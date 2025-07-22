@@ -1,0 +1,246 @@
+/* Estilos para el componente de Navegación */
+.navigation-container {
+    min-height: 100vh;
+    background: #f4f6fa;
+    font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+}
+
+.content-wrapper {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+    padding-top: 6rem;
+}
+
+.page-header {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.page-header h1 {
+    color: #222b45;
+    font-size: 2.5rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem 0;
+}
+
+.page-header p {
+    color: #8f9bb3;
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+/* Grid de módulos */
+.modules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+}
+
+.module-card {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 4px 12px rgba(44, 62, 80, 0.08);
+    border-left: 6px solid #1976d2;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.module-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 16px 40px rgba(44, 62, 80, 0.15);
+}
+
+.module-card.active {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e3f2fd 100%);
+    border-left-width: 8px;
+}
+
+.module-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(25, 118, 210, 0.05) 0%, rgba(25, 118, 210, 0.02) 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.module-card:hover::before {
+    opacity: 1;
+}
+
+.module-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+.module-content {
+    position: relative;
+    z-index: 1;
+}
+
+.module-content h3 {
+    color: #222b45;
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 0 0 0.75rem 0;
+}
+
+.module-content p {
+    color: #8f9bb3;
+    font-size: 1rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.module-arrow {
+    position: absolute;
+    top: 1.5rem;
+    right: 1.5rem;
+    font-size: 1.5rem;
+    color: #8f9bb3;
+    transition: all 0.3s ease;
+}
+
+.module-card:hover .module-arrow {
+    color: #1976d2;
+    transform: translateX(4px);
+}
+
+/* Estadísticas rápidas */
+.quick-stats {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 4px 12px rgba(44, 62, 80, 0.08);
+}
+
+.quick-stats h2 {
+    color: #222b45;
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0 0 1.5rem 0;
+    text-align: center;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.stat-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 12px;
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    background: #e3f2fd;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(25, 118, 210, 0.15);
+}
+
+.stat-icon {
+    font-size: 2.5rem;
+    flex-shrink: 0;
+}
+
+.stat-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-number {
+    color: #222b45;
+    font-size: 1.8rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+
+.stat-label {
+    color: #8f9bb3;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .content-wrapper {
+        padding: 1rem;
+        padding-top: 5rem;
+    }
+    
+    .page-header h1 {
+        font-size: 2rem;
+    }
+    
+    .page-header p {
+        font-size: 1rem;
+    }
+    
+    .modules-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .module-card {
+        padding: 1.5rem;
+    }
+    
+    .module-icon {
+        font-size: 2.5rem;
+    }
+    
+    .module-content h3 {
+        font-size: 1.2rem;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+    
+    .stat-card {
+        padding: 1rem;
+    }
+    
+    .stat-icon {
+        font-size: 2rem;
+    }
+    
+    .stat-number {
+        font-size: 1.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .module-card {
+        padding: 1.25rem;
+    }
+    
+    .module-icon {
+        font-size: 2rem;
+    }
+    
+    .module-content h3 {
+        font-size: 1.1rem;
+    }
+} 

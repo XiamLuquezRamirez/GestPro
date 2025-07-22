@@ -1,0 +1,819 @@
+/* Estilos para el componente de Parámetros */
+.parametros-container {
+    min-height: 100vh;
+    background: #f4f6fa;
+    font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+}
+
+.content-wrapper {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+    padding-top: 6rem;
+}
+
+.page-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.page-header h1 {
+    color: #222b45;
+    font-size: 2rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem 0;
+}
+
+.page-header p {
+    color: #8f9bb3;
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+/* Tabs */
+.tabs-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
+    overflow: hidden;
+}
+
+.tabs-header {
+    display: flex;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e6ed;
+    overflow-x: auto;
+}
+
+.tab-button {
+    background: none;
+    border: none;
+    padding: 1rem 1.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #8f9bb3;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+    border-bottom: 3px solid transparent;
+}
+
+.tab-button:hover {
+    color: #1976d2;
+    background: #e3f2fd;
+}
+
+.tab-button.active {
+    color: #1976d2;
+    background: white;
+    border-bottom-color: #1976d2;
+}
+
+.tab-icon {
+    font-size: 1.1rem;
+}
+
+.tab-content {
+    padding: 2rem;
+}
+
+/* Configuración General */
+.general-config h2 {
+    color: #222b45;
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+}
+
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.config-card {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border-left: 4px solid #1976d2;
+}
+
+.config-card h3 {
+    color: #222b45;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 1rem 0;
+}
+
+.config-card p {
+    color: #555e6b;
+    margin: 0.5rem 0;
+    font-size: 0.9rem;
+}
+
+/* Tablas */
+.table-container {
+    margin-top: 1rem;
+}
+
+.table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.table-header h3 {
+    color: #222b45;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.btn-add {
+    background: #1976d2;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.btn-add:hover {
+    background: #1565c0;
+}
+
+.btn-add span {
+    font-size: 1.1rem;
+    font-weight: bold;
+}
+
+.table-content {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(44, 62, 80, 0.05);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th {
+    background: #f8f9fa;
+    color: #222b45;
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid #e0e6ed;
+}
+
+td {
+    padding: 1rem;
+    border-bottom: 1px solid #f0f2f5;
+    color: #555e6b;
+    font-size: 0.9rem;
+}
+
+tr:hover {
+    background: #f8f9fa;
+}
+
+/* Elementos específicos de la tabla */
+.color-preview {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    border: 1px solid #e0e6ed;
+}
+
+/* Estilos para la pestaña de presupuesto */
+.presupuesto-container {
+    margin-top: 1rem;
+}
+
+.presupuesto-resumen {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 1px 4px rgba(44, 62, 80, 0.05);
+}
+
+.presupuesto-resumen h3 {
+    color: #222b45;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 0 0 1.5rem 0;
+}
+
+.resumen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.resumen-card {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border-left: 4px solid #1976d2;
+    transition: all 0.2s ease;
+}
+
+.resumen-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(44, 62, 80, 0.1);
+}
+
+.resumen-card h4 {
+    color: #222b45;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 1rem 0;
+}
+
+.resumen-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.total-label {
+    color: #e9edf1;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.total-value {
+    color: #1976d2;
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.resumen-detalles {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.detalles-label {
+    color: #8f9bb3;
+    font-size: 0.8rem;
+}
+
+/* Estilos para la sección de presupuesto en el modal */
+.presupuesto-modal-section {
+    padding: 1rem 0;
+}
+
+.presupuesto-modal-section h3 {
+    color: #222b45;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem 0;
+}
+
+.presupuesto-info {
+    color: #8f9bb3;
+    font-size: 0.9rem;
+    margin: 0 0 1.5rem 0;
+}
+
+.componente-form {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+}
+
+.btn-add-componente {
+    background: #1976d2;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 1rem;
+}
+
+.btn-add-componente:hover:not(:disabled) {
+    background: #1565c0;
+}
+
+.btn-add-componente:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.componentes-list {
+    margin-bottom: 1.5rem;
+}
+
+.componentes-list h4 {
+    color: #222b45;
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 1rem 0;
+}
+
+.no-componentes {
+    color: #8f9bb3;
+    font-style: italic;
+    text-align: center;
+    padding: 2rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.componentes-table {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(44, 62, 80, 0.05);
+}
+
+.componentes-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.componentes-table th {
+    background: #f8f9fa;
+    color: #222b45;
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #e0e6ed;
+}
+
+.componentes-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #f0f2f5;
+    color: #555e6b;
+    font-size: 0.9rem;
+}
+
+.btn-delete-componente {
+    background: #ffebee;
+    color: #c62828;
+    border: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.2s ease;
+}
+
+.btn-delete-componente:hover {
+    background: #ffcdd2;
+}
+
+.presupuesto-total {
+    margin-top: 1.5rem;
+}
+
+.total-card {
+    background: linear-gradient(135deg, #1976d2, #1565c0);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.total-label {
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+.total-amount {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.active {
+    background: #e8f5e8;
+    color: #2e7d32;
+}
+
+.status-badge.inactive {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.btn-toggle,
+.btn-edit,
+.btn-delete {
+    padding: 0.25rem 0.5rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.2s ease;
+}
+
+.btn-toggle.activate {
+    background: #e8f5e8;
+    color: #2e7d32;
+}
+
+.btn-toggle.deactivate {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.btn-toggle:hover {
+    opacity: 0.8;
+}
+
+.btn-edit {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.btn-edit:hover {
+    background: #bbdefb;
+}
+
+.btn-delete {
+    background: #ffebee;
+    color: #f44336;
+}
+
+.btn-delete:hover {
+    background: #ffcdd2;
+}
+
+/* Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e0e6ed;
+}
+
+.modal-header h2 {
+    color: #222b45;
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.btn-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #8f9bb3;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.btn-close:hover {
+    background: #f0f2f5;
+    color: #222b45;
+}
+
+.modal-form {
+    padding: 1.5rem;
+}
+
+/* Pestañas del modal */
+.modal-tabs {
+    display: flex;
+    border-bottom: 1px solid #e0e6ed;
+    margin-bottom: 1.5rem;
+}
+
+.modal-tab {
+    background: none;
+    border: none;
+    padding: 1rem 1.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #8f9bb3;
+    transition: all 0.3s ease;
+    border-bottom: 3px solid transparent;
+}
+
+.modal-tab:hover {
+    color: #1976d2;
+    background: #f8f9fa;
+}
+
+.modal-tab.active {
+    color: #1976d2;
+    border-bottom-color: #1976d2;
+    background: #f8f9fa;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #222b45;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #e0e6ed;
+    border-radius: 6px;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #1976d2;
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.form-group input[type="color"] {
+    width: 60px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    padding-top: 1rem;
+    border-top: 1px solid #e0e6ed;
+}
+
+.btn-cancel,
+.btn-save {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-cancel {
+    background: #f0f2f5;
+    color: #8f9bb3;
+}
+
+.btn-cancel:hover {
+    background: #e0e6ed;
+    color: #222b45;
+}
+
+.btn-save {
+    background: #1976d2;
+    color: white;
+}
+
+.btn-save:hover {
+    background: #1565c0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .content-wrapper {
+        padding: 1rem;
+        padding-top: 5rem;
+    }
+    
+    .page-header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .tabs-header {
+        flex-wrap: wrap;
+    }
+    
+    .tab-button {
+        padding: 0.75rem 1rem;
+        font-size: 0.8rem;
+    }
+    
+    .tab-content {
+        padding: 1rem;
+    }
+    
+    .config-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .table-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+    }
+    
+    .table-content {
+        overflow-x: auto;
+    }
+    
+    table {
+        min-width: 600px;
+    }
+    
+    th, td {
+        padding: 0.75rem 0.5rem;
+        font-size: 0.8rem;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    
+    .modal-content {
+        margin: 1rem;
+        max-height: calc(100vh - 2rem);
+    }
+    
+    .modal-actions {
+        flex-direction: column;
+    }
+    
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .resumen-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .resumen-card {
+        padding: 1rem;
+    }
+    
+    .resumen-total {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .modal-tabs {
+        flex-direction: column;
+    }
+    
+    .modal-tab {
+        padding: 0.75rem 1rem;
+        font-size: 0.8rem;
+    }
+    
+    .componente-form {
+        padding: 1rem;
+    }
+    
+    .componentes-table {
+        overflow-x: auto;
+    }
+    
+    .componentes-table table {
+        min-width: 400px;
+    }
+    
+    .total-card {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+}
+
+/* Controles de paginación */
+.pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin: 1.5rem 0 0.5rem 0;
+    font-size: 1rem;
+}
+
+.pagination-controls button {
+    background: #1976d2;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 0.4rem 1rem;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.pagination-controls button:disabled {
+    background: #e0e6ed;
+    color: #8f9bb3;
+    cursor: not-allowed;
+}
+
+.pagination-controls button:not(:disabled):hover {
+    background: #1565c0;
+}
+
+.pagination-controls span {
+    color: #222b45;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.search-input {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    border: 1px solid #e0e6ed;
+    font-size: 1rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+    background: #f8f9fa;
+    color: #222b45;
+}
+
+.search-input:focus {
+    border-color: #1976d2;
+    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+}
