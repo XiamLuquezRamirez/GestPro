@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from './Header';
 import '../../css/Navigation.css';
+import axios from 'axios';
 
 const Navigation = ({ user, onLogout }) => {
     const navigate = useNavigate();
     const location = useLocation();
+    const [proyectos, setProyectos] = useState([]);
+    const [eventos, setEventos] = useState([]);
 
     const modules = [
         {
@@ -25,6 +28,22 @@ const Navigation = ({ user, onLogout }) => {
             path: '/parametros'
         }
     ];
+
+    useEffect(() => {
+        listProyectos();
+        listEventos();
+    }, []);
+
+
+    const listProyectos = async () => {
+        const response = await axios.get('/proyectos');
+        setProyectos(response.data);
+    };
+    
+    const listEventos = async () => {
+        const response = await axios.get('/eventos');
+        setEventos(response.data);
+    };
 
     const handleModuleClick = (modulePath) => {
         navigate(modulePath);
@@ -68,31 +87,31 @@ const Navigation = ({ user, onLogout }) => {
                         <div className="stat-card">
                             <div className="stat-icon">📋</div>
                             <div className="stat-info">
-                                <span className="stat-number">14</span>
+                                <span className="stat-number">{proyectos.length}</span>
                                 <span className="stat-label">Proyectos Activos</span>
                             </div>
                         </div>
                         <div className="stat-card">
                             <div className="stat-icon">📅</div>
                             <div className="stat-info">
-                                <span className="stat-number">8</span>
+                                <span className="stat-number">{eventos.filter(evento => evento.estado === 'pendiente').length}</span>
                                 <span className="stat-label">Eventos Pendientes</span>
                             </div>
                         </div>
-                        <div className="stat-card">
+                        {/* <div className="stat-card">
                             <div className="stat-icon">✅</div>
                             <div className="stat-info">
-                                <span className="stat-number">6</span>
+                                <span className="stat-number">{proyectos.filter(proyecto => proyecto.estado === 'Aprobado').length}</span>
                                 <span className="stat-label">Proyectos Aprobados</span>
                             </div>
                         </div>
                         <div className="stat-card">
                             <div className="stat-icon">🚀</div>
                             <div className="stat-info">
-                                <span className="stat-number">4</span>
+                                <span className="stat-number">{proyectos.filter(proyecto => proyecto.estado === 'En Ejecución').length}</span>
                                 <span className="stat-label">En Ejecución</span>
                             </div>
-                        </div>
+                        </div> */}
                     </div>
                 </div>
             </div>

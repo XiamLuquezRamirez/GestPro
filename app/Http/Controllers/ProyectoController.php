@@ -63,6 +63,7 @@ class ProyectoController extends Controller
                 'eventos.tipo_eventos',
                 'eventos.prioridad',
                 'eventos.responsable',
+                'eventos.estado',
                 'tipo_eventos.icono',
                 DB::raw('proyectos.nombre as descripcion_proyecto'),
                 DB::raw('tipo_eventos.nombre as descripcion_tipo_evento'),
@@ -103,7 +104,7 @@ class ProyectoController extends Controller
     public function fases()
     {
         $fases = DB::table('fases')
-            ->select('nombre', 'id', 'color', 'activo')
+            ->select('nombre', 'id', 'color', 'activo', 'dashboard')
             ->orderBy('nombre', 'asc')
             ->get();
         return response()->json($fases);
@@ -112,7 +113,7 @@ class ProyectoController extends Controller
     public function entidades()
     {
         $entidades = DB::table('entidades')
-            ->select('nombre', 'id')
+            ->select('nombre', 'id', 'activo')
             ->orderBy('nombre', 'asc')
             ->get();
         return response()->json($entidades);
@@ -130,7 +131,7 @@ class ProyectoController extends Controller
     public function tiposEventos()
     {
         $tiposEventos = DB::table('tipo_eventos')
-            ->select('nombre', 'id', 'icono')
+            ->select('nombre', 'id', 'icono', 'activo')
             ->orderBy('nombre', 'asc')
             ->get();
         return response()->json($tiposEventos);
@@ -139,7 +140,7 @@ class ProyectoController extends Controller
     public function prioridades()
     {
         $prioridades = DB::table('prioridades')
-            ->select('nombre', 'id', 'color')
+            ->select('nombre', 'id', 'color', 'activo')
             ->orderBy('nombre', 'asc')
             ->get();
         return response()->json($prioridades);
@@ -148,7 +149,7 @@ class ProyectoController extends Controller
     public function responsables()
     {
         $responsables = DB::table('responsable')
-            ->select('nombre', 'id')
+            ->select('nombre', 'id', 'email', 'cargo', 'activo')
             ->orderBy('nombre', 'asc')
             ->get();
         return response()->json($responsables);
@@ -174,6 +175,17 @@ class ProyectoController extends Controller
             DB::table('estados')->where('id', $estado['id'])->update(['activo' => '1']);
         }
         return response()->json(['success' => 'Estado activado correctamente']);
+    }
+
+    public function activarFaseDashboard(Request $request)
+    {
+        $fase = $request->all();
+        if ($fase['dashboard']) {
+            DB::table('fases')->where('id', $fase['id'])->update(['dashboard' => '0']);
+        } else {
+            DB::table('fases')->where('id', $fase['id'])->update(['dashboard' => '1']);
+        }
+        return response()->json(['success' => 'Fase activada en Dashboard correctamente']);
     }
 
     public function activarFase(Request $request)
@@ -399,4 +411,178 @@ class ProyectoController extends Controller
         DB::commit();
         return response()->json(['success' => 'Fase guardada correctamente']);
     }
+
+    public function guardarTipoEvento(Request $request)
+    {
+        $tipoEvento = $request->all();
+        DB::beginTransaction();
+        try {
+            if ($tipoEvento['accion'] == 'Agregar') {
+                DB::table('tipo_eventos')->insert([
+                    'nombre' => $tipoEvento['nombre'],
+                    'icono' => $tipoEvento['icono'],
+                    'activo' => $tipoEvento['activo']
+                ]);
+            } else {
+                DB::table('tipo_eventos')->where('id', $tipoEvento['id'])->update([
+                    'nombre' => $tipoEvento['nombre'],
+                    'icono' => $tipoEvento['icono']
+                ]);
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+        DB::commit();
+        return response()->json(['success' => 'Tipo de evento guardado correctamente']);
+    }
+
+    function guardarPrioridad(Request $request)
+    {
+        $prioridad = $request->all();
+        DB::beginTransaction();
+        try {
+            if ($prioridad['accion'] == 'Agregar') {
+                DB::table('prioridades')->insert([
+                    'nombre' => $prioridad['nombre'],
+                    'color' => $prioridad['color'],
+                    'activo' => $prioridad['activo']
+                ]);
+            } else {
+                DB::table('prioridades')->where('id', $prioridad['id'])->update([
+                    'nombre' => $prioridad['nombre'],
+                    'color' => $prioridad['color']
+                ]);
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+        DB::commit();
+        return response()->json(['success' => 'Prioridad guardada correctamente']);
+
+    }
+
+    public function guardarResponsable(Request $request)
+    {
+        $responsable = $request->all();
+        DB::beginTransaction();
+        try {
+            if ($responsable['accion'] == 'Agregar') {
+                DB::table('responsable')->insert([
+                    'nombre' => $responsable['nombre'],
+                    'email' => $responsable['email'],
+                    'cargo' => $responsable['cargo'],
+                    'activo' => $responsable['activo']
+                ]);
+            } else {
+                DB::table('responsable')->where('id', $responsable['id'])->update([
+                    'nombre' => $responsable['nombre'],
+                    'email' => $responsable['email'],
+                    'cargo' => $responsable['cargo']
+                ]);
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+        DB::commit();
+        return response()->json(['success' => 'Responsable guardado correctamente']);
+    }
+
+    public function eliminarPrioridad(Request $request)
+    {
+        $prioridad = $request->all();
+        DB::table('prioridades')->where('id', $prioridad['id'])->delete();
+        return response()->json(['success' => 'Prioridad eliminada correctamente']);
+    }
+
+    public function activarTipoEvento(Request $request)
+    {
+        $tipoEvento = $request->all();
+        if ($tipoEvento['activo']) {
+            DB::table('tipo_eventos')->where('id', $tipoEvento['id'])->update(['activo' => '0']);
+        } else {
+            DB::table('tipo_eventos')->where('id', $tipoEvento['id'])->update(['activo' => '1']);
+        }
+        return response()->json(['success' => 'Tipo de evento activado correctamente']);
+    }
+
+    public function activarPrioridad(Request $request)
+    {
+        $prioridad = $request->all();
+        if ($prioridad['activo']) {
+            DB::table('prioridades')->where('id', $prioridad['id'])->update(['activo' => '0']);
+        } else {
+            DB::table('prioridades')->where('id', $prioridad['id'])->update(['activo' => '1']);
+        }
+        return response()->json(['success' => 'Prioridad activada correctamente']);
+    }
+
+    public function activarResponsable(Request $request)
+    {
+        $responsable = $request->all();
+        if ($responsable['activo']) {
+            DB::table('responsable')->where('id', $responsable['id'])->update(['activo' => '0']);
+        } else {
+            DB::table('responsable')->where('id', $responsable['id'])->update(['activo' => '1']);
+        }
+        return response()->json(['success' => 'Responsable activado correctamente']);
+    }
+
+    public function eliminarTipoEvento(Request $request)
+    {
+        $tipoEvento = $request->all();
+        DB::table('tipo_eventos')->where('id', $tipoEvento['id'])->delete();
+        return response()->json(['success' => 'Tipo de evento eliminado correctamente']);
+    }
+
+    public function eliminarResponsable(Request $request)
+    {
+        $responsable = $request->all();
+        DB::table('responsable')->where('id', $responsable['id'])->delete();
+        return response()->json(['success' => 'Responsable eliminado correctamente']);
+    }
+
+    public function guardarEntidad(Request $request)
+    {
+        $entidad = $request->all();
+        DB::beginTransaction();
+        try {
+            if ($entidad['accion'] == 'Agregar') {
+                DB::table('entidades')->insert([
+                    'nombre' => $entidad['nombre'],
+                    'activo' => $entidad['activo']
+                ]);
+            } else {
+                DB::table('entidades')->where('id', $entidad['id'])->update([
+                    'nombre' => $entidad['nombre']
+                ]);
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+        DB::commit();
+        return response()->json(['success' => 'Entidad guardada correctamente']);
+    }
+
+    public function activarEntidad(Request $request)
+    {
+        $entidad = $request->all();
+        if ($entidad['activo']) {
+            DB::table('entidades')->where('id', $entidad['id'])->update(['activo' => '0']);
+        } else {
+            DB::table('entidades')->where('id', $entidad['id'])->update(['activo' => '1']);
+        }
+        return response()->json(['success' => 'Entidad activada correctamente']);
+    }
+
+    public function eliminarEntidad(Request $request)
+    {
+        $entidad = $request->all();
+        DB::table('entidades')->where('id', $entidad['id'])->delete();
+        return response()->json(['success' => 'Entidad eliminada correctamente']);
+    }
+
 }

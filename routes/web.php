@@ -38,6 +38,7 @@ Route::get('/fases', [ProyectoController::class, 'fases'])->middleware('auth');
 Route::get('/entidades', [ProyectoController::class, 'entidades'])->middleware('auth');
 Route::post('/guardarProyecto', [ProyectoController::class, 'guardarProyecto'])->middleware('auth');
 Route::post('/eliminarProyecto', [ProyectoController::class, 'eliminarProyecto'])->middleware('auth');
+Route::post('/guardarEvento', [ProyectoController::class, 'guardarEvento'])->middleware('auth');
 Route::get('/eventos', [ProyectoController::class, 'eventos'])->middleware('auth');
 Route::get('/tiposEventos', [ProyectoController::class, 'tiposEventos'])->middleware('auth');
 Route::get('/prioridades', [ProyectoController::class, 'prioridades'])->middleware('auth');
@@ -53,6 +54,20 @@ Route::post('/activarEstado', [ProyectoController::class, 'activarEstado'])->mid
 Route::post('/activarFase', [ProyectoController::class, 'activarFase'])->middleware('auth');
 Route::post('/guardarFase', [ProyectoController::class, 'guardarFase'])->middleware('auth');
 Route::post('/eliminarFase', [ProyectoController::class, 'eliminarFase'])->middleware('auth');
+Route::post('/guardarTipoEvento', [ProyectoController::class, 'guardarTipoEvento'])->middleware('auth');
+Route::post('/eliminarTipoEvento', [ProyectoController::class, 'eliminarTipoEvento'])->middleware('auth');
+Route::post('/activarTipoEvento', [ProyectoController::class, 'activarTipoEvento'])->middleware('auth');
+Route::post('/guardarPrioridad', [ProyectoController::class, 'guardarPrioridad'])->middleware('auth');
+Route::post('/activarPrioridad', [ProyectoController::class, 'activarPrioridad'])->middleware('auth');
+Route::post('/eliminarPrioridad', [ProyectoController::class, 'eliminarPrioridad'])->middleware('auth');
+Route::post('/activarPrioridad', [ProyectoController::class, 'activarPrioridad'])->middleware('auth');
+Route::post('/guardarResponsable', [ProyectoController::class, 'guardarResponsable'])->middleware('auth');
+Route::post('/eliminarResponsable', [ProyectoController::class, 'eliminarResponsable'])->middleware('auth');
+Route::post('/activarResponsable', [ProyectoController::class, 'activarResponsable'])->middleware('auth');
+Route::post('/guardarEntidad', [ProyectoController::class, 'guardarEntidad'])->middleware('auth');
+Route::post('/eliminarEntidad', [ProyectoController::class, 'eliminarEntidad'])->middleware('auth');
+Route::post('/activarEntidad', [ProyectoController::class, 'activarEntidad'])->middleware('auth');
+Route::post('/activarFaseDashboard', [ProyectoController::class, 'activarFaseDashboard'])->middleware('auth');
 // 👇 Ruta que sirve el frontend React
 Route::get('/{any}', function () {
     return view('app'); // asegúrate de tener resources/views/app.blade.php

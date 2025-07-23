@@ -5,6 +5,7 @@ import axios from '../axios';
 import { faPlus, faTrash, faSave, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
+import EmojiPicker from 'emoji-picker-react';
 
 const Parametros = ({ user, onLogout }) => {
     const [activeTab, setActiveTab] = useState('proyectos');
@@ -38,9 +39,9 @@ const Parametros = ({ user, onLogout }) => {
             { id: 5, nombre: 'Completado', color: '#9C27B0', activo: true }
         ],
         fases: [
-            { id: 1, nombre: 'Formulación', color: '#FF9800', activo: true },
-            { id: 2, nombre: 'Licitación', color: '#2196F3', activo: true },
-            { id: 3, nombre: 'Ejecución', color: '#4CAF50', activo: true }
+            { id: 1, nombre: 'Formulación', color: '#FF9800', activo: true, dashboard: true },
+            { id: 2, nombre: 'Licitación', color: '#2196F3', activo: true, dashboard: true },
+            { id: 3, nombre: 'Ejecución', color: '#4CAF50', activo: true, dashboard: true }
         ],
         tiposEventos: [
             { id: 1, nombre: 'Pliego de Condiciones', icono: '📋', activo: true },
@@ -63,6 +64,12 @@ const Parametros = ({ user, onLogout }) => {
             { id: 2, nombre: 'María García', email: 'maria.garcia@empresa.com', cargo: 'Coordinadora', activo: true },
             { id: 3, nombre: 'Carlos López', email: 'carlos.lopez@empresa.com', cargo: 'Supervisor', activo: true },
             { id: 4, nombre: 'Ana Rodríguez', email: 'ana.rodriguez@empresa.com', cargo: 'Analista', activo: false }
+        ],
+        entidades: [
+            { id: 1, nombre: 'Empresa 1', activo: true },
+            { id: 2, nombre: 'Empresa 2', activo: true },
+            { id: 3, nombre: 'Empresa 3', activo: true },
+            { id: 4, nombre: 'Empresa 4', activo: false }
         ]
     });
 
@@ -135,7 +142,7 @@ const Parametros = ({ user, onLogout }) => {
         const response = await axios.get('/departamentos');
         setDepartamentos(response.data);
     }
-   
+
     const estadosEventos = [
         { value: 'pendiente', label: 'Pendiente' },
         { value: 'en_proceso', label: 'En Proceso' },
@@ -149,7 +156,7 @@ const Parametros = ({ user, onLogout }) => {
         nombre: '',
         codigo: '',
         color: '#1976d2',
-        icono: '📋',
+        icono: '🗓️',
         email: '',
         cargo: '',
         // Campos para proyectos
@@ -170,7 +177,8 @@ const Parametros = ({ user, onLogout }) => {
         proyecto: '',
         responsable: '',
 
-        departamento: '',       
+        departamento: '',
+        dashboard: false,
 
         // Campos para detalles de presupuesto
         proyectoId: '',
@@ -183,6 +191,7 @@ const Parametros = ({ user, onLogout }) => {
     const [componentesPresupuesto, setComponentesPresupuesto] = useState([]);
     // Estado para búsqueda
     const [searchText, setSearchText] = useState("");
+    const [showEmojiModal, setShowEmojiModal] = useState(false);
 
     const tabs = [
         { id: 'proyectos', label: 'Gestionar Proyectos', icon: '📋' },
@@ -193,9 +202,15 @@ const Parametros = ({ user, onLogout }) => {
         { id: 'eventos', label: 'Tipos de Eventos', icon: '📅' },
         { id: 'prioridades', label: 'Prioridades', icon: '🎯' },
         { id: 'responsables', label: 'Responsables', icon: '👥' },
-
+        { id: 'entidades', label: 'Entidades', icon: '🏢' }
     ];
 
+    const handleEmojiClick = (emojiData) => {
+        setFormData(prev => ({
+            ...prev,
+            icono: emojiData.emoji
+        }));
+    };
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -211,7 +226,7 @@ const Parametros = ({ user, onLogout }) => {
         if (modalType === 'proyectos') {
             // Calcular el presupuesto total de los componentes
             const presupuestoTotal = componentesPresupuesto.reduce((sum, comp) => sum + comp.valor, 0);
-            
+
             const newProyecto = {
                 ...formData,
                 id: editingItem ? editingItem.id : Date.now(),
@@ -306,7 +321,79 @@ const Parametros = ({ user, onLogout }) => {
                     handleCloseModal();
                 });
             }
-
+        } else if (modalType === 'tiposEventos') {
+            const newTipoEvento = {
+                ...formData,
+                id: editingItem ? editingItem.id : Date.now(),
+                activo: true
+            };
+            const response = await axios.post('/guardarTipoEvento', newTipoEvento);
+            if (response.status === 200) {
+                listTiposEventos();
+                handleCloseModal();
+                Swal.fire({
+                    title: 'Tipo de evento guardado correctamente',
+                    icon: 'success'
+                }).then(() => {
+                    listTiposEventos();
+                    handleCloseModal();
+                });
+            }
+        } else if (modalType === 'prioridades') {
+            const newPrioridad = {
+                ...formData,
+                id: editingItem ? editingItem.id : Date.now(),
+                activo: true
+            };
+            const response = await axios.post('/guardarPrioridad', newPrioridad);
+            if (response.status === 200) {
+                listPrioridades();
+                handleCloseModal();
+                Swal.fire({
+                    title: 'Prioridad guardada correctamente',
+                    icon: 'success'
+                }).then(() => {
+                    listPrioridades();
+                    handleCloseModal();
+                });
+            }
+        } else if (modalType === 'responsables') {
+            const newResponsable = {
+                ...formData,
+                id: editingItem ? editingItem.id : Date.now(),
+                activo: true
+            };
+            const response = await axios.post('/guardarResponsable', newResponsable);
+            if (response.status === 200) {
+                listResponsables();
+                handleCloseModal();
+                Swal.fire({
+                    title: 'Responsable guardado correctamente',
+                    icon: 'success'
+                }).then(() => {
+                    listResponsables();
+                    handleCloseModal();
+                });
+            }
+        } else if (modalType === 'entidades') {
+            const newEntidad = {
+                ...formData,
+                id: editingItem ? editingItem.id : Date.now(),
+                activo: true
+            };
+            const response = await axios.post('/guardarEntidad', newEntidad);
+            if (response.status === 200) {
+                listEntidades();
+                handleCloseModal();
+                Swal.fire({
+                    title: 'Entidad guardada correctamente',
+                    icon: 'success'
+                }).then(() => {
+                    listEntidades();
+                    handleCloseModal();
+                });
+            }
+        
         } else {
             const newItem = {
                 ...formData,
@@ -325,7 +412,7 @@ const Parametros = ({ user, onLogout }) => {
         handleCloseModal();
     };
 
-    
+
 
     const handleEdit = (item, type) => {
         setEditingItem(item);
@@ -335,7 +422,7 @@ const Parametros = ({ user, onLogout }) => {
             nombre: item.nombre || '',
             codigo: item.codigo || '',
             color: item.color || '#1976d2',
-            icono: item.icono || '📋',
+            icono: item.icono || '🗓️',
             email: item.email || '',
             cargo: item.cargo || '',
             // Campos para proyectos
@@ -360,7 +447,8 @@ const Parametros = ({ user, onLogout }) => {
             descripcionComponente: item.descripcionComponente || '',
             valor: item.valor || '',
             accion: 'Editar',
-            departamento: item.codigo_departamento || ''
+            departamento: item.codigo_departamento || '',
+            dashboard: item.dashboard || false
         });
 
 
@@ -438,6 +526,42 @@ const Parametros = ({ user, onLogout }) => {
                             icon: 'success'
                         });
                     }
+                } else if (type === 'tiposEventos') {
+                    const response = await axios.post('/eliminarTipoEvento', { id: id });
+                    if (response.status === 200) {
+                        listTiposEventos();
+                        Swal.fire({
+                            title: 'Tipo de evento eliminado correctamente',
+                            icon: 'success'
+                        });
+                    }
+                } else if (type === 'prioridades') {
+                    const response = await axios.post('/eliminarPrioridad', { id: id });
+                    if (response.status === 200) {
+                        listPrioridades();
+                        Swal.fire({
+                            title: 'Prioridad eliminada correctamente',
+                            icon: 'success'
+                        });
+                    }
+                } else if (type === 'responsables') {
+                    const response = await axios.post('/eliminarResponsable', { id: id });
+                    if (response.status === 200) {
+                        listResponsables();
+                        Swal.fire({
+                            title: 'Responsable eliminado correctamente',
+                            icon: 'success'
+                        });
+                    }
+                } else if (type === 'entidades') {
+                    const response = await axios.post('/eliminarEntidad', { id: id });
+                    if (response.status === 200) {
+                        listEntidades();
+                        Swal.fire({
+                            title: 'Entidad eliminada correctamente',
+                            icon: 'success'
+                        });
+                    }
                 } else {
                     setParametros(prev => ({
                         ...prev,
@@ -451,7 +575,7 @@ const Parametros = ({ user, onLogout }) => {
             }
         });
 
-        
+
     };
 
     const handleAddNew = (type) => {
@@ -462,7 +586,7 @@ const Parametros = ({ user, onLogout }) => {
             nombre: '',
             codigo: '',
             color: '#1976d2',
-            icono: '📋',
+            icono: '🗓️',
             email: '',
             cargo: '',
             presupuesto: '',
@@ -499,7 +623,7 @@ const Parametros = ({ user, onLogout }) => {
             nombre: '',
             codigo: '',
             color: '#1976d2',
-            icono: '📋',
+            icono: '🗓️',
             email: '',
             cargo: '',
             presupuesto: '',
@@ -526,7 +650,24 @@ const Parametros = ({ user, onLogout }) => {
         setModalActiveTab('datos');
     };
 
+    const toggleActiveDashboard = async (id, type, dashboard) => {
+        console.log(id, type, dashboard);
+        setParametros(prev => ({
+            ...prev,
+            [type]: prev[type].map(item => item.id === id ? { ...item, dashboard: !item.dashboard } : item)
+        }));
+        const response = await axios.post('/activarFaseDashboard', { id: id, dashboard: dashboard });
+        if (response.status === 200) {
+            listFases();
+            Swal.fire({
+                title: 'Fase activada en Dashboard correctamente',
+                icon: 'success'
+            });
+        }
+    };
+
     const toggleActive = async (id, type, activo) => {
+        console.log(id, type, activo);
         setParametros(prev => ({
             ...prev,
             [type]: prev[type].map(item =>
@@ -548,6 +689,26 @@ const Parametros = ({ user, onLogout }) => {
             const response = await axios.post('/activarFase', { id: id, activo: activo });
             if (response.status === 200) {
                 listFases();
+            }
+        } else if (type === 'tiposEventos') {
+            const response = await axios.post('/activarTipoEvento', { id: id, activo: activo });
+            if (response.status === 200) {
+                listTiposEventos();
+            }
+        } else if (type === 'prioridades') {
+            const response = await axios.post('/activarPrioridad', { id: id, activo: activo });
+            if (response.status === 200) {
+                listPrioridades();
+            }
+        } else if (type === 'responsables') {
+            const response = await axios.post('/activarResponsable', { id: id, activo: activo });
+            if (response.status === 200) {
+                listResponsables();
+            }
+        } else if (type === 'entidades') {
+            const response = await axios.post('/activarEntidad', { id: id, activo: activo });
+            if (response.status === 200) {
+                listEntidades();
             }
         }
     };
@@ -602,12 +763,12 @@ const Parametros = ({ user, onLogout }) => {
     };
 
     const handleDeleteComponente = (id) => {
-    
+
         setComponentesPresupuesto(prev => prev.filter(comp => comp.id !== id));
     };
 
     const calcularTotalPresupuesto = () => {
-        
+
         return componentesPresupuesto.reduce((sum, comp) => sum + comp.valor, 0);
     };
 
@@ -707,7 +868,7 @@ const Parametros = ({ user, onLogout }) => {
                                     )}
                                     {type === 'eventos' && <td>{item.descripcion_proyecto}</td>}
                                     {type === 'eventos' && <td>{item.descripcion_responsable}</td>}
-                                  
+
                                     <td>
                                         <div className="action-buttons">
                                             {type !== 'proyectos' && type !== 'eventos' && (
@@ -718,6 +879,15 @@ const Parametros = ({ user, onLogout }) => {
                                                     {item.activo ? 'Desactivar' : 'Activar'}
                                                 </button>
                                             )}
+                                            {type === 'fases' && (
+                                                <button
+                                                    onClick={() => toggleActiveDashboard(item.id, type, item.dashboard)}
+                                                    className={`btn-toggle ${item.dashboard ? 'deactivate' : 'activate'}`}
+                                                >
+                                                    {item.dashboard ? 'Desactivar en Dashboard' : 'Activar en Dashboard'}
+                                                </button>
+                                            )}
+
                                             <button
                                                 onClick={() => handleEdit(item, type)}
                                                 className="btn-edit"
@@ -748,6 +918,9 @@ const Parametros = ({ user, onLogout }) => {
             </div>
         );
     };
+
+    const openEmojiModal = () => setShowEmojiModal(true);
+    const closeEmojiModal = () => setShowEmojiModal(false);
 
     return (
         <div className="parametros-container">
@@ -803,10 +976,10 @@ const Parametros = ({ user, onLogout }) => {
                         {activeTab === 'municipios' && renderTable(municipios, 'municipios')}
                         {activeTab === 'estados' && renderTable(estados, 'estados')}
                         {activeTab === 'fases' && renderTable(fases, 'fases')}
-                        {activeTab === 'eventos' && renderTable(parametros.tiposEventos, 'tiposEventos')}
-                        {activeTab === 'prioridades' && renderTable(parametros.prioridades, 'prioridades')}
+                        {activeTab === 'eventos' && renderTable(tipos, 'tiposEventos')}
+                        {activeTab === 'prioridades' && renderTable(prioridades, 'prioridades')}
                         {activeTab === 'responsables' && renderTable(responsables, 'responsables')}
-
+                        {activeTab === 'entidades' && renderTable(entidades, 'entidades')}
                     </div>
                 </div>
             </div>
@@ -850,7 +1023,7 @@ const Parametros = ({ user, onLogout }) => {
                             )}
 
                             {/* Campos comunes */}
-                            {(modalType === 'municipios' || modalType === 'estados' || modalType === 'fases' || modalType === 'tiposEventos' || modalType === 'prioridades' || modalType === 'responsables') && (
+                            {(modalType === 'municipios' || modalType === 'estados' || modalType === 'fases' || modalType === 'tiposEventos' || modalType === 'prioridades' || modalType === 'responsables' || modalType === 'entidades') && (
                                 <div className="form-group">
                                     <label htmlFor="nombre">Nombre *</label>
                                     <input
@@ -867,37 +1040,37 @@ const Parametros = ({ user, onLogout }) => {
 
                             {/* Campos específicos para municipios */}
                             {modalType === 'municipios' && (
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label htmlFor="nombre">Código *</label>
-                                    <input
-                                        type="text"
-                                        id="codigo"
-                                        name="codigo"
-                                        value={formData.codigo}
-                                        onChange={handleInputChange}
-                                        required
-                                        placeholder="Ingrese el código"
-                                    />
-                                </div>
+                                <div className="form-row">
+                                    <div className="form-group">
+                                        <label htmlFor="nombre">Código *</label>
+                                        <input
+                                            type="text"
+                                            id="codigo"
+                                            name="codigo"
+                                            value={formData.codigo}
+                                            onChange={handleInputChange}
+                                            required
+                                            placeholder="Ingrese el código"
+                                        />
+                                    </div>
 
-                                <div className="form-group">
-                                    <label htmlFor="codigo">Departamento *</label>
-                                    <select
-                                        id="departamento"
-                                        name="departamento"
-                                        value={formData.departamento}
-                                        onChange={handleInputChange}
-                                        required
-                                    >
-                                    <option value="">Seleccione un departamento</option>
-                                    {departamentos.map(departamento => (
-                                        <option key={departamento.codigo} value={departamento.codigo}>
-                                            {departamento.nombre}
-                                        </option>
-                                    ))}
-                                </select>
-                                </div>
+                                    <div className="form-group">
+                                        <label htmlFor="codigo">Departamento *</label>
+                                        <select
+                                            id="departamento"
+                                            name="departamento"
+                                            value={formData.departamento}
+                                            onChange={handleInputChange}
+                                            required
+                                        >
+                                            <option value="">Seleccione un departamento</option>
+                                            {departamentos.map(departamento => (
+                                                <option key={departamento.codigo} value={departamento.codigo}>
+                                                    {departamento.nombre}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </div>
                             )}
 
@@ -915,21 +1088,36 @@ const Parametros = ({ user, onLogout }) => {
                                     />
                                 </div>
                             )}
+                            
 
                             {/* Campos específicos para tipos de eventos */}
                             {modalType === 'tiposEventos' && (
-                                <div className="form-group">
-                                    <label htmlFor="icono">Icono *</label>
-                                    <input
-                                        type="text"
-                                        id="icono"
-                                        name="icono"
-                                        value={formData.icono}
-                                        onChange={handleInputChange}
-                                        required
-                                        placeholder="Ej: 📋"
-                                    />
-                                </div>
+                                <>
+                                    <div className="form-group">
+                                        <label htmlFor="icono">Icono *</label>
+                                        <div style={{ fontSize: '2rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                            <span style={{ fontSize: '2.5rem', border: '1px solid #ccc', borderRadius: '8px', padding: '0.2em 0.5em', background: '#fff' }}>{formData.icono}</span>
+                                            <button
+                                                type="button"
+                                                className="btn-select-emoji"
+                                                style={{
+                                                    background: '#1976d2',
+                                                    color: '#fff',
+                                                    border: 'none',
+                                                    borderRadius: '6px',
+                                                    padding: '0.5em 1.2em',
+                                                    fontSize: '1.1rem',
+                                                    cursor: 'pointer',
+                                                    fontWeight: 'bold',
+                                                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                                                }}
+                                                onClick={openEmojiModal}
+                                            >
+                                                Seleccionar icono
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
                             )}
 
                             {/* Campos específicos para responsables */}
@@ -1002,7 +1190,7 @@ const Parametros = ({ user, onLogout }) => {
                                                 className="btn-add-componente"
                                                 disabled={!formData.descripcionComponente || !formData.valor}
                                             >
-                                            <FontAwesomeIcon icon={faPlus} /> Agregar Componente
+                                                <FontAwesomeIcon icon={faPlus} /> Agregar Componente
                                             </button>
                                         </div>
 
@@ -1083,7 +1271,7 @@ const Parametros = ({ user, onLogout }) => {
                                                         name="entidadFinancia"
                                                         value={formData.entidadFinancia}
                                                         onChange={handleInputChange}
-                                                        
+
                                                     >
                                                         <option value="">Seleccione una entidad</option>
                                                         {entidades.map(entidad => (
@@ -1095,17 +1283,17 @@ const Parametros = ({ user, onLogout }) => {
                                                 </div>
                                             </div>
                                             <div className="form-group">
-                                                    <label htmlFor="fuente">Fuente de Financiamiento *</label>
-                                                    <textarea
-                                                        type="text"
-                                                        id="fuenteFinanciamiento"
-                                                        name="fuenteFinanciamiento"
-                                                        value={formData.fuenteFinanciamiento}
-                                                        onChange={handleInputChange}
-                                                        rows="4"
-                                                        placeholder="Ingrese la fuente de financiamiento"
-                                                    />
-                                                </div>
+                                                <label htmlFor="fuente">Fuente de Financiamiento *</label>
+                                                <textarea
+                                                    type="text"
+                                                    id="fuenteFinanciamiento"
+                                                    name="fuenteFinanciamiento"
+                                                    value={formData.fuenteFinanciamiento}
+                                                    onChange={handleInputChange}
+                                                    rows="4"
+                                                    placeholder="Ingrese la fuente de financiamiento"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </>
@@ -1343,6 +1531,81 @@ const Parametros = ({ user, onLogout }) => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal para seleccionar emoji (global) */}
+            {showEmojiModal && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    width: '100vw',
+                    height: '100vh',
+                    background: 'rgba(0,0,0,0.35)',
+                    zIndex: 9999,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                }}
+                    onClick={closeEmojiModal}
+                >
+                    <div
+                        style={{
+                            background: '#fff',
+                            borderRadius: '12px',
+                            boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
+                            maxWidth: 600,
+                            width: '90vw',
+                            padding: '2rem 1.5rem 1.5rem 1.5rem',
+                            position: 'relative',
+                            textAlign: 'center',
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <button
+                            type="button"
+                            onClick={closeEmojiModal}
+                            style={{
+                                position: 'absolute',
+                                top: 10,
+                                right: 15,
+                                background: 'transparent',
+                                border: 'none',
+                                fontSize: '2rem',
+                                color: '#888',
+                                cursor: 'pointer',
+                            }}
+                            aria-label="Cerrar"
+                        >
+                            ×
+                        </button>
+                        <h3 style={{ marginBottom: '1rem' }}>Selecciona un icono</h3>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem', border: '1px solid #eee', borderRadius: '8px', display: 'inline-block', padding: '0.3em 0.7em', background: '#f9f9f9' }}>
+                            {formData.icono}
+                        </div>
+                        <div style={{ margin: '0 auto', width: '100%', maxWidth: 600 }}>
+                            <EmojiPicker
+                                onEmojiClick={(emojiData) => {
+                                    handleEmojiClick(emojiData);
+                                    closeEmojiModal();
+                                }}
+                                disableSkinTones
+                                disableSearchBar
+                                disableAutoFocus
+                                disablePreview
+                                width={600}
+                                style={{
+                                    width: '100%',
+                                    overflowY: 'auto',
+                                    border: '1px solid #ccc',
+                                    borderRadius: '5px',
+                                    padding: '10px',
+                                    background: '#fff',
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
             )}
