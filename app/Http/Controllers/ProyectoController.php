@@ -28,7 +28,9 @@ class ProyectoController extends Controller
                 'proyectos.entidad_financia',
                 'proyectos.fuente_financiacion',
                 'fase.color as color_fase',
+                'fase.dashboard as dashboard_fase',
                 'estado.color as color_estado',
+                'proyectos.progreso',
                 DB::raw('municipios.nombre as descripcion_municipio'),
                 DB::raw('entidad_presenta.nombre as descripcion_entidad_presenta'),
                 DB::raw('entidad_financia.nombre as descripcion_entidad_financia'),
@@ -36,14 +38,23 @@ class ProyectoController extends Controller
                 DB::raw('estado.nombre as descripcion_estado')
             )
             ->get();
-
+        $totalPresupuesto = 0;
         foreach ($proyectos as $proyecto) {
             $componentesPresupuesto = DB::table('presupuesto_proyecto')
-                ->select('componente', 'valor', 'id')
+                ->select('componente', 'valor', 'id',)
                 ->where('proyecto', $proyecto->id)
                 ->get();
             $proyecto->componentesPresupuesto = $componentesPresupuesto;
+            $totalPresupuesto = $componentesPresupuesto->sum('valor');
+            $proyecto->totalPresupuesto = $totalPresupuesto;
+
+            $contratos = DB::table('contratos')
+                ->select('n_contrato', 'objeto', 'valor', 'estado', 'contratante', 'contratista', 'fecha_inicio', 'fecha_fin', 'interventoria', 'avance')
+                ->where('proyecto', $proyecto->id)
+                ->get();
+            $proyecto->contratos = $contratos;
         }
+        
 
         return response()->json($proyectos);
     }
@@ -105,7 +116,7 @@ class ProyectoController extends Controller
     {
         $fases = DB::table('fases')
             ->select('nombre', 'id', 'color', 'activo', 'dashboard')
-            ->orderBy('nombre', 'asc')
+            ->orderBy('id', 'asc')
             ->get();
         return response()->json($fases);
     }
@@ -227,6 +238,25 @@ class ProyectoController extends Controller
                         ]);
                     }
                 }
+
+                if (isset($proyecto['contratos']) && count($proyecto['contratos']) > 0) {
+                    foreach ($proyecto['contratos'] as $contrato) {
+                        DB::table('contratos')->insert([
+                            'proyecto' => $proyectoId,
+                            'n_contrato' => $contrato['n_contrato'],
+                            'objeto' => $contrato['objeto'],
+                            'contratante' => $contrato['contratante'],
+                            'contratista' => $contrato['contratista'],
+                            'valor' => $contrato['valor'],
+                            'fecha_inicio' => $contrato['fecha_inicio'],
+                            'fecha_fin' => $contrato['fecha_fin'],
+                            'interventoria' => $contrato['interventoria'],
+                            'avance' => $contrato['avance'],
+                            'estado' => $contrato['estado']
+                        ]);
+                    }
+                }
+
             } else {
 
                 DB::table('proyectos')->where('id', $proyecto['id'])->update([
@@ -252,6 +282,26 @@ class ProyectoController extends Controller
                         ]);
                     }
                 }
+
+                DB::table('contratos')->where('proyecto', $proyecto['id'])->delete();
+                if (isset($proyecto['contratos']) && count($proyecto['contratos']) > 0) {
+                    foreach ($proyecto['contratos'] as $contrato) {
+                        DB::table('contratos')->insert([
+                            'proyecto' => $proyecto['id'],
+                            'n_contrato' => $contrato['n_contrato'],
+                            'objeto' => $contrato['objeto'],
+                            'contratante' => $contrato['contratante'],
+                            'contratista' => $contrato['contratista'],
+                            'valor' => $contrato['valor'],
+                            'fecha_inicio' => $contrato['fecha_inicio'],
+                            'fecha_fin' => $contrato['fecha_fin'],
+                            'interventoria' => $contrato['interventoria'],
+                            'avance' => $contrato['avance'],
+                            'estado' => $contrato['estado']
+                        ]);
+                    }
+                }
+
             }
         } catch (\Exception $e) {
             DB::rollBack();

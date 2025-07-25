@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import Header from './Header';
-import '../../css/Parametros.css';
 import axios from '../axios';
 import { faPlus, faTrash, faSave, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import Swal from 'sweetalert2';
+import Swal from 'sweetalert2/dist/sweetalert2.js';
 import EmojiPicker from 'emoji-picker-react';
 
 const Parametros = ({ user, onLogout }) => {
@@ -193,6 +192,58 @@ const Parametros = ({ user, onLogout }) => {
     const [searchText, setSearchText] = useState("");
     const [showEmojiModal, setShowEmojiModal] = useState(false);
 
+    // Estados posibles para los contratos
+    const estadosContratos = [
+        { value: 'vigente', label: 'Vigente' },
+        { value: 'ejecutado', label: 'Ejecutado' },
+        { value: 'liquidado', label: 'Liquidado' },
+        { value: 'suspendido', label: 'Suspendido' },
+        { value: 'anulado', label: 'Anulado' },
+    ];
+
+    // Estado para la lista de contratos
+    const [contratos, setContratos] = useState([]);
+
+    // Campos de formulario para contratos
+    const [formContrato, setFormContrato] = useState({
+        n_contrato: '',
+        objeto: '',
+        contratante: '',
+        contratista: '',
+        valor: '',
+        fecha_inicio: '',
+        fecha_fin: '',
+        interventoria: '',
+        avance: '',
+        estado: '',
+    });
+
+    // Manejar cambios en el formulario de contratos
+    const handleContratoChange = (e) => {
+        const { name, value } = e.target;
+        setFormContrato(prev => ({ ...prev, [name]: value }));
+    };
+
+    // Agregar contrato a la lista
+    const handleAddContrato = () => {
+        if (!formContrato.n_contrato || !formContrato.objeto || !formContrato.valor || !formContrato.estado) {
+            Swal.fire({ icon: 'warning', title: 'Los campos N° Contrato, Objeto, Valor y Estado son obligatorios' });
+            return;
+        }
+        setContratos(prev => [
+            ...prev,
+            { ...formContrato, id: Date.now() }
+        ]);
+        setFormContrato({
+            n_contrato: '', objeto: '', contratante: '', contratista: '', valor: '', fecha_inicio: '', fecha_fin: '', interventoria: '', avance: '', estado: ''
+        });
+    };
+
+    // Eliminar contrato de la lista
+    const handleDeleteContrato = (id) => {
+        setContratos(prev => prev.filter(c => c.id !== id));
+    };
+
     const tabs = [
         { id: 'proyectos', label: 'Gestionar Proyectos', icon: '📋' },
         { id: 'eventos-calendario', label: 'Gestionar Eventos', icon: '📅' },
@@ -232,7 +283,7 @@ const Parametros = ({ user, onLogout }) => {
                 id: editingItem ? editingItem.id : Date.now(),
                 presupuesto: formatCurrency(presupuestoTotal),
                 componentesPresupuesto: componentesPresupuesto,
-
+                contratos: contratos,
             };
             const response = await axios.post('/guardarProyecto', newProyecto);
             if (response.status === 200) {
@@ -465,6 +516,12 @@ const Parametros = ({ user, onLogout }) => {
         } else {
             setComponentesPresupuesto([]);
         }
+        // Cargar contratos si es un proyecto
+        if (type === 'proyectos' && item.contratos) {
+            setContratos(item.contratos);
+        } else {
+            setContratos([]);
+        }
 
         setModalActiveTab('datos');
         setShowModal(true);
@@ -610,6 +667,7 @@ const Parametros = ({ user, onLogout }) => {
             accion: 'Agregar'
         });
         setComponentesPresupuesto([]);
+        setContratos([]); // Resetear contratos al agregar nuevo
         setModalActiveTab('datos');
         setShowModal(true);
     };
@@ -647,6 +705,7 @@ const Parametros = ({ user, onLogout }) => {
             accion: 'Agregar'
         });
         setComponentesPresupuesto([]);
+        setContratos([]); // Resetear contratos al cerrar modal
         setModalActiveTab('datos');
     };
 
@@ -1019,6 +1078,14 @@ const Parametros = ({ user, onLogout }) => {
                                     >
                                         💰 Financiación
                                     </button>
+                                    <button
+                                        type="button"
+                                        className={`modal-tab ${modalActiveTab === 'contratos' ? 'active' : ''}`}
+                                        onClick={() => setModalActiveTab('contratos')}
+                                    >
+                                        📄
+                                        Contratos 
+                                    </button>
                                 </div>
                             )}
 
@@ -1299,6 +1366,120 @@ const Parametros = ({ user, onLogout }) => {
                                 </>
                             )}
 
+                            {/* Pestaña de Contratos para proyectos */}
+                            {modalType === 'proyectos' && modalActiveTab === 'contratos' && (
+                                <>
+                                    <div className="contratos-modal-section">
+                                        <h3>Contratos</h3>
+                                        <p className="contratos-info">
+                                            Agregue los contratos asociados al proyecto. Todos los campos son obligatorios.
+                                        </p>
+                                        <div className="contrato-form">
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label htmlFor="n_contrato">N° Contrato *</label>
+                                                    <input type="text" id="n_contrato" name="n_contrato" value={formContrato.n_contrato} onChange={handleContratoChange} />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label htmlFor="valor">Valor *</label>
+                                                    <input type="number" id="valor" name="valor" value={formContrato.valor} onChange={handleContratoChange} min="0" step="1000" />
+                                                </div>
+                                               
+                                            </div>
+                                                <div className="form-group">
+                                                    <label htmlFor="objeto">Objeto *</label>
+                                                    <textarea type="text" 
+                                                    id="objeto" name="objeto" 
+                                                    value={formContrato.objeto} 
+                                                    onChange={handleContratoChange} 
+                                                    rows="4"
+                                                    placeholder="Ingrese el objeto del contrato"
+                                                    />
+                                                </div>
+                                           
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label htmlFor="contratante">Contratante *</label>
+                                                    <input type="text" id="contratante" name="contratante" value={formContrato.contratante} onChange={handleContratoChange} />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label htmlFor="contratista">Contratista *</label>
+                                                    <input type="text" id="contratista" name="contratista" value={formContrato.contratista} onChange={handleContratoChange} />
+                                                </div>
+                                            </div>
+                                            <div className="form-row">
+                                               
+                                                <div className="form-group">
+                                                    <label htmlFor="fecha_inicio">Fecha Inicio *</label>
+                                                    <input type="date" id="fecha_inicio" name="fecha_inicio" value={formContrato.fecha_inicio} onChange={handleContratoChange} />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label htmlFor="fecha_fin">Fecha Fin *</label>
+                                                    <input type="date" id="fecha_fin" name="fecha_fin" value={formContrato.fecha_fin} onChange={handleContratoChange} />
+                                                </div>
+                                            </div>
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label htmlFor="interventoria">Interventoría *</label>
+                                                    <input type="text" id="interventoria" name="interventoria" value={formContrato.interventoria} onChange={handleContratoChange} />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label htmlFor="avance">Avance *</label>
+                                                    <input type="text" id="avance" name="avance" value={formContrato.avance} onChange={handleContratoChange} />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label htmlFor="estado">Estado *</label>
+                                                    <select id="estado" name="estado" value={formContrato.estado} onChange={handleContratoChange}>
+                                                        <option value="">Seleccione un estado</option>
+                                                        {estadosContratos.map(e => (
+                                                            <option key={e.value} value={e.value}>{e.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <button type="button" onClick={handleAddContrato} className="btn-add-contrato" disabled={!formContrato.n_contrato || !formContrato.objeto || !formContrato.valor || !formContrato.estado}>
+                                                <FontAwesomeIcon icon={faPlus} /> Agregar Contrato
+                                            </button>
+                                        </div>
+                                        <div className="contratos-list">
+                                            <h4>Contratos Agregados</h4>
+                                            {contratos.length === 0 ? (
+                                                <p className="no-contratos">No hay contratos agregados</p>
+                                            ) : (
+                                                <div className="contratos-table">
+                                                    <table>
+                                                        <thead>
+                                                            <tr>
+                                                                <th>N° Contrato</th>
+                                                                <th>Objeto</th>
+                                                                <th>Valor</th>
+                                                                <th>Estado</th>
+                                                                <th>Acciones</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {contratos.map(contrato => (
+                                                                <tr key={contrato.id}>
+                                                                    <td>{contrato.n_contrato}</td>
+                                                                    <td>{contrato.objeto}</td>
+                                                                    <td>{formatCurrency(Number(contrato.valor))}</td>
+                                                                    <td>{estadosContratos.find(e => e.value === contrato.estado)?.label || contrato.estado}</td>
+                                                                    <td>
+                                                                        <button type="button" onClick={() => handleDeleteContrato(contrato.id)} className="btn-delete-contrato">
+                                                                            <FontAwesomeIcon icon={faTrash} />
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
                             {/* Campos específicos para proyectos - Pestaña Datos */}
                             {modalType === 'proyectos' && modalActiveTab === 'datos' && (
                                 <>
@@ -1325,7 +1506,7 @@ const Parametros = ({ user, onLogout }) => {
                                                 required
                                             >
                                                 <option value="">Seleccione un municipio</option>
-                                                {municipios.map(municipio => (
+                                                {municipios.filter(municipio => municipio.activo === 1).map(municipio => (
                                                     <option key={municipio.codigo} value={municipio.codigo}>
                                                         {municipio.nombre}
                                                     </option>

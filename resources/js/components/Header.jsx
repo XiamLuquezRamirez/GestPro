@@ -1,5 +1,4 @@
 import React from 'react';
-import '../../css/Header.css';
 import { faSignOutAlt, faCog, faHome, faBars } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useNavigate, useLocation } from 'react-router-dom';

@@ -5,7 +5,8 @@ import Login from './components/Login';
 import Navigation from './components/Navigation';
 import Dashboard from './components/Dashboard';
 import Parametros from './components/Parametros';
-import axios from './axios';
+//import axios from './axios';
+import axios from 'axios';
 import '../css/app.css';
 
 function App() {
@@ -14,7 +15,11 @@ function App() {
 
   const fetchUser = async () => {
     try {
-      const res = await axios.get('/user');
+
+      axios.get('https://ingeer.co/GestPro/public/sanctum/csrf-cookie', { withCredentials: true })
+
+
+      const res = await axios.get('https://ingeer.co/GestPro/user', { withCredentials: true });
       setUser(res.data);
     } catch {
       setUser(null);

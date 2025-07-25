@@ -321,8 +321,58 @@ tr:hover {
     cursor: not-allowed;
 }
 
+.btn-add-contrato{
+    background: #1976d2;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 1rem;
+}
+
+.btn-add-contrato:hover {
+    background: #1565c0;
+}
+
+.btn-add-contrato:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
 .componentes-list {
     margin-bottom: 1.5rem;
+}
+
+.btn-delete-contrato{
+    background: #ffebee;
+    color: #c62828;
+    border: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.2s ease;
+}
+
+.btn-delete-contrato:hover {
+    background: #ffcdd2;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+    }
 }
 
 .componentes-list h4 {
@@ -465,6 +515,7 @@ tr:hover {
 
 .btn-edit:hover {
     background: #bbdefb;
+    animation: pulse 1s infinite;
 }
 
 .btn-delete {
@@ -474,6 +525,7 @@ tr:hover {
 
 .btn-delete:hover {
     background: #ffcdd2;
+    animation: pulse 1s infinite;
 }
 
 /* Modal */

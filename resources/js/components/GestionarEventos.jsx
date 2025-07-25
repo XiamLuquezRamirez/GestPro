@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import Header from './Header';
-import '../../css/GestionarEventos.css';
 
 const GestionarEventos = ({ user, onLogout }) => {
     const [eventos, setEventos] = useState([

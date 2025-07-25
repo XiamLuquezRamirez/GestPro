@@ -1,264 +1,107 @@
-import React, { useState } from 'react';
-import '../../css/Dashboard.css';
+import React, { useState, useEffect } from 'react';
 import Header from './Header';
-
+import axios from 'axios';
 const Dashboard = ({ user, onLogout }) => {
-    const [activeTab, setActiveTab] = useState('formulacion');
+    const [activeTab, setActiveTab] = useState(''); // Inicialmente vacío
     const [currentEventIndex, setCurrentEventIndex] = useState(0);
     const [selectedMunicipio, setSelectedMunicipio] = useState(null);
-
-    // Datos de ejemplo - en un proyecto real vendrían de una API
-    const [municipios] = useState([
-        {
-            id: 1,
-            nombre: 'Valledupar',
-            proyectosFormulacion: 8,
-            color: '#4CAF50',
-            icon: '🗺️'
-        },
-        {
-            id: 2,
-            nombre: 'Aguachica',
-            proyectosFormulacion: 5,
-            color: '#2196F3',
-            icon: ' 🗺️'
-        },
-        {
-            id: 3,
-            nombre: 'Codazzi',
-            proyectosFormulacion: 3,
-            color: '#FF9800',
-            icon: '🗺️'
-        },
-        {
-            id: 4,
-            nombre: 'La Paz',
-            proyectosFormulacion: 6,
-            color: '#9C27B0',
-            icon: ' 🗺️ '
-        }
-    ]);
-
-    // Array consolidado con todos los proyectos
-    const [todosLosProyectos] = useState([
-        // Proyectos en Formulación
-        {
-            id: 1,
-            nombre: 'Centro Deportivo Valledupar',
-            municipio: 'Valledupar',
-            presupuesto: '$2,500,000',
-            fechaInicio: '2024-08-01',
-            estado: 'En revisión',
-            fase: 'formulacion'
-        },
-        {
-            id: 2,
-            nombre: 'Parque Ecológico Aguachica',
-            municipio: 'Aguachica',
-            presupuesto: '$1,800,000',
-            fechaInicio: '2024-08-15',
-            estado: 'Aprobado',
-            fase: 'formulacion'
-        },
-        {
-            id: 3,
-            nombre: 'Mejora Hospital Codazzi',
-            municipio: 'Codazzi',
-            presupuesto: '$3,200,000',
-            fechaInicio: '2024-09-01',
-            estado: 'En revisión',
-            fase: 'formulacion'
-        },
-        {
-            id: 4,
-            nombre: 'Sistema de Agua Potable Valledupar',
-            municipio: 'Valledupar',
-            presupuesto: '$4,100,000',
-            fechaInicio: '2024-08-10',
-            estado: 'Aprobado',
-            fase: 'formulacion'
-        },
-        {
-            id: 5,
-            nombre: 'Centro Comercial La Paz',
-            municipio: 'La Paz',
-            presupuesto: '$5,200,000',
-            fechaInicio: '2024-09-15',
-            estado: 'En revisión',
-            fase: 'formulacion'
-        },
-        {
-            id: 6,
-            nombre: 'Mejora Vías Rurales Aguachica',
-            municipio: 'Aguachica',
-            presupuesto: '$2,800,000',
-            fechaInicio: '2024-08-20',
-            estado: 'Aprobado',
-            fase: 'formulacion'
-        },
-        // Proyectos en Licitación
-        {
-            id: 7,
-            nombre: 'Sistema de Alcantarillado Valledupar',
-            municipio: 'Valledupar',
-            presupuesto: '$4,500,000',
-            fechaLicitacion: '2024-07-20',
-            estado: 'Abierta',
-            fase: 'licitacion'
-        },
-        {
-            id: 8,
-            nombre: 'Construcción Escuela Rural La Paz',
-            municipio: 'La Paz',
-            presupuesto: '$1,200,000',
-            fechaLicitacion: '2024-07-25',
-            estado: 'En evaluación',
-            fase: 'licitacion'
-        },
-        {
-            id: 9,
-            nombre: 'Mejora Vías Principales Aguachica',
-            municipio: 'Aguachica',
-            presupuesto: '$3,800,000',
-            fechaLicitacion: '2024-08-01',
-            estado: 'Abierta',
-            fase: 'licitacion'
-        },
-        {
-            id: 10,
-            nombre: 'Centro de Salud Valledupar',
-            municipio: 'Valledupar',
-            presupuesto: '$2,100,000',
-            fechaLicitacion: '2024-08-05',
-            estado: 'En evaluación',
-            fase: 'licitacion'
-        },
-        // Proyectos en Ejecución
-        {
-            id: 11,
-            nombre: 'Construcción Centro Comercial Valledupar',
-            municipio: 'Valledupar',
-            progreso: 75,
-            fechaInicio: '2024-01-15',
-            fechaFin: '2024-12-30',
-            estado: 'En ejecución',
-            fase: 'ejecucion'
-        },
-        {
-            id: 12,
-            nombre: 'Mejora Vías Principales Aguachica',
-            municipio: 'Aguachica',
-            progreso: 45,
-            fechaInicio: '2024-03-01',
-            fechaFin: '2025-02-28',
-            estado: 'En ejecución',
-            fase: 'ejecucion'
-        },
-        {
-            id: 13,
-            nombre: 'Sistema de Alcantarillado Codazzi',
-            municipio: 'Codazzi',
-            progreso: 90,
-            fechaInicio: '2023-11-01',
-            fechaFin: '2024-10-31',
-            estado: 'En ejecución',
-            fase: 'ejecucion'
-        },
-        {
-            id: 14,
-            nombre: 'Parque Recreacional La Paz',
-            municipio: 'La Paz',
-            progreso: 60,
-            fechaInicio: '2024-02-01',
-            fechaFin: '2024-11-30',
-            estado: 'En ejecución',
-            fase: 'ejecucion'
-        }
-    ]);
-
-    // Función para filtrar proyectos por fase
+    const [fases, setFases] = useState([]);
+    const [proyectos, setProyectos] = useState([]);
+    const [modalProyecto, setModalProyecto] = useState(null);
+    const [proximosEventos, setProximosEventos] = useState([]);
+    
+    // Función para filtrar proyectos por fase (usando descripcion_fase)
     const getProyectosPorFase = (fase) => {
-        return todosLosProyectos.filter(proyecto => proyecto.fase === fase);
+        return proyectos.filter(proyecto => proyecto.descripcion_fase?.toLowerCase() === fase.toLowerCase());
     };
 
-    // Función para filtrar proyectos por estado
+    // Función para filtrar proyectos por estado (usando descripcion_estado)
     const getProyectosPorEstado = (estado) => {
-        return todosLosProyectos.filter(proyecto => proyecto.estado === estado);
+        return proyectos.filter(proyecto => proyecto.descripcion_estado === estado);
     };
 
     // Función para filtrar proyectos por municipio y fase
     const getProyectosPorMunicipioYFase = (municipio, fase) => {
-        return todosLosProyectos.filter(proyecto => 
-            proyecto.municipio === municipio && proyecto.fase === fase
+        return proyectos.filter(proyecto =>
+            proyecto.descripcion_municipio === municipio && proyecto.descripcion_fase?.toLowerCase() === fase.toLowerCase()
         );
     };
 
     // Función para filtrar proyectos por municipio, fase y estado
     const getProyectosPorMunicipioFaseYEstado = (municipio, fase, estado) => {
-        return todosLosProyectos.filter(proyecto => 
-            proyecto.municipio === municipio && 
-            proyecto.fase === fase && 
-            proyecto.estado === estado
+        return proyectos.filter(proyecto =>
+            proyecto.descripcion_municipio === municipio &&
+            proyecto.descripcion_fase?.toLowerCase() === fase.toLowerCase() &&
+            proyecto.descripcion_estado?.toLowerCase() === estado.toLowerCase()
         );
     };
 
     // Función para obtener estadísticas de proyectos por estado
     const getEstadisticasPorEstado = () => {
         const estadisticas = {};
-        todosLosProyectos.forEach(proyecto => {
-            if (!estadisticas[proyecto.estado]) {
-                estadisticas[proyecto.estado] = 0;
+        proyectos.forEach(proyecto => {
+            const estado = proyecto.descripcion_estado;
+            if (!estadisticas[estado]) {
+                estadisticas[estado] = 0;
             }
-            estadisticas[proyecto.estado]++;
+            estadisticas[estado]++;
         });
+        console.log("Estadísticas por estado:", estadisticas);
         return estadisticas;
     };
 
     // Función para obtener estadísticas por fase
     const getEstadisticasPorFase = () => {
         const estadisticas = {};
-        todosLosProyectos.forEach(proyecto => {
-            if (!estadisticas[proyecto.fase]) {
-                estadisticas[proyecto.fase] = 0;
+        proyectos.forEach(proyecto => {
+            const fase = proyecto.descripcion_fase;
+            if (!estadisticas[fase]) {
+                estadisticas[fase] = 0;
             }
-            estadisticas[proyecto.fase]++;
+            estadisticas[fase]++;
         });
+        console.log("Estadísticas por fase:", estadisticas);
         return estadisticas;
     };
 
     // Función para obtener estadísticas por municipio
     const getEstadisticasPorMunicipio = () => {
         const estadisticas = {};
-        todosLosProyectos.forEach(proyecto => {
-            if (!estadisticas[proyecto.municipio]) {
-                estadisticas[proyecto.municipio] = 0;
+        proyectos.forEach(proyecto => {
+            const municipio = proyecto.descripcion_municipio;
+            if (!estadisticas[municipio]) {
+                estadisticas[municipio] = 0;
             }
-            estadisticas[proyecto.municipio]++;
+            estadisticas[municipio]++;
         });
+        console.log("Estadísticas por municipio:", estadisticas);
         return estadisticas;
     };
 
     // Función para obtener datos de progreso de proyectos en ejecución
     const getDatosProgreso = () => {
-        return proyectosEjecucion.map(proyecto => ({
+        const proyectosEnEjecucion = getProyectosPorFase('Ejecución');
+        console.log("Proyectos en ejecución:", proyectosEnEjecucion);
+        return proyectosEnEjecucion.map(proyecto => ({
             nombre: proyecto.nombre,
-            progreso: proyecto.progreso,
-            municipio: proyecto.municipio
+            progreso: proyecto.progreso || 0,
+            municipio: proyecto.descripcion_municipio
         }));
     };
 
     // Función para obtener presupuesto total por municipio
     const getPresupuestoPorMunicipio = () => {
         const presupuestos = {};
-        todosLosProyectos.forEach(proyecto => {
-            if (proyecto.presupuesto) {
-                const valor = parseInt(proyecto.presupuesto.replace(/[$,]/g, ''));
-                if (!presupuestos[proyecto.municipio]) {
-                    presupuestos[proyecto.municipio] = 0;
+        proyectos.forEach(proyecto => {
+            if (proyecto.totalPresupuesto) {
+                const valor = parseInt(proyecto.totalPresupuesto);
+                if (!presupuestos[proyecto.descripcion_municipio]) {
+                    presupuestos[proyecto.descripcion_municipio] = 0;
                 }
-                presupuestos[proyecto.municipio] += valor;
+                presupuestos[proyecto.descripcion_municipio] += valor;
             }
         });
+        console.log("Presupuesto por municipio:", presupuestos);
         return presupuestos;
     };
 
@@ -300,9 +143,9 @@ const Dashboard = ({ user, onLogout }) => {
 
     const getFaseColor = (fase) => {
         const colores = {
-            'formulacion': '#FF9800',
-            'licitacion': '#2196F3',
-            'ejecucion': '#4CAF50'
+            'Formulación': '#FF9800',
+            'Licitación': '#2196F3',
+            'Ejecución': '#4CAF50'
         };
         return colores[fase] || '#757575';
     };
@@ -318,83 +161,25 @@ const Dashboard = ({ user, onLogout }) => {
     };
 
     // Obtener proyectos por fase para usar en el componente
-    const proyectosFormulacion = getProyectosPorFase('formulacion');
-    const proyectosLicitacion = getProyectosPorFase('licitacion');
-    const proyectosEjecucion = getProyectosPorFase('ejecucion');
+    const proyectosFormulacion = getProyectosPorFase('Formulación');
+    const proyectosLicitacion = getProyectosPorFase('Licitación');
+    const proyectosEjecucion = getProyectosPorFase('Ejecución');
 
-    // Ejemplos de uso de filtrado por estado
-    const proyectosAprobados = getProyectosPorEstado('Aprobado');
-    const proyectosEnRevision = getProyectosPorEstado('En revisión');
-    const proyectosAbiertos = getProyectosPorEstado('Abierta');
-    const proyectosEnEvaluacion = getProyectosPorEstado('En evaluación');
-    const proyectosEnEjecucion = getProyectosPorEstado('En ejecución');
+    console.log("Proyectos por fase:", {
+        formulacion: proyectosFormulacion.length,
+        licitacion: proyectosLicitacion.length,
+        ejecucion: proyectosEjecucion.length
+    });
 
-    const [proximosEventos] = useState([
-        {
-            id: 1,
-            titulo: 'Fecha límite para pasar pliego',
-            descripcion: 'Proyecto: Centro Deportivo Valledupar',
-            fecha: '2024-07-15',
-            tipo: 'pliego',
-            prioridad: 'alta'
-        },
-        {
-            id: 2,
-            titulo: 'Presentación de propuesta técnica',
-            descripcion: 'Proyecto: Parque Ecológico Aguachica',
-            fecha: '2024-07-20',
-            tipo: 'propuesta',
-            prioridad: 'media'
-        },
-        {
-            id: 3,
-            titulo: 'Audiencia pública',
-            descripcion: 'Proyecto: Mejora Hospital Codazzi',
-            fecha: '2024-07-25',
-            tipo: 'audiencia',
-            prioridad: 'alta'
-        },
-        {
-            id: 4,
-            titulo: 'Entrega de documentación',
-            descripcion: 'Proyecto: Escuela Rural La Paz',
-            fecha: '2024-07-30',
-            tipo: 'documentacion',
-            prioridad: 'baja'
-        },
-        {
-            id: 5,
-            titulo: 'Revisión de propuestas',
-            descripcion: 'Proyecto: Sistema Alcantarillado',
-            fecha: '2024-08-05',
-            tipo: 'revision',
-            prioridad: 'alta'
-        },
-        {
-            id: 6,
-            titulo: 'Firma de contratos',
-            descripcion: 'Proyecto: Mejora Vías Aguachica',
-            fecha: '2024-08-10',
-            tipo: 'contrato',
-            prioridad: 'media'
-        },
-        {
-            id: 7,
-            titulo: 'Inicio de obras',
-            descripcion: 'Proyecto: Centro Comercial',
-            fecha: '2024-08-15',
-            tipo: 'inicio',
-            prioridad: 'alta'
-        },
-        {
-            id: 8,
-            titulo: 'Inspección de avance',
-            descripcion: 'Proyecto: Hospital Codazzi',
-            fecha: '2024-08-20',
-            tipo: 'inspeccion',
-            prioridad: 'baja'
-        }
-    ]);
+    // Generar dinámicamente los arrays de proyectos por estado
+    const estadosExistentes = Object.keys(getEstadisticasPorEstado());
+    const proyectosPorEstado = {};
+    estadosExistentes.forEach(estado => {
+        proyectosPorEstado[estado] = getProyectosPorEstado(estado);
+    });
+
+
+  
 
     const formatDate = (dateString) => {
         const options = { year: 'numeric', month: 'long', day: 'numeric' };
@@ -438,19 +223,33 @@ const Dashboard = ({ user, onLogout }) => {
 
     const visibleEvents = proximosEventos.slice(currentEventIndex, currentEventIndex + 4);
 
+    // Eliminar el array de municipios de ejemplo
+    // const [municipios] = useState([...]);
+
+    // Generar municipios únicos a partir de los proyectos
+    const municipios = Array.from(
+        new Map(
+            proyectos.map(p => [p.descripcion_municipio, {
+                nombre: p.descripcion_municipio,
+                color: '#4CAF50', // Puedes personalizar el color si tienes un campo en el backend
+                icon: '🏙️' // Puedes personalizar el icono si tienes un campo en el backend
+            }])
+        ).values()
+    );
+
     // Agrupar proyectos por municipio usando las nuevas funciones de filtrado
     const proyectosPorMunicipio = municipios.reduce((acc, municipio) => {
-        acc[municipio.nombre] = getProyectosPorMunicipioYFase(municipio.nombre, 'formulacion');
+        acc[municipio.nombre] = getProyectosPorMunicipioYFase(municipio.nombre, 'Formulación');
         return acc;
     }, {});
 
     const proyectosLicitacionPorMunicipio = municipios.reduce((acc, municipio) => {
-        acc[municipio.nombre] = getProyectosPorMunicipioYFase(municipio.nombre, 'licitacion');
+        acc[municipio.nombre] = getProyectosPorMunicipioYFase(municipio.nombre, 'Licitación');
         return acc;
     }, {});
 
     const proyectosEjecucionPorMunicipio = municipios.reduce((acc, municipio) => {
-        acc[municipio.nombre] = getProyectosPorMunicipioYFase(municipio.nombre, 'ejecucion');
+        acc[municipio.nombre] = getProyectosPorMunicipioYFase(municipio.nombre, 'Ejecución');
         return acc;
     }, {});
 
@@ -467,6 +266,65 @@ const Dashboard = ({ user, onLogout }) => {
         setSelectedMunicipio(null); // Reset municipio selection when changing tabs
     };
 
+    const handleOpenModalProyecto = (proyecto) => setModalProyecto(proyecto);
+    const handleCloseModalProyecto = () => setModalProyecto(null);
+
+    // Estado para la pestaña activa del modal de proyecto
+    const [modalProyectoTab, setModalProyectoTab] = useState('datos');
+
+    // Estado para el contrato seleccionado en el modal
+    const [modalContrato, setModalContrato] = useState(null);
+
+    useEffect(() => {
+        listFases();
+        listProyectos();
+        listEventos();
+    }, []);
+
+    // Cuando se abre un nuevo modal, resetear la pestaña activa
+    useEffect(() => {
+        if (modalProyecto) setModalProyectoTab('datos');
+    }, [modalProyecto]);
+
+    useEffect(() => {
+        if (fases.length > 0) {
+            setActiveTab(fases[0].nombre);
+        }
+    }, [fases]);
+
+    const listFases = async () => {
+        const response = await axios.get('/fases');
+        setFases(response.data);
+    };
+
+    const listProyectos = async () => {
+        const response = await axios.get('/proyectos');
+        setProyectos(response.data);
+        console.log(response.data);
+    };
+
+    const listEventos = async () => {
+        const response = await axios.get('/eventos');
+        setProximosEventos(response.data);
+        console.log(response.data);
+    };
+
+    // Mostrar solo las fases que tienen dashboard_fase === 1
+    const fasesDashboard = fases.filter(fase => fase.dashboard === 1);
+    console.log(fasesDashboard);
+
+    // Función para filtrar proyectos por nombre de fase
+    const getProyectosPorNombreFase = (nombreFase) => {
+        return proyectos.filter(proyecto => proyecto.descripcion_fase === nombreFase);
+    };
+
+    // Agrupar proyectos por municipio y nombre de fase
+    const getProyectosPorMunicipioYNombreFase = (municipio, nombreFase) => {
+        return proyectos.filter(proyecto =>
+            proyecto.descripcion_municipio === municipio && proyecto.descripcion_fase === nombreFase
+        );
+    };
+
     return (
         <div className="dashboard-container">
             {/* Header */}
@@ -478,24 +336,15 @@ const Dashboard = ({ user, onLogout }) => {
                 <section className="proyectos-tabs-section">
                     <div className="tabs-container">
                         <div className="tabs-header">
-                            <button 
-                                className={`tab-button ${activeTab === 'formulacion' ? 'active' : ''}`}
-                                onClick={() => handleTabChange('formulacion')}
-                            >
-                                Proyectos en Formulación
-                            </button>
-                            <button 
-                                className={`tab-button ${activeTab === 'licitacion' ? 'active' : ''}`}
-                                onClick={() => handleTabChange('licitacion')}
-                            >
-                                Proyectos en Licitación
-                            </button>
-                            <button 
-                                className={`tab-button ${activeTab === 'ejecucion' ? 'active' : ''}`}
-                                onClick={() => handleTabChange('ejecucion')}
-                            >
-                                Proyectos en Ejecución
-                            </button>
+                            {fasesDashboard.map(fase => (
+                                <button 
+                                    key={fase.id}
+                                    className={`tab-button ${activeTab === fase.nombre ? 'active' : ''}`}
+                                    onClick={() => handleTabChange(fase.nombre)}
+                                >
+                                    {fase.nombre}
+                                </button>
+                            ))}
                             <button 
                                 className={`tab-button ${activeTab === 'estadisticas' ? 'active' : ''}`}
                                 onClick={() => handleTabChange('estadisticas')}
@@ -505,16 +354,18 @@ const Dashboard = ({ user, onLogout }) => {
                         </div>
                         
                         <div className="tab-content">
-                            {activeTab === 'formulacion' && (
-                                <div className="formulacion-content">
+                            {fasesDashboard.map(fase => (
+                                activeTab === fase.nombre && (
+                                    <div key={fase.id} className="formulacion-content">
                                     {!selectedMunicipio ? (
-                                        // Vista de municipios
                                         <div className="municipios-grid">
-                                            {municipios.map(municipio => {
-                                                const proyectosDelMunicipio = proyectosPorMunicipio[municipio.nombre] || [];
+                                                {municipios
+                                                    .filter(municipio => getProyectosPorMunicipioYNombreFase(municipio.nombre, fase.nombre).length > 0)
+                                                    .map(municipio => {
+                                                        const proyectosDelMunicipio = getProyectosPorMunicipioYNombreFase(municipio.nombre, fase.nombre) || [];
                                                 return (
                                                     <div 
-                                                        key={municipio.id} 
+                                                                key={municipio.nombre}
                                                         className="municipio-card-modern"
                                                         style={{ borderLeftColor: municipio.color }}
                                                         onClick={() => handleMunicipioClick(municipio.nombre)}
@@ -527,19 +378,16 @@ const Dashboard = ({ user, onLogout }) => {
                                                                 <h3>{municipio.nombre}</h3>
                                                                 <div className="proyectos-count-modern">
                                                                     <span className="count-number-modern">{proyectosDelMunicipio.length}</span>
-                                                                    <span className="count-label-modern">proyectos en formulación</span>
+                                                                            <span className="count-label-modern">proyectos en {fase.nombre.toLowerCase()}</span>
                                                                 </div>
                                                             </div>
-                                                            <div className="municipio-arrow">
-                                                                →
-                                                            </div>
+                                                                    <div className="municipio-arrow">→</div>
                                                         </div>
                                                     </div>
                                                 );
                                             })}
                                         </div>
                                     ) : (
-                                        // Vista de proyectos del municipio seleccionado
                                         <div className="municipio-proyectos-view">
                                             <div className="municipio-header-back">
                                                 <button onClick={handleBackToMunicipios} className="back-btn">
@@ -551,246 +399,69 @@ const Dashboard = ({ user, onLogout }) => {
                                                     </span>
                                                     <h3 className="municipio-nombre">{selectedMunicipio}</h3>
                                                     <span className="proyectos-count-header">
-                                                        {proyectosPorMunicipio[selectedMunicipio]?.length || 0} proyectos
+                                                            {getProyectosPorMunicipioYNombreFase(selectedMunicipio, fase.nombre)?.length || 0} proyectos
                                                     </span>
                                                 </div>
                                             </div>
                                             <div className="proyectos-grid">
-                                                {proyectosPorMunicipio[selectedMunicipio]?.map(proyecto => (
-                                                    <div key={proyecto.id} className="proyecto-card">
+                                                    {getProyectosPorMunicipioYNombreFase(selectedMunicipio, fase.nombre)?.length > 0 ? (
+                                                        getProyectosPorMunicipioYNombreFase(selectedMunicipio, fase.nombre).map(proyecto => (
+                                                            <div key={proyecto.id} className="proyecto-card" onClick={() => handleOpenModalProyecto(proyecto)}>
                                                         <div className="proyecto-header">
                                                             <h3>{proyecto.nombre}</h3>
-                                                            <span className="municipio-tag">{proyecto.municipio}</span>
+                                                                    <span className="municipio-tag">{proyecto.descripcion_municipio}</span>
                                                         </div>
                                                         <div className="proyecto-info">
                                                             <div className="info-item">
                                                                 <span className="info-label">Presupuesto:</span>
-                                                                <span className="info-value">{proyecto.presupuesto}</span>
+                                                                        <span className="info-value">$ {proyecto.totalPresupuesto?.toLocaleString()}</span>
                                                             </div>
                                                             <div className="info-item">
                                                                 <span className="info-label">Fecha Inicio:</span>
-                                                                <span className="info-value">{formatDate(proyecto.fechaInicio)}</span>
+                                                                        <span className="info-value">{formatDate(proyecto.fecha_inicio)}</span>
                                                             </div>
                                                             <div className="info-item">
                                                                 <span className="info-label">Estado:</span>
-                                                                <span className={`estado-badge ${proyecto.estado.toLowerCase().replace(' ', '-')}`}>
-                                                                    {proyecto.estado}
+                                                                        <span className={`estado-badge ${proyecto.descripcion_estado?.toLowerCase().replace(' ', '-')}`}>
+                                                                            {proyecto.descripcion_estado}
                                                                 </span>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                )) || (
+                                                        ))
+                                                    ) : (
                                                     <div className="no-proyectos">
-                                                        <p>No hay proyectos en formulación para este municipio.</p>
+                                                            <p>No hay proyectos en {fase.nombre.toLowerCase()} para este municipio.</p>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
                                     )}
                                 </div>
-                            )}
-                            
-                            {activeTab === 'licitacion' && (
-                                <div className="formulacion-content">
-                                    {!selectedMunicipio ? (
-                                        // Vista de municipios para licitación
-                                        <div className="municipios-grid">
-                                            {municipios.map(municipio => {
-                                                const proyectosDelMunicipio = proyectosLicitacionPorMunicipio[municipio.nombre] || [];
-                                                return (
-                                                    <div 
-                                                        key={municipio.id} 
-                                                        className="municipio-card-modern"
-                                                        style={{ borderLeftColor: municipio.color }}
-                                                        onClick={() => handleMunicipioClick(municipio.nombre)}
-                                                    >
-                                                        <div className="municipio-card-content">
-                                                            <div className="municipio-icon-modern">
-                                                                {municipio.icon}
-                                                            </div>
-                                                            <div className="municipio-info-modern">
-                                                                <h3>{municipio.nombre}</h3>
-                                                                <div className="proyectos-count-modern">
-                                                                    <span className="count-number-modern">{proyectosDelMunicipio.length}</span>
-                                                                    <span className="count-label-modern">proyectos en licitación</span>
-                                                                </div>
-                                                            </div>
-                                                            <div className="municipio-arrow">
-                                                                →
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : (
-                                        // Vista de proyectos de licitación del municipio seleccionado
-                                        <div className="municipio-proyectos-view">
-                                            <div className="municipio-header-back">
-                                                <button onClick={handleBackToMunicipios} className="back-btn">
-                                                    ← Volver a municipios
-                                                </button>
-                                                <div className="municipio-info-header">
-                                                    <span className="municipio-icon-header">
-                                                        {municipios.find(m => m.nombre === selectedMunicipio)?.icon || '🏙️'}
-                                                    </span>
-                                                    <h3 className="municipio-nombre">{selectedMunicipio}</h3>
-                                                    <span className="proyectos-count-header">
-                                                        {proyectosLicitacionPorMunicipio[selectedMunicipio]?.length || 0} proyectos
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div className="proyectos-grid">
-                                                {proyectosLicitacionPorMunicipio[selectedMunicipio]?.map(proyecto => (
-                                                    <div key={proyecto.id} className="proyecto-card">
-                                                        <div className="proyecto-header">
-                                                            <h3>{proyecto.nombre}</h3>
-                                                            <span className="municipio-tag">{proyecto.municipio}</span>
-                                                        </div>
-                                                        <div className="proyecto-info">
-                                                            <div className="info-item">
-                                                                <span className="info-label">Presupuesto:</span>
-                                                                <span className="info-value">{proyecto.presupuesto}</span>
-                                                            </div>
-                                                            <div className="info-item">
-                                                                <span className="info-label">Fecha Licitación:</span>
-                                                                <span className="info-value">{formatDate(proyecto.fechaLicitacion)}</span>
-                                                            </div>
-                                                            <div className="info-item">
-                                                                <span className="info-label">Estado:</span>
-                                                                <span className={`estado-badge ${proyecto.estado.toLowerCase().replace(' ', '-')}`}>
-                                                                    {proyecto.estado}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )) || (
-                                                    <div className="no-proyectos">
-                                                        <p>No hay proyectos en licitación para este municipio.</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            
-                            {activeTab === 'ejecucion' && (
-                                <div className="formulacion-content">
-                                    {!selectedMunicipio ? (
-                                        // Vista de municipios para ejecución
-                                        <div className="municipios-grid">
-                                            {municipios.map(municipio => {
-                                                const proyectosDelMunicipio = proyectosEjecucionPorMunicipio[municipio.nombre] || [];
-                                                return (
-                                                    <div 
-                                                        key={municipio.id} 
-                                                        className="municipio-card-modern"
-                                                        style={{ borderLeftColor: municipio.color }}
-                                                        onClick={() => handleMunicipioClick(municipio.nombre)}
-                                                    >
-                                                        <div className="municipio-card-content">
-                                                            <div className="municipio-icon-modern">
-                                                                {municipio.icon}
-                                                            </div>
-                                                            <div className="municipio-info-modern">
-                                                                <h3>{municipio.nombre}</h3>
-                                                                <div className="proyectos-count-modern">
-                                                                    <span className="count-number-modern">{proyectosDelMunicipio.length}</span>
-                                                                    <span className="count-label-modern">proyectos en ejecución</span>
-                                                                </div>
-                                                            </div>
-                                                            <div className="municipio-arrow">
-                                                                →
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : (
-                                        // Vista de proyectos de ejecución del municipio seleccionado
-                                        <div className="municipio-proyectos-view">
-                                            <div className="municipio-header-back">
-                                                <button onClick={handleBackToMunicipios} className="back-btn">
-                                                    ← Volver a municipios
-                                                </button>
-                                                <div className="municipio-info-header">
-                                                    <span className="municipio-icon-header">
-                                                        {municipios.find(m => m.nombre === selectedMunicipio)?.icon || '🏙️'}
-                                                    </span>
-                                                    <h3 className="municipio-nombre">{selectedMunicipio}</h3>
-                                                    <span className="proyectos-count-header">
-                                                        {proyectosEjecucionPorMunicipio[selectedMunicipio]?.length || 0} proyectos
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div className="proyectos-grid">
-                                                {proyectosEjecucionPorMunicipio[selectedMunicipio]?.map(proyecto => (
-                                                    <div key={proyecto.id} className="proyecto-card">
-                                                        <div className="proyecto-header">
-                                                            <h3>{proyecto.nombre}</h3>
-                                                            <span className="municipio-tag">{proyecto.municipio}</span>
-                                                        </div>
-                                                        <div className="proyecto-progreso">
-                                                            <div className="progreso-info">
-                                                                <span>Progreso: {proyecto.progreso}%</span>
-                                                                <div className="progreso-bar">
-                                                                    <div 
-                                                                        className="progreso-fill"
-                                                                        style={{ width: `${proyecto.progreso}%` }}
-                                                                    ></div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="proyecto-fechas">
-                                                            <div className="fecha-item">
-                                                                <span className="fecha-label">Inicio:</span>
-                                                                <span className="fecha-value">{formatDate(proyecto.fechaInicio)}</span>
-                                                            </div>
-                                                            <div className="fecha-item">
-                                                                <span className="fecha-label">Fin:</span>
-                                                                <span className="fecha-value">{formatDate(proyecto.fechaFin)}</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )) || (
-                                                    <div className="no-proyectos">
-                                                        <p>No hay proyectos en ejecución para este municipio.</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            
+                                )
+                            ))}
                             {activeTab === 'estadisticas' && (
                                 <div className="estadisticas-content">
-                                    <div className="estadisticas-grid">
                                         {/* Tarjetas de resumen */}
                                         <div className="resumen-cards">
                                             <div className="resumen-card">
                                                 <div className="resumen-icon">📊</div>
                                                 <div className="resumen-info">
                                                     <h3>Total Proyectos</h3>
-                                                    <span className="resumen-valor">{todosLosProyectos.length}</span>
+                                                <span className="resumen-valor">{proyectos.length}</span>
                                                 </div>
                                             </div>
-                                            <div className="resumen-card">
-                                                <div className="resumen-icon">✅</div>
-                                                <div className="resumen-info">
-                                                    <h3>Proyectos Aprobados</h3>
-                                                    <span className="resumen-valor">{proyectosAprobados.length}</span>
+                                            {estadosExistentes.slice(0, 3).map((estado, index) => (
+                                                <div key={estado} className="resumen-card">
+                                                    <div className="resumen-icon">
+                                                        {index === 0 ? '✅' : index === 1 ? '🚀' : '💰'}
+                                                    </div>
+                                                    <div className="resumen-info">
+                                                        <h3>{estado}</h3>
+                                                        <span className="resumen-valor">{proyectosPorEstado[estado].length}</span>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <div className="resumen-card">
-                                                <div className="resumen-icon">🚀</div>
-                                                <div className="resumen-info">
-                                                    <h3>En Ejecución</h3>
-                                                    <span className="resumen-valor">{proyectosEnEjecucion.length}</span>
-                                                </div>
-                                            </div>
+                                            ))}
                                             <div className="resumen-card">
                                                 <div className="resumen-icon">💰</div>
                                                 <div className="resumen-info">
@@ -814,7 +485,7 @@ const Dashboard = ({ user, onLogout }) => {
                                                                 <div 
                                                                     className="barra-fill"
                                                                     style={{ 
-                                                                        width: `${(cantidad / todosLosProyectos.length) * 100}%`,
+                                                                    width: `${(cantidad / proyectos.length) * 100}%`,
                                                                         backgroundColor: getEstadoColor(estado)
                                                                     }}
                                                                 ></div>
@@ -875,7 +546,7 @@ const Dashboard = ({ user, onLogout }) => {
                                                                 <div 
                                                                     className="barra-fill"
                                                                     style={{ 
-                                                                        width: `${(cantidad / todosLosProyectos.length) * 100}%`,
+                                                                    width: `${(cantidad / proyectos.length) * 100}%`,
                                                                         backgroundColor: getMunicipioColor(municipio)
                                                                     }}
                                                                 ></div>
@@ -886,7 +557,11 @@ const Dashboard = ({ user, onLogout }) => {
                                                 </div>
                                             </div>
 
-                                            <div className="grafica-card">
+                                      
+                                        </div>
+
+                                        <div className="graficas-section2">
+                                        <div className="grafica-card">
                                                 <h3>Progreso de Proyectos en Ejecución</h3>
                                                 <div className="progreso-grafica">
                                                     {getDatosProgreso().map((proyecto, index) => (
@@ -905,136 +580,7 @@ const Dashboard = ({ user, onLogout }) => {
                                                         </div>
                                                     ))}
                                                 </div>
-                                            </div>
-
-                                            {/* Nueva gráfica de líneas - Evolución Temporal */}
-                                            <div className="grafica-card">
-                                                <h3>Evolución de Proyectos por Mes</h3>
-                                                <div className="linea-grafica">
-                                                    <div className="linea-chart">
-                                                        {(() => {
-                                                            const { meses, datos } = getDatosEvolucionTemporal();
-                                                            const maxValue = Math.max(...meses.map(mes => 
-                                                                Math.max(datos[mes].formulacion, datos[mes].licitacion, datos[mes].ejecucion)
-                                                            ));
-                                                            
-                                                            return (
-                                                                <svg width="100%" height="200" viewBox="0 0 400 200">
-                                                                    {/* Líneas de fondo */}
-                                                                    {[0, 25, 50, 75, 100].map(y => (
-                                                                        <line
-                                                                            key={y}
-                                                                            x1="0"
-                                                                            y1={y * 2}
-                                                                            x2="400"
-                                                                            y2={y * 2}
-                                                                            stroke="#e0e6ed"
-                                                                            strokeWidth="1"
-                                                                        />
-                                                                    ))}
-                                                                    
-                                                                    {/* Línea de Formulación */}
-                                                                    <polyline
-                                                                        points={meses.map((mes, index) => 
-                                                                            `${(index * 400 / 11) + 20},${200 - (datos[mes].formulacion / maxValue) * 180}`
-                                                                        ).join(' ')}
-                                                                        fill="none"
-                                                                        stroke={getFaseColor('formulacion')}
-                                                                        strokeWidth="3"
-                                                                        strokeLinecap="round"
-                                                                        strokeLinejoin="round"
-                                                                    />
-                                                                    
-                                                                    {/* Puntos de Formulación */}
-                                                                    {meses.map((mes, index) => (
-                                                                        <circle
-                                                                            key={`form-${mes}-${index}`}
-                                                                            cx={(index * 400 / 11) + 20}
-                                                                            cy={200 - (datos[mes].formulacion / maxValue) * 180}
-                                                                            r="4"
-                                                                            fill={getFaseColor('formulacion')}
-                                                                        />
-                                                                    ))}
-                                                                    
-                                                                    {/* Línea de Licitación */}
-                                                                    <polyline
-                                                                        points={meses.map((mes, index) => 
-                                                                            `${(index * 400 / 11) + 20},${200 - (datos[mes].licitacion / maxValue) * 180}`
-                                                                        ).join(' ')}
-                                                                        fill="none"
-                                                                        stroke={getFaseColor('licitacion')}
-                                                                        strokeWidth="3"
-                                                                        strokeLinecap="round"
-                                                                        strokeLinejoin="round"
-                                                                    />
-                                                                    
-                                                                    {/* Puntos de Licitación */}
-                                                                    {meses.map((mes, index) => (
-                                                                        <circle
-                                                                            key={`lic-${mes}-${index}`}
-                                                                            cx={(index * 400 / 11) + 20}
-                                                                            cy={200 - (datos[mes].licitacion / maxValue) * 180}
-                                                                            r="4"
-                                                                            fill={getFaseColor('licitacion')}
-                                                                        />
-                                                                    ))}
-                                                                    
-                                                                    {/* Línea de Ejecución */}
-                                                                    <polyline
-                                                                        points={meses.map((mes, index) => 
-                                                                            `${(index * 400 / 11) + 20},${200 - (datos[mes].ejecucion / maxValue) * 180}`
-                                                                        ).join(' ')}
-                                                                        fill="none"
-                                                                        stroke={getFaseColor('ejecucion')}
-                                                                        strokeWidth="3"
-                                                                        strokeLinecap="round"
-                                                                        strokeLinejoin="round"
-                                                                    />
-                                                                    
-                                                                    {/* Puntos de Ejecución */}
-                                                                    {meses.map((mes, index) => (
-                                                                        <circle
-                                                                            key={`ejec-${mes}-${index}`}
-                                                                            cx={(index * 400 / 11) + 20}
-                                                                            cy={200 - (datos[mes].ejecucion / maxValue) * 180}
-                                                                            r="4"
-                                                                            fill={getFaseColor('ejecucion')}
-                                                                        />
-                                                                    ))}
-                                                                    
-                                                                    {/* Etiquetas de meses */}
-                                                                    {meses.map((mes, index) => (
-                                                                        <text
-                                                                            key={`label-${mes}-${index}`}
-                                                                            x={(index * 400 / 11) + 20}
-                                                                            y="220"
-                                                                            textAnchor="middle"
-                                                                            fontSize="10"
-                                                                            fill="#8f9bb3"
-                                                                        >
-                                                                            {mes}
-                                                                        </text>
-                                                                    ))}
-                                                                </svg>
-                                                            );
-                                                        })()}
-                                                    </div>
-                                                    <div className="linea-legend">
-                                                        <div className="legend-item">
-                                                            <div className="legend-color" style={{ backgroundColor: getFaseColor('formulacion') }}></div>
-                                                            <span>Formulación</span>
-                                                        </div>
-                                                        <div className="legend-item">
-                                                            <div className="legend-color" style={{ backgroundColor: getFaseColor('licitacion') }}></div>
-                                                            <span>Licitación</span>
-                                                        </div>
-                                                        <div className="legend-item">
-                                                            <div className="legend-color" style={{ backgroundColor: getFaseColor('ejecucion') }}></div>
-                                                            <span>Ejecución</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            </div>                                        
 
                                             {/* Nueva gráfica de barras apiladas */}
                                             <div className="grafica-card">
@@ -1095,70 +641,26 @@ const Dashboard = ({ user, onLogout }) => {
                                             </div>
                                         </div>
 
-                                        {/* Filtros por Estado */}
+                                    {/* Filtros por Estado - Dinámicos */}
                                         <div className="filtros-section">
                                             <h3>Filtros por Estado</h3>
                                             <div className="filtros-grid">
-                                                <div className="filtro-card">
-                                                    <h4>Proyectos Aprobados ({proyectosAprobados.length})</h4>
+                                            {Object.entries(getEstadisticasPorEstado()).map(([estado, cantidad]) => {
+                                                const proyectosDelEstado = getProyectosPorEstado(estado);
+                                                return (
+                                                    <div key={estado} className="filtro-card">
+                                                        <h4>{estado} ({cantidad})</h4>
                                                     <div className="proyectos-lista">
-                                                        {proyectosAprobados.map(proyecto => (
+                                                            {proyectosDelEstado.map(proyecto => (
                                                             <div key={proyecto.id} className="proyecto-item">
                                                                 <span className="proyecto-nombre">{proyecto.nombre}</span>
-                                                                <span className="proyecto-fase">{proyecto.fase}</span>
+                                                                    <span className="proyecto-fase">{proyecto.descripcion_fase}</span>
                                                             </div>
                                                         ))}
                                                     </div>
                                                 </div>
-
-                                                <div className="filtro-card">
-                                                    <h4>Proyectos En Revisión ({proyectosEnRevision.length})</h4>
-                                                    <div className="proyectos-lista">
-                                                        {proyectosEnRevision.map(proyecto => (
-                                                            <div key={proyecto.id} className="proyecto-item">
-                                                                <span className="proyecto-nombre">{proyecto.nombre}</span>
-                                                                <span className="proyecto-fase">{proyecto.fase}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-
-                                                <div className="filtro-card">
-                                                    <h4>Licitaciones Abiertas ({proyectosAbiertos.length})</h4>
-                                                    <div className="proyectos-lista">
-                                                        {proyectosAbiertos.map(proyecto => (
-                                                            <div key={proyecto.id} className="proyecto-item">
-                                                                <span className="proyecto-nombre">{proyecto.nombre}</span>
-                                                                <span className="proyecto-fase">{proyecto.fase}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-
-                                                <div className="filtro-card">
-                                                    <h4>En Evaluación ({proyectosEnEvaluacion.length})</h4>
-                                                    <div className="proyectos-lista">
-                                                        {proyectosEnEvaluacion.map(proyecto => (
-                                                            <div key={proyecto.id} className="proyecto-item">
-                                                                <span className="proyecto-nombre">{proyecto.nombre}</span>
-                                                                <span className="proyecto-fase">{proyecto.fase}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-
-                                                <div className="filtro-card">
-                                                    <h4>En Ejecución ({proyectosEnEjecucion.length})</h4>
-                                                    <div className="proyectos-lista">
-                                                        {proyectosEnEjecucion.map(proyecto => (
-                                                            <div key={proyecto.id} className="proyecto-item">
-                                                                <span className="proyecto-nombre">{proyecto.nombre}</span>
-                                                                <span className="proyecto-fase">{proyecto.fase}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 </div>
@@ -1189,10 +691,10 @@ const Dashboard = ({ user, onLogout }) => {
                                 <div 
                                     key={evento.id} 
                                     className="evento-card"
-                                    style={{ borderLeftColor: getPriorityColor(evento.prioridad) }}
+                                    style={{ borderLeftColor: evento.descripcion_prioridad.split(' ')[0].toUpperCase() }}
                                 >
                                     <div className="evento-icon">
-                                        {getEventIcon(evento.tipo)}
+                                        {evento.icono}
                                     </div>
                                     <div className="evento-content">
                                         <h3>{evento.titulo}</h3>
@@ -1201,13 +703,20 @@ const Dashboard = ({ user, onLogout }) => {
                                             <span className="fecha-icon">📅</span>
                                             <span>{formatDate(evento.fecha)}</span>
                                         </div>
+                                      {evento.descripcion_responsable && (
+                                        <div className="evento-responsable">
+                                            <span className="responsable-icon">👤</span>
+                                            <span>{evento.descripcion_responsable}</span>
+                                        </div>
+                                    )}
                                     </div>
+                                 
                                     <div className="evento-prioridad">
                                         <span 
                                             className="prioridad-badge"
-                                            style={{ backgroundColor: getPriorityColor(evento.prioridad) }}
+                                            style={{ backgroundColor: evento.descripcion_prioridad.split(' ')[0].toUpperCase() }}
                                         >
-                                            {evento.prioridad.toUpperCase()}
+                                            {evento.descripcion_prioridad.split(' ')[1].toUpperCase()}
                                         </span>
                                     </div>
                                 </div>
@@ -1216,6 +725,119 @@ const Dashboard = ({ user, onLogout }) => {
                     </div>
                 </section>
             </main>
+            {modalProyecto && (
+                <div className="modal-proyecto-overlay" onClick={handleCloseModalProyecto}>
+                    <div className="modal-proyecto" onClick={e => e.stopPropagation()}>
+                        <div className="modal-proyecto-header">
+                            <h2><span className="icono">📁</span>{modalProyecto.nombre}</h2>
+                            <button className="modal-close-btn" onClick={handleCloseModalProyecto}>×</button>
+                        </div>
+                        {/* Pestañas del modal */}
+                        <div className="modal-tabs">
+                            <button
+                                className={`modal-tab${modalProyectoTab === 'datos' ? ' active' : ''}`}
+                                onClick={() => setModalProyectoTab('datos')}
+                            >
+                                Datos Generales
+                            </button>
+                            <button
+                                className={`modal-tab${modalProyectoTab === 'componentes' ? ' active' : ''}`}
+                                onClick={() => setModalProyectoTab('componentes')}
+                            >
+                                Componentes
+                            </button>
+                            {modalProyecto.contratos && modalProyecto.contratos.length > 0 && (
+                                <button
+                                    className={`modal-tab${modalProyectoTab === 'contratos' ? ' active' : ''}`}
+                                    onClick={() => setModalProyectoTab('contratos')}
+                                >
+                                    Contratos
+                                </button>
+                            )}
+                        </div>
+                        <div className="modal-proyecto-content">
+                            {modalProyectoTab === 'datos' && (
+                                <div className="modal-tab-content datos-generales">
+                                    <p><span className="icono">📝</span><strong>Descripción:</strong> {modalProyecto.descripcion}</p>
+                                    <p><span className="icono">📍</span><strong>Municipio:</strong> {modalProyecto.descripcion_municipio}</p>
+                                    <p><span className="icono">🔄</span><strong>Fase:</strong> {modalProyecto.descripcion_fase}</p>
+                                    <p><span className="icono">📊</span><strong>Estado:</strong> {modalProyecto.descripcion_estado}</p>
+                                    <p><span className="icono">💰</span><strong>Presupuesto Total:</strong> $ {modalProyecto.totalPresupuesto?.toLocaleString()}</p>
+                                    <p><span className="icono">🏢</span><strong>Entidad Presenta:</strong> {modalProyecto.descripcion_entidad_presenta}</p>
+                                    <p><span className="icono">🏦</span><strong>Entidad Financia:</strong> {modalProyecto.descripcion_entidad_financia}</p>
+                                    <p><span className="icono">💡</span><strong>Fuente de Financiación:</strong> {modalProyecto.fuente_financiacion}</p>
+                                </div>
+                            )}
+                            {modalProyectoTab === 'componentes' && (
+                                <div className="modal-tab-content componentes">
+                                    <h3>Componentes del Presupuesto</h3>
+                                    <ul>
+                                        {modalProyecto.componentesPresupuesto && modalProyecto.componentesPresupuesto.length > 0 ? (
+                                            modalProyecto.componentesPresupuesto.map(comp => (
+                                                <li key={comp.id}>
+                                                    <span className="badge-componente">{comp.componente}</span>
+                                                    <span className="icono">💵</span>$ {parseInt(comp.valor).toLocaleString()}
+                                                </li>
+                                            ))
+                                        ) : (
+                                            <li>No hay componentes registrados.</li>
+                                        )}
+                                    </ul>
+                                </div>
+                            )}
+                            {modalProyectoTab === 'contratos' && modalProyecto.contratos && (
+                                <div className="modal-tab-content contratos">
+                                    <h3>Contratos</h3>
+                                    {modalProyecto.contratos.length > 0 ? (
+                                        <table className="contratos-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Número</th>
+                                                    <th>Objeto</th>
+                                                    <th>Valor</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {modalProyecto.contratos.map(contrato => (
+                                                    <tr key={contrato.id} className="contrato-row" style={{ cursor: 'pointer' }} onClick={() => setModalContrato(contrato)}>
+                                                        <td>{contrato.n_contrato}</td>
+                                                        <td>{contrato.objeto}</td>
+                                                        <td>$ {contrato.valor ? parseInt(contrato.valor).toLocaleString() : ''}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    ) : (
+                                        <div>No hay contratos registrados.</div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+            {modalContrato && (
+                <div className="modal-proyecto-overlay" onClick={() => setModalContrato(null)}>
+                    <div className="modal-proyecto" onClick={e => e.stopPropagation()}>
+                        <div className="modal-proyecto-header">
+                            <h2><span className="icono">📄</span>Contrato {modalContrato.n_contrato || modalContrato.numero || modalContrato.nombre}</h2>
+                            <button className="modal-close-btn" onClick={() => setModalContrato(null)}>×</button>
+                        </div>
+                        <div className="modal-proyecto-content">
+                            <p><span className="icono">🔢</span><strong>Número de Contrato:</strong> {modalContrato.n_contrato || modalContrato.numero || modalContrato.nombre}</p>
+                            <p><span className="icono">📝</span><strong>Objeto:</strong> {modalContrato.objeto || modalContrato.descripcion}</p>
+                            <p><span className="icono">🏢</span><strong>Contratante:</strong> {modalContrato.contratante}</p>
+                            <p><span className="icono">👷</span><strong>Contratista:</strong> {modalContrato.contratista}</p>
+                            <p><span className="icono">💵</span><strong>Monto:</strong> $ {modalContrato.monto ? parseInt(modalContrato.monto).toLocaleString() : (modalContrato.valor ? parseInt(modalContrato.valor).toLocaleString() : '')}</p>
+                            <p><span className="icono">📅</span><strong>Fecha de Inicio:</strong> {modalContrato.fecha_inicio || modalContrato.fecha}</p>
+                            <p><span className="icono">📅</span><strong>Fecha de Fin:</strong> {modalContrato.fecha_fin}</p>
+                            <p><span className="icono">🕵️‍♂️</span><strong>Interventoría:</strong> {modalContrato.interventoria || modalContrato.interventor}</p>
+                            <p><span className="icono">📈</span><strong>Avance:</strong> {modalContrato.avance ? `${modalContrato.avance}%` : ''}</p>
+                            <p><span className="icono">🔄</span><strong>Estado:</strong> {modalContrato.estado}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

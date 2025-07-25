@@ -1,6 +1,15 @@
+/* Reset CSS básico */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Estilos base */
 body {
     background-color: #f5f5f5;
     font-family: Arial, sans-serif;
+    line-height: 1.6;
 }
 
 .container {
@@ -10,3 +19,12 @@ body {
     border-radius: 10px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
+
+/* Importar todos los archivos CSS de componentes */
+@import './Dashboard.css';
+@import './Parametros.css';
+@import './Login.css';
+@import './GestionarProyectos.css';
+@import './Header.css';
+@import './Navigation.css';
+@import './GestionarEventos.css';

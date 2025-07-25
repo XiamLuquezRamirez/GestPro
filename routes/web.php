@@ -28,8 +28,11 @@ Route::post('/logout', function (Request $request) {
 });
 
 Route::get('/user', function (Request $request) {
+
     return $request->user();
-})->middleware('auth');
+
+})->middleware('auth:sanctum');
+
 
 Route::get('/proyectos', [ProyectoController::class, 'proyectos'])->middleware('auth');
 Route::get('/municipios', [ProyectoController::class, 'municipios'])->middleware('auth');

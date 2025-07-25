@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from './Header';
-import '../../css/Navigation.css';
 import axios from 'axios';
 
 const Navigation = ({ user, onLogout }) => {

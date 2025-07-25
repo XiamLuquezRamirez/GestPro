@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import axios from '../axios';
 import { useNavigate } from 'react-router-dom';
-import '../../css/Login.css';
 import logo from '../../images/logo.png';
 
 const Login = ({ onLogin }) => {
@@ -19,6 +18,7 @@ const Login = ({ onLogin }) => {
         try {
             // Petición CSRF primero
             await axios.get('/sanctum/csrf-cookie');
+            
 
             // Luego enviar login
             await axios.post('/login', { email, password });

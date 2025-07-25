@@ -1,0 +1,18 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Prevent Directory Listing
+Options -Indexes
+
+# Protect sensitive files
+<FilesMatch "^\.env|composer\.(json|lock)$|package(-lock)?\.json$|\.git">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Protect application directories
+<IfModule mod_rewrite.c>
+    RewriteRule ^(app|bootstrap|config|database|resources|routes|storage|tests|vendor) - [F,L]
+</IfModule> 
