@@ -5,8 +5,7 @@
 
     RewriteEngine On
 
-    # *** Aquí está el cambio importante ***
-    RewriteBase /GestPro/public/
+    RewriteBase /GestPro
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .

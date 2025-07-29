@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test CSRF Token</title>
+</head>
+<body>
+    <h1>Test CSRF Token</h1>
+    <button onclick="testCSRF()">Test CSRF Token</button>
+    <div id="result"></div>
+
+    <script>
+        async function testCSRF() {
+            try {
+                // Primero obtener el CSRF token
+                const csrfResponse = await fetch('/sanctum/csrf-cookie', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                if (csrfResponse.ok) {
+                    document.getElementById('result').innerHTML = '<p style="color: green;">CSRF token obtenido exitosamente</p>';
+                    
+                    // Ahora intentar hacer login
+                    const loginResponse = await fetch('/GestPro/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.cookie.split('XSRF-TOKEN=')[1]?.split(';')[0] || '',
+                            'Accept': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            email: 'test@example.com',
+                            password: 'password'
+                        })
+                    });
+                    
+                    const loginResult = await loginResponse.json();
+                    document.getElementById('result').innerHTML += `<p>Login response: ${JSON.stringify(loginResult)}</p>`;
+                } else {
+                    document.getElementById('result').innerHTML = '<p style="color: red;">Error obteniendo CSRF token</p>';
+                }
+            } catch (error) {
+                document.getElementById('result').innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html> 

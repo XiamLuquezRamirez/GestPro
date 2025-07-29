@@ -5,35 +5,45 @@ import Login from './components/Login';
 import Navigation from './components/Navigation';
 import Dashboard from './components/Dashboard';
 import Parametros from './components/Parametros';
-//import axios from './axios';
-import axios from 'axios';
+import axios from './axios';
 import '../css/app.css';
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const getToken = () => localStorage.getItem('token');
+
   const fetchUser = async () => {
     try {
+      const token = getToken();
+    
+      if (!token) {
+        // No hay token, usuario no autenticado (normal)
+        setUser(null);
+        return;
+      }
+   
 
-      axios.get('https://ingeer.co/GestPro/public/sanctum/csrf-cookie', { withCredentials: true })
-
-
-      const res = await axios.get('https://ingeer.co/GestPro/user', { withCredentials: true });
+      const res = await axios.get('/user');
       setUser(res.data);
-    } catch {
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      // Si hay error al obtener usuario, limpiar token y usuario
+      localStorage.removeItem('token');
       setUser(null);
     } finally {
       setLoading(false);
     }
+    
   };
 
   useEffect(() => {
     fetchUser();
   }, []);
 
-  const logout = async () => {
-    await axios.post('/logout');
+  const logout = () => {
+    localStorage.removeItem('token');
     setUser(null);
   };
 
@@ -43,20 +53,20 @@ function App() {
     <Router>
       <Routes>
         <Route
-          path="/"
+          path="/GestPro"
           element={user ? <Navigate to="/navigation" /> : <Login onLogin={setUser} />}
         />
         <Route
           path="/navigation"
-          element={user ? <Navigation user={user} onLogout={logout} /> : <Navigate to="/" />}
+          element={user ? <Navigation user={user} onLogout={logout} /> : <Navigate to="/GestPro" />}
         />
         <Route
           path="/dashboard"
-          element={user ? <Dashboard user={user} onLogout={logout} /> : <Navigate to="/" />}
+          element={user ? <Dashboard user={user} onLogout={logout} /> : <Navigate to="/GestPro" />}
         />
         <Route
           path="/parametros"
-          element={user ? <Parametros user={user} onLogout={logout} /> : <Navigate to="/" />}
+          element={user ? <Parametros user={user} onLogout={logout} /> : <Navigate to="/GestPro" />}
         />
       </Routes>
     </Router>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from '../axios';
 import { useNavigate } from 'react-router-dom';
-import logo from '../../images/logo.png';
+import { getImageUrl } from '../utils/assetHelper';
 
 const Login = ({ onLogin }) => {
     const navigate = useNavigate();
@@ -16,24 +16,38 @@ const Login = ({ onLogin }) => {
         setIsLoading(true);
 
         try {
-            // Petición CSRF primero
-            await axios.get('/sanctum/csrf-cookie');
+            console.log('Intentando login con:', { email, password: '***' });
             
+            
+            // Enviar login y recibir token + datos del usuario
+            const loginRes = await axios.post('/login', { email, password });
+            
+            console.log('Respuesta del login:', loginRes.data);
 
-            // Luego enviar login
-            await axios.post('/login', { email, password });
+            const { token, user } = loginRes.data;
+            localStorage.setItem('token', token);
+            
+            console.log('Token guardado en localStorage');
 
-            // Obtener el usuario autenticado
-            const res = await axios.get('/user');
-            onLogin(res.data);
+            // Configurar axios con el token
+            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
-            // Redireccionar al dashboard
+            // Usar los datos del usuario que ya recibimos
+            onLogin(user);
+            
+            console.log('Usuario establecido, navegando a dashboard');
+
             navigate('/dashboard');
         } catch (error) {
-            if (error.response && error.response.status === 422) {
-                setErrors('Credenciales incorrectas. Por favor, verifique su email y contraseña.');
+            console.error('Error en login:', error);
+            console.error('Error response:', error.response);
+            
+            if (error.response && error.response.status === 401) {
+                setErrors('Credenciales incorrectas. Verifica tu email y contraseña.');
+            } else if (error.response && error.response.data && error.response.data.error) {
+                setErrors(`Error del servidor: ${error.response.data.error}`);
             } else {
-                setErrors('Ocurrió un error al iniciar sesión. Por favor, intente nuevamente.');
+                setErrors('Error al iniciar sesión. Intenta nuevamente.');
             }
         } finally {
             setIsLoading(false);
@@ -49,7 +63,7 @@ const Login = ({ onLogin }) => {
             <div className="login-card">
                 <div className="login-header">
                     <div className="logo-container">
-                        <div className="logo-icon"><img src={logo} width="80" height="80" alt="GestPro" /></div>
+                        <div className="logo-icon"><img src={getImageUrl('images/logo.png')} width="80" height="80" alt="GestPro" /></div>
                         <h1 className="logo-text">GestPro</h1>
                     </div>
                     <p className="login-subtitle">Sistema de Gestión de Proyectos</p>

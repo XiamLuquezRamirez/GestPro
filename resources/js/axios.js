@@ -1,21 +1,21 @@
-import axios from "axios";
-import Cookies from "js-cookie";
+import axios from 'axios';
 
-if (process.env.NODE_ENV === "development") {
-    axios.defaults.baseURL = "http://localhost:8000";
-} else {
-    axios.defaults.baseURL = "https://ingeer.co/GestPro";
-}
+// Base URL según entornoclear
+axios.defaults.baseURL =
+    process.env.NODE_ENV === 'development'
+        ? 'http://localhost:8000/GestPro/'
+        : 'https://ingeer.co/GestPro/';
 
-axios.defaults.withCredentials = true;
+// Incluir credenciales en cross-origin si lo necesitas
+axios.defaults.withCredentials = false; // ⚠️ false para JWT
 
-    // Este interceptor añade el token CSRF manualmente
+// Agregar token JWT automáticamente si está guardado
 axios.interceptors.request.use((config) => {
-    const token = Cookies.get("XSRF-TOKEN");
+    const token = localStorage.getItem('token');
     if (token) {
-        config.headers["X-XSRF-TOKEN"] = decodeURIComponent(token);
+        config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
 });
 
-export default axios;
+export default axios;       

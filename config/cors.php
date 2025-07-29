@@ -15,14 +15,19 @@ return [
     |
     */
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    'paths' => ['api/*', 'sanctum/csrf-cookie', 'GestPro/*'],
 
     'allowed_methods' => ['*'],
-
-    'allowed_origins' => ['*'],
-
+    'allowed_origins' => [
+        'http://localhost',
+        'http://localhost:3000',
+        'http://127.0.0.1',
+        'http://127.0.0.1:3000',
+        'https://ingeer.co',
+        'https://ingeer.co/GestPro',
+    ],
     'allowed_origins_patterns' => [],
-    
+
 
     'allowed_headers' => ['*'],
 

@@ -1,7 +1,6 @@
 const mix = require('laravel-mix');
 
 mix.setPublicPath('public'); // dónde se compilan los archivos
-mix.setResourceRoot('/GestPro/'); // 👈 muy importante para rutas relativas en producción
 
 mix.js('resources/js/app.jsx', 'js')
    .react()
