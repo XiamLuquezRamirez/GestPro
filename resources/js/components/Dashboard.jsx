@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Header from './Header';
 import axios from 'axios';
+import '../../css/Dashboard.css';
+import '../../css/Dashboard-Extras.css';
 const Dashboard = ({ user, onLogout }) => {
     const [activeTab, setActiveTab] = useState(''); // Inicialmente vacío
     const [currentEventIndex, setCurrentEventIndex] = useState(0);
@@ -9,7 +11,20 @@ const Dashboard = ({ user, onLogout }) => {
     const [proyectos, setProyectos] = useState([]);
     const [modalProyecto, setModalProyecto] = useState(null);
     const [proximosEventos, setProximosEventos] = useState([]);
-    
+    const [isLargeScreen, setIsLargeScreen] = useState(false);
+
+    // Detectar tamaño de pantalla
+    useEffect(() => {
+        const checkScreenSize = () => {
+            setIsLargeScreen(window.innerWidth >= 1200);
+        };
+
+        checkScreenSize();
+        window.addEventListener('resize', checkScreenSize);
+
+        return () => window.removeEventListener('resize', checkScreenSize);
+    }, []);
+
     // Función para filtrar proyectos por fase (usando descripcion_fase)
     const getProyectosPorFase = (fase) => {
         return proyectos.filter(proyecto => proyecto.descripcion_fase?.toLowerCase() === fase.toLowerCase());
@@ -109,7 +124,7 @@ const Dashboard = ({ user, onLogout }) => {
     const getDatosEvolucionTemporal = () => {
         const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
         const datos = {};
-        
+
         // Simular datos de evolución por mes
         meses.forEach((mes, index) => {
             datos[mes] = {
@@ -118,7 +133,7 @@ const Dashboard = ({ user, onLogout }) => {
                 ejecucion: Math.floor(Math.random() * 6) + 2
             };
         });
-        
+
         return { meses, datos };
     };
 
@@ -179,7 +194,7 @@ const Dashboard = ({ user, onLogout }) => {
     });
 
 
-  
+
 
     const formatDate = (dateString) => {
         const options = { year: 'numeric', month: 'long', day: 'numeric' };
@@ -210,18 +225,24 @@ const Dashboard = ({ user, onLogout }) => {
     };
 
     const nextEvents = () => {
-        setCurrentEventIndex(prev => 
-            prev + 4 >= proximosEventos.length ? 0 : prev + 4
-        );
+        pauseAutoRotation();
+        setCurrentEventIndex(prev => {
+            const nextIndex = prev + 3 >= proximosEventos.length ? 0 : prev + 3;
+            setCurrentRotationIndex(Math.floor(nextIndex / 3));
+            return nextIndex;
+        });
     };
 
     const prevEvents = () => {
-        setCurrentEventIndex(prev => 
-            prev - 4 < 0 ? Math.max(0, proximosEventos.length - 4) : prev - 4
-        );
+        pauseAutoRotation();
+        setCurrentEventIndex(prev => {
+            const newIndex = prev - 3 < 0 ? Math.max(0, proximosEventos.length - 3) : prev - 3;
+            setCurrentRotationIndex(Math.floor(newIndex / 3));
+            return newIndex;
+        });
     };
 
-    const visibleEvents = proximosEventos.slice(currentEventIndex, currentEventIndex + 4);
+    const visibleEvents = proximosEventos.slice(currentEventIndex, currentEventIndex + 3);
 
     // Eliminar el array de municipios de ejemplo
     // const [municipios] = useState([...]);
@@ -274,12 +295,35 @@ const Dashboard = ({ user, onLogout }) => {
 
     // Estado para el contrato seleccionado en el modal
     const [modalContrato, setModalContrato] = useState(null);
+    const [autoRotationEnabled, setAutoRotationEnabled] = useState(true);
+    const [currentRotationIndex, setCurrentRotationIndex] = useState(0);
 
     useEffect(() => {
         listFases();
         listProyectos();
         listEventos();
     }, []);
+
+    // Rotación automática de eventos cada 10 segundos
+    useEffect(() => {
+        if (!autoRotationEnabled || proximosEventos.length <= 3) return;
+
+        const interval = setInterval(() => {
+            setCurrentEventIndex(prev => {
+                const nextIndex = prev + 3 >= proximosEventos.length ? 0 : prev + 3;
+                setCurrentRotationIndex(Math.floor(nextIndex / 3));
+                return nextIndex;
+            });
+        }, 10000); // 10 segundos
+
+        return () => clearInterval(interval);
+    }, [proximosEventos.length, autoRotationEnabled]);
+
+    // Pausar rotación automática cuando el usuario interactúa
+    const pauseAutoRotation = () => {
+        setAutoRotationEnabled(false);
+        setTimeout(() => setAutoRotationEnabled(true), 30000); // Reanudar después de 30 segundos
+    };
 
     // Cuando se abre un nuevo modal, resetear la pestaña activa
     useEffect(() => {
@@ -337,7 +381,7 @@ const Dashboard = ({ user, onLogout }) => {
                     <div className="tabs-container">
                         <div className="tabs-header">
                             {fasesDashboard.map(fase => (
-                                <button 
+                                <button
                                     key={fase.id}
                                     className={`tab-button ${activeTab === fase.nombre ? 'active' : ''}`}
                                     onClick={() => handleTabChange(fase.nombre)}
@@ -345,320 +389,321 @@ const Dashboard = ({ user, onLogout }) => {
                                     {fase.nombre}
                                 </button>
                             ))}
-                            <button 
+                            <button
                                 className={`tab-button ${activeTab === 'estadisticas' ? 'active' : ''}`}
                                 onClick={() => handleTabChange('estadisticas')}
                             >
                                 Estadísticas y Filtros
                             </button>
                         </div>
-                        
+
                         <div className="tab-content">
                             {fasesDashboard.map(fase => (
                                 activeTab === fase.nombre && (
                                     <div key={fase.id} className="formulacion-content">
-                                    {!selectedMunicipio ? (
-                                        <div className="municipios-grid">
+                                        {!selectedMunicipio ? (
+                                            <div className="municipios-grid">
                                                 {municipios
                                                     .filter(municipio => getProyectosPorMunicipioYNombreFase(municipio.nombre, fase.nombre).length > 0)
                                                     .map(municipio => {
                                                         const proyectosDelMunicipio = getProyectosPorMunicipioYNombreFase(municipio.nombre, fase.nombre) || [];
-                                                return (
-                                                    <div 
+                                                        return (
+                                                            <div
                                                                 key={municipio.nombre}
-                                                        className="municipio-card-modern"
-                                                        style={{ borderLeftColor: municipio.color }}
-                                                        onClick={() => handleMunicipioClick(municipio.nombre)}
-                                                    >
-                                                        <div className="municipio-card-content">
-                                                            <div className="municipio-icon-modern">
-                                                                {municipio.icon}
-                                                            </div>
-                                                            <div className="municipio-info-modern">
-                                                                <h3>{municipio.nombre}</h3>
-                                                                <div className="proyectos-count-modern">
-                                                                    <span className="count-number-modern">{proyectosDelMunicipio.length}</span>
+                                                                className="municipio-card-modern"
+                                                                style={{ borderLeftColor: municipio.color }}
+                                                                onClick={() => handleMunicipioClick(municipio.nombre)}
+                                                            >
+                                                                <div className="municipio-card-content">
+                                                                    <div className="municipio-icon-modern">
+                                                                        {municipio.icon}
+                                                                    </div>
+                                                                    <div className="municipio-info-modern">
+                                                                        <h3>{municipio.nombre}</h3>
+                                                                        <div className="proyectos-count-modern">
+                                                                            <span className="count-number-modern">{proyectosDelMunicipio.length}</span>
                                                                             <span className="count-label-modern">proyectos en {fase.nombre.toLowerCase()}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="municipio-arrow">→</div>
                                                                 </div>
                                                             </div>
-                                                                    <div className="municipio-arrow">→</div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : (
-                                        <div className="municipio-proyectos-view">
-                                            <div className="municipio-header-back">
-                                                <button onClick={handleBackToMunicipios} className="back-btn">
-                                                    ← Volver a municipios
-                                                </button>
-                                                <div className="municipio-info-header">
-                                                    <span className="municipio-icon-header">
-                                                        {municipios.find(m => m.nombre === selectedMunicipio)?.icon || '🏙️'}
-                                                    </span>
-                                                    <h3 className="municipio-nombre">{selectedMunicipio}</h3>
-                                                    <span className="proyectos-count-header">
-                                                            {getProyectosPorMunicipioYNombreFase(selectedMunicipio, fase.nombre)?.length || 0} proyectos
-                                                    </span>
-                                                </div>
+                                                        );
+                                                    })}
                                             </div>
-                                            <div className="proyectos-grid">
+                                        ) : (
+                                            <div className="municipio-proyectos-view">
+                                                <div className="municipio-header-back">
+                                                    <button onClick={handleBackToMunicipios} className="back-btn">
+                                                        ← Volver a municipios
+                                                    </button>
+                                                    <div className="municipio-info-header">
+                                                        <span className="municipio-icon-header">
+                                                            {municipios.find(m => m.nombre === selectedMunicipio)?.icon || '🏙️'}
+                                                        </span>
+                                                        <h3 className="municipio-nombre">{selectedMunicipio}</h3>
+                                                        <span className="proyectos-count-header">
+                                                            {getProyectosPorMunicipioYNombreFase(selectedMunicipio, fase.nombre)?.length || 0} proyectos
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="proyectos-grid">
                                                     {getProyectosPorMunicipioYNombreFase(selectedMunicipio, fase.nombre)?.length > 0 ? (
                                                         getProyectosPorMunicipioYNombreFase(selectedMunicipio, fase.nombre).map(proyecto => (
                                                             <div key={proyecto.id} className="proyecto-card" onClick={() => handleOpenModalProyecto(proyecto)}>
-                                                        <div className="proyecto-header">
-                                                            <h3>{proyecto.nombre}</h3>
+                                                                <div className="proyecto-header">
+                                                                    <h3>{proyecto.nombre}</h3>
                                                                     <span className="municipio-tag">{proyecto.descripcion_municipio}</span>
-                                                        </div>
-                                                        <div className="proyecto-info">
-                                                            <div className="info-item">
-                                                                <span className="info-label">Presupuesto:</span>
+                                                                </div>
+                                                                <div className="proyecto-info">
+                                                                    <div className="info-item">
+                                                                        <span className="info-label">Presupuesto:</span>
                                                                         <span className="info-value">$ {proyecto.totalPresupuesto?.toLocaleString()}</span>
-                                                            </div>
-                                                            <div className="info-item">
-                                                                <span className="info-label">Fecha Inicio:</span>
+                                                                    </div>
+                                                                    <div className="info-item">
+                                                                        <span className="info-label">Fecha Inicio:</span>
                                                                         <span className="info-value">{formatDate(proyecto.fecha_inicio)}</span>
-                                                            </div>
-                                                            <div className="info-item">
-                                                                <span className="info-label">Estado:</span>
+                                                                    </div>
+                                                                    <div className="info-item">
+                                                                        <span className="info-label">Estado:</span>
                                                                         <span className={`estado-badge ${proyecto.descripcion_estado?.toLowerCase().replace(' ', '-')}`}>
                                                                             {proyecto.descripcion_estado}
-                                                                </span>
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    </div>
                                                         ))
                                                     ) : (
-                                                    <div className="no-proyectos">
+                                                        <div className="no-proyectos">
                                                             <p>No hay proyectos en {fase.nombre.toLowerCase()} para este municipio.</p>
-                                                    </div>
-                                                )}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
-                                </div>
+                                        )}
+                                    </div>
                                 )
                             ))}
                             {activeTab === 'estadisticas' && (
                                 <div className="estadisticas-content">
-                                        {/* Tarjetas de resumen */}
-                                        <div className="resumen-cards">
-                                            <div className="resumen-card">
-                                                <div className="resumen-icon">📊</div>
-                                                <div className="resumen-info">
-                                                    <h3>Total Proyectos</h3>
+                                    {/* Tarjetas de resumen */}
+                                    <div className="resumen-cards">
+                                        <div className="resumen-card">
+                                            <div className="resumen-icon">📊</div>
+                                            <div className="resumen-info">
+                                                <h3>Total Proyectos</h3>
                                                 <span className="resumen-valor">{proyectos.length}</span>
-                                                </div>
                                             </div>
-                                            {estadosExistentes.slice(0, 3).map((estado, index) => (
-                                                <div key={estado} className="resumen-card">
-                                                    <div className="resumen-icon">
-                                                        {index === 0 ? '✅' : index === 1 ? '🚀' : '💰'}
-                                                    </div>
-                                                    <div className="resumen-info">
-                                                        <h3>{estado}</h3>
-                                                        <span className="resumen-valor">{proyectosPorEstado[estado].length}</span>
-                                                    </div>
+                                        </div>
+                                        {estadosExistentes.slice(0, 3).map((estado, index) => (
+                                            <div key={estado} className="resumen-card">
+                                                <div className="resumen-icon">
+                                                    {index === 0 ? '✅' : index === 1 ? '🚀' : '💰'}
                                                 </div>
-                                            ))}
-                                            <div className="resumen-card">
-                                                <div className="resumen-icon">💰</div>
                                                 <div className="resumen-info">
-                                                    <h3>Presupuesto Total</h3>
-                                                    <span className="resumen-valor">
-                                                        ${Object.values(getPresupuestoPorMunicipio()).reduce((a, b) => a + b, 0).toLocaleString()}
-                                                    </span>
+                                                    <h3>{estado}</h3>
+                                                    <span className="resumen-valor">{proyectosPorEstado[estado].length}</span>
                                                 </div>
+                                            </div>
+                                        ))}
+                                        <div className="resumen-card">
+                                            <div className="resumen-icon">💰</div>
+                                            <div className="resumen-info">
+                                                <h3>Presupuesto Total</h3>
+                                                <span className="resumen-valor">
+                                                    ${Object.values(getPresupuestoPorMunicipio()).reduce((a, b) => a + b, 0).toLocaleString()}
+                                                </span>
                                             </div>
                                         </div>
+                                    </div>
 
-                                        {/* Gráficas */}
-                                        <div className="graficas-section">
-                                            <div className="grafica-card">
-                                                <h3>Proyectos por Estado</h3>
-                                                <div className="grafica-barras">
-                                                    {Object.entries(getEstadisticasPorEstado()).map(([estado, cantidad]) => (
-                                                        <div key={estado} className="barra-item">
-                                                            <div className="barra-label">{estado}</div>
-                                                            <div className="barra-container">
-                                                                <div 
-                                                                    className="barra-fill"
-                                                                    style={{ 
-                                                                    width: `${(cantidad / proyectos.length) * 100}%`,
-                                                                        backgroundColor: getEstadoColor(estado)
-                                                                    }}
-                                                                ></div>
-                                                                <span className="barra-valor">{cantidad}</span>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            <div className="grafica-card">
-                                                <h3>Proyectos por Fase</h3>
-                                                <div className="grafica-pie-real">
-                                                    <div className="pie-chart">
-                                                        {Object.entries(getEstadisticasPorFase()).map(([fase, cantidad], index) => {
-                                                            const total = Object.values(getEstadisticasPorFase()).reduce((a, b) => a + b, 0);
-                                                            const porcentaje = (cantidad / total) * 100;
-                                                            const angulo = (porcentaje / 100) * 360;
-                                                            const anguloAcumulado = Object.entries(getEstadisticasPorFase())
-                                                                .slice(0, index)
-                                                                .reduce((acc, [_, val]) => acc + (val / total) * 360, 0);
-                                                            
-                                                            return (
-                                                                <div 
-                                                                    key={fase}
-                                                                    className="pie-slice"
-                                                                    style={{
-                                                                        background: `conic-gradient(from ${anguloAcumulado}deg, ${getFaseColor(fase)} 0deg, ${getFaseColor(fase)} ${angulo}deg, transparent ${angulo}deg)`
-                                                                    }}
-                                                                ></div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                    <div className="pie-legend">
-                                                        {Object.entries(getEstadisticasPorFase()).map(([fase, cantidad]) => (
-                                                            <div key={fase} className="legend-item">
-                                                                <div 
-                                                                    className="legend-color"
-                                                                    style={{ backgroundColor: getFaseColor(fase) }}
-                                                                ></div>
-                                                                <div className="legend-info">
-                                                                    <span className="legend-label">{fase}</span>
-                                                                    <span className="legend-value">{cantidad} ({((cantidad / Object.values(getEstadisticasPorFase()).reduce((a, b) => a + b, 0)) * 100).toFixed(1)}%)</span>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="grafica-card">
-                                                <h3>Proyectos por Municipio</h3>
-                                                <div className="grafica-barras">
-                                                    {Object.entries(getEstadisticasPorMunicipio()).map(([municipio, cantidad]) => (
-                                                        <div key={municipio} className="barra-item">
-                                                            <div className="barra-label">{municipio}</div>
-                                                            <div className="barra-container">
-                                                                <div 
-                                                                    className="barra-fill"
-                                                                    style={{ 
-                                                                    width: `${(cantidad / proyectos.length) * 100}%`,
-                                                                        backgroundColor: getMunicipioColor(municipio)
-                                                                    }}
-                                                                ></div>
-                                                                <span className="barra-valor">{cantidad}</span>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                      
-                                        </div>
-
-                                        <div className="graficas-section2">
+                                    {/* Gráficas */}
+                                    <div className="graficas-section">
                                         <div className="grafica-card">
-                                                <h3>Progreso de Proyectos en Ejecución</h3>
-                                                <div className="progreso-grafica">
-                                                    {getDatosProgreso().map((proyecto, index) => (
-                                                        <div key={`${proyecto.nombre}-${proyecto.municipio}-${index}`} className="progreso-item">
-                                                            <div className="progreso-info">
-                                                                <span className="proyecto-nombre">{proyecto.nombre}</span>
-                                                                <span className="proyecto-municipio">{proyecto.municipio}</span>
-                                                            </div>
-                                                            <div className="progreso-bar-container">
-                                                                <div 
-                                                                    className="progreso-bar-fill"
-                                                                    style={{ width: `${proyecto.progreso}%` }}
-                                                                ></div>
-                                                                <span className="progreso-porcentaje">{proyecto.progreso}%</span>
+                                            <h3>Proyectos por Estado</h3>
+                                            <div className="grafica-barras">
+                                                {Object.entries(getEstadisticasPorEstado()).map(([estado, cantidad]) => (
+                                                    <div key={estado} className="barra-item">
+                                                        <div className="barra-label">{estado}</div>
+                                                        <div className="barra-container">
+                                                            <div
+                                                                className="barra-fill"
+                                                                style={{
+                                                                    width: `${(cantidad / proyectos.length) * 100}%`,
+                                                                    backgroundColor: getEstadoColor(estado)
+                                                                }}
+                                                            ></div>
+                                                            <span className="barra-valor">{cantidad}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="grafica-card">
+                                            <h3>Proyectos por Fase</h3>
+                                            <div className="grafica-pie-real">
+                                                <div className="pie-chart">
+                                                    {Object.entries(getEstadisticasPorFase()).map(([fase, cantidad], index) => {
+                                                        const total = Object.values(getEstadisticasPorFase()).reduce((a, b) => a + b, 0);
+                                                        const porcentaje = (cantidad / total) * 100;
+                                                        const angulo = (porcentaje / 100) * 360;
+                                                        const anguloAcumulado = Object.entries(getEstadisticasPorFase())
+                                                            .slice(0, index)
+                                                            .reduce((acc, [_, val]) => acc + (val / total) * 360, 0);
+
+                                                        return (
+                                                            <div
+                                                                key={fase}
+                                                                className="pie-slice"
+                                                                style={{
+                                                                    background: `conic-gradient(from ${anguloAcumulado}deg, ${getFaseColor(fase)} 0deg, ${getFaseColor(fase)} ${angulo}deg, transparent ${angulo}deg)`
+                                                                }}
+                                                            ></div>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <div className="pie-legend">
+                                                    {Object.entries(getEstadisticasPorFase()).map(([fase, cantidad]) => (
+                                                        <div key={fase} className="legend-item">
+                                                            <div
+                                                                className="legend-color"
+                                                                style={{ backgroundColor: getFaseColor(fase) }}
+                                                            ></div>
+                                                            <div className="legend-info">
+                                                                <span className="legend-label">{fase}</span>
+                                                                <span className="legend-value">{cantidad} ({((cantidad / Object.values(getEstadisticasPorFase()).reduce((a, b) => a + b, 0)) * 100).toFixed(1)}%)</span>
                                                             </div>
                                                         </div>
                                                     ))}
                                                 </div>
-                                            </div>                                        
-
-                                            {/* Nueva gráfica de barras apiladas */}
-                                            <div className="grafica-card">
-                                                <h3>Presupuesto Mensual por Municipio</h3>
-                                                <div className="barras-apiladas">
-                                                    {(() => {
-                                                        const { meses, presupuestos } = getDatosPresupuestoMensual();
-                                                        const maxPresupuesto = Math.max(...presupuestos);
-                                                        const municipios = ['Valledupar', 'Aguachica', 'Codazzi', 'La Paz'];
-                                                        
-                                                        return (
-                                                            <>
-                                                                <div className="barras-container">
-                                                                    {meses.map((mes, index) => {
-                                                                        const presupuestoTotal = presupuestos[index];
-                                                                        const alturas = municipios.map((municipio, mIndex) => {
-                                                                            const porcentaje = (Math.random() * 0.4) + 0.2; // 20-60% del total
-                                                                            return {
-                                                                                municipio,
-                                                                                altura: (presupuestoTotal * porcentaje / maxPresupuesto) * 150,
-                                                                                color: getMunicipioColor(municipio)
-                                                                            };
-                                                                        });
-                                                                        
-                                                                        return (
-                                                                            <div key={mes} className="barra-apilada">
-                                                                                <div className="barra-secciones">
-                                                                                    {alturas.map((seccion, sIndex) => (
-                                                                                        <div
-                                                                                            key={`${mes}-${seccion.municipio}`}
-                                                                                            className="barra-seccion"
-                                                                                            style={{
-                                                                                                height: `${seccion.altura}px`,
-                                                                                                backgroundColor: seccion.color
-                                                                                            }}
-                                                                                            title={`${seccion.municipio}: $${(presupuestoTotal * ((Math.random() * 0.4) + 0.2)).toLocaleString()}`}
-                                                                                        ></div>
-                                                                                    ))}
-                                                                                </div>
-                                                                                <div className="barra-label">{mes}</div>
-                                                                                <div className="barra-total">${presupuestoTotal.toLocaleString()}</div>
-                                                                            </div>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                                <div className="barras-legend">
-                                                                    {municipios.map(municipio => (
-                                                                        <div key={municipio} className="legend-item">
-                                                                            <div className="legend-color" style={{ backgroundColor: getMunicipioColor(municipio) }}></div>
-                                                                            <span>{municipio}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </>
-                                                        );
-                                                    })()}
-                                                </div>
                                             </div>
                                         </div>
+
+                                        <div className="grafica-card">
+                                            <h3>Proyectos por Municipio</h3>
+                                            <div className="grafica-barras">
+                                                {Object.entries(getEstadisticasPorMunicipio()).map(([municipio, cantidad]) => (
+                                                    <div key={municipio} className="barra-item">
+                                                        <div className="barra-label">{municipio}</div>
+                                                        <div className="barra-container">
+                                                            <div
+                                                                className="barra-fill"
+                                                                style={{
+                                                                    width: `${(cantidad / proyectos.length) * 100}%`,
+                                                                    backgroundColor: getMunicipioColor(municipio)
+                                                                }}
+                                                            ></div>
+                                                            <span className="barra-valor">{cantidad}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+
+                                        <div className="grafica-card">
+                                            <h3>Progreso de Proyectos en Ejecución</h3>
+                                            <div className="progreso-grafica">
+                                                {getDatosProgreso().map((proyecto, index) => (
+                                                    <div key={`${proyecto.nombre}-${proyecto.municipio}-${index}`} className="progreso-item">
+                                                        <div className="progreso-info">
+                                                            <span className="proyecto-nombre">{proyecto.nombre}</span>
+                                                            <span className="proyecto-municipio">{proyecto.municipio}</span>
+                                                        </div>
+                                                        <div className="progreso-bar-container">
+                                                            <div
+                                                                className="progreso-bar-fill"
+                                                                style={{ width: `${proyecto.progreso}%` }}
+                                                            ></div>
+                                                            <span className="progreso-porcentaje">{proyecto.progreso}%</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                    </div>
+
+                                    <div className="graficas-section2">
+
+                                        {/* Nueva gráfica de barras apiladas */}
+                                        <div className="grafica-card" style={{ display: 'none' }}>
+                                            <h3>Presupuesto Mensual por Municipio</h3>
+                                            <div className="barras-apiladas">
+                                                {(() => {
+                                                    const { meses, presupuestos } = getDatosPresupuestoMensual();
+                                                    const maxPresupuesto = Math.max(...presupuestos);
+                                                    const municipios = ['Valledupar', 'Aguachica', 'Codazzi', 'La Paz'];
+
+                                                    return (
+                                                        <>
+                                                            <div className="barras-container">
+                                                                {meses.map((mes, index) => {
+                                                                    const presupuestoTotal = presupuestos[index];
+                                                                    const alturas = municipios.map((municipio, mIndex) => {
+                                                                        const porcentaje = (Math.random() * 0.4) + 0.2; // 20-60% del total
+                                                                        return {
+                                                                            municipio,
+                                                                            altura: (presupuestoTotal * porcentaje / maxPresupuesto) * 150,
+                                                                            color: getMunicipioColor(municipio)
+                                                                        };
+                                                                    });
+
+                                                                    return (
+                                                                        <div key={mes} className="barra-apilada">
+                                                                            <div className="barra-secciones">
+                                                                                {alturas.map((seccion, sIndex) => (
+                                                                                    <div
+                                                                                        key={`${mes}-${seccion.municipio}`}
+                                                                                        className="barra-seccion"
+                                                                                        style={{
+                                                                                            height: `${seccion.altura}px`,
+                                                                                            backgroundColor: seccion.color
+                                                                                        }}
+                                                                                        title={`${seccion.municipio}: $${(presupuestoTotal * ((Math.random() * 0.4) + 0.2)).toLocaleString()}`}
+                                                                                    ></div>
+                                                                                ))}
+                                                                            </div>
+                                                                            <div className="barra-label">{mes}</div>
+                                                                            <div className="barra-total">${presupuestoTotal.toLocaleString()}</div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                            <div className="barras-legend">
+                                                                {municipios.map(municipio => (
+                                                                    <div key={municipio} className="legend-item">
+                                                                        <div className="legend-color" style={{ backgroundColor: getMunicipioColor(municipio) }}></div>
+                                                                        <span>{municipio}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </>
+                                                    );
+                                                })()}
+                                            </div>
+                                        </div>
+                                    </div>
 
                                     {/* Filtros por Estado - Dinámicos */}
-                                        <div className="filtros-section">
-                                            <h3>Filtros por Estado</h3>
-                                            <div className="filtros-grid">
+                                    <div className="filtros-section">
+                                        <h3>Filtros por Estado</h3>
+                                        <div className="filtros-grid">
                                             {Object.entries(getEstadisticasPorEstado()).map(([estado, cantidad]) => {
                                                 const proyectosDelEstado = getProyectosPorEstado(estado);
                                                 return (
                                                     <div key={estado} className="filtro-card">
                                                         <h4>{estado} ({cantidad})</h4>
-                                                    <div className="proyectos-lista">
+                                                        <div className="proyectos-lista">
                                                             {proyectosDelEstado.map(proyecto => (
-                                                            <div key={proyecto.id} className="proyecto-item">
-                                                                <span className="proyecto-nombre">{proyecto.nombre}</span>
+                                                                <div key={proyecto.id} className="proyecto-item">
+                                                                    <span className="proyecto-nombre">{proyecto.nombre}</span>
                                                                     <span className="proyecto-fase">{proyecto.descripcion_fase}</span>
-                                                            </div>
-                                                        ))}
+                                                                </div>
+                                                            ))}
+                                                        </div>
                                                     </div>
-                                                </div>
                                                 );
                                             })}
                                         </div>
@@ -678,7 +723,7 @@ const Dashboard = ({ user, onLogout }) => {
                                 ‹
                             </button>
                             <span className="slider-indicator">
-                                {Math.floor(currentEventIndex / 4) + 1} / {Math.ceil(proximosEventos.length / 4)}
+                                {Math.floor(currentEventIndex / 3) + 1} / {Math.ceil(proximosEventos.length / 3)}
                             </span>
                             <button onClick={nextEvents} className="slider-btn">
                                 ›
@@ -688,8 +733,8 @@ const Dashboard = ({ user, onLogout }) => {
                     <div className="eventos-slider">
                         <div className="eventos-grid">
                             {visibleEvents.map(evento => (
-                                <div 
-                                    key={evento.id} 
+                                <div
+                                    key={evento.id}
                                     className="evento-card"
                                     style={{ borderLeftColor: evento.descripcion_prioridad.split(' ')[0].toUpperCase() }}
                                 >
@@ -703,16 +748,16 @@ const Dashboard = ({ user, onLogout }) => {
                                             <span className="fecha-icon">📅</span>
                                             <span>{formatDate(evento.fecha)}</span>
                                         </div>
-                                      {evento.descripcion_responsable && (
-                                        <div className="evento-responsable">
-                                            <span className="responsable-icon">👤</span>
-                                            <span>{evento.descripcion_responsable}</span>
-                                        </div>
-                                    )}
+                                        {evento.descripcion_responsable && (
+                                            <div className="evento-responsable">
+                                                <span className="responsable-icon">👤</span>
+                                                <span>{evento.descripcion_responsable}</span>
+                                            </div>
+                                        )}
                                     </div>
-                                 
+
                                     <div className="evento-prioridad">
-                                        <span 
+                                        <span
                                             className="prioridad-badge"
                                             style={{ backgroundColor: evento.descripcion_prioridad.split(' ')[0].toUpperCase() }}
                                         >
@@ -722,6 +767,23 @@ const Dashboard = ({ user, onLogout }) => {
                                 </div>
                             ))}
                         </div>
+
+                        {/* Indicador de rotación automática */}
+                        {proximosEventos.length > 3 && (
+                            <div className="auto-rotation-indicator">
+                                {Array.from({ length: Math.ceil(proximosEventos.length / 3) }, (_, index) => (
+                                    <div
+                                        key={index}
+                                        className={`rotation-dot ${currentRotationIndex === index ? 'active' : ''}`}
+                                        onClick={() => {
+                                            pauseAutoRotation();
+                                            setCurrentEventIndex(index * 3);
+                                            setCurrentRotationIndex(index);
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </section>
             </main>

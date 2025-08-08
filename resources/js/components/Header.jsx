@@ -2,6 +2,7 @@ import React from 'react';
 import { faSignOutAlt, faCog, faHome, faBars } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useNavigate, useLocation } from 'react-router-dom';
+import logo from '../../images/logo.png';
 
 const Header = ({ user, onLogout }) => {
     const navigate = useNavigate();
@@ -41,7 +42,11 @@ const Header = ({ user, onLogout }) => {
     return (
         <header className="dashboard-header">
             <div className="header-content">
-                <h1>{getPageTitle()}</h1>
+                <div className="header-logo">
+                    <img src={logo} alt="Logo" style={{width: '50px', height: '50px'}} className="logo" />
+                    <h1>{getPageTitle()}</h1>
+                </div>
+                
 
                 <div className="user-info">
                     <span>Bienvenido, {user.name}</span>

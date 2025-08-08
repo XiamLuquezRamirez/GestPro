@@ -53,7 +53,7 @@ function App() {
     <Router>
       <Routes>
         <Route
-          path="/GestPro"
+          path="/"
           element={user ? <Navigate to="/navigation" /> : <Login onLogin={setUser} />}
         />
         <Route
