@@ -61,4 +61,11 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/eliminarEntidad', [ProyectoController::class, 'eliminarEntidad']);
     Route::post('/activarEntidad', [ProyectoController::class, 'activarEntidad']);
     Route::post('/activarFaseDashboard', [ProyectoController::class, 'activarFaseDashboard']);
+
+    //gestion de contratos
+    Route::post('/guardarContrato', [ProyectoController::class, 'guardarContrato']);
+    Route::post('/subirAnexo', [ProyectoController::class, 'subirAnexo']);
+    Route::post('/eliminarAnexo', [ProyectoController::class, 'eliminarAnexo']);
+    Route::get('/listarContratos', [ProyectoController::class, 'listarContratos']);
+    
 });

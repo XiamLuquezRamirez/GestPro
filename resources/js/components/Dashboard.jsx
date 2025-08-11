@@ -3,6 +3,8 @@ import Header from './Header';
 import axios from 'axios';
 import '../../css/Dashboard.css';
 import '../../css/Dashboard-Extras.css';
+import Eventos from './eventos';
+
 const Dashboard = ({ user, onLogout }) => {
     const [activeTab, setActiveTab] = useState(''); // Inicialmente vacío
     const [currentEventIndex, setCurrentEventIndex] = useState(0);
@@ -10,7 +12,7 @@ const Dashboard = ({ user, onLogout }) => {
     const [fases, setFases] = useState([]);
     const [proyectos, setProyectos] = useState([]);
     const [modalProyecto, setModalProyecto] = useState(null);
-    const [proximosEventos, setProximosEventos] = useState([]);
+
     const [isLargeScreen, setIsLargeScreen] = useState(false);
 
     // Detectar tamaño de pantalla
@@ -201,48 +203,7 @@ const Dashboard = ({ user, onLogout }) => {
         return new Date(dateString).toLocaleDateString('es-ES', options);
     };
 
-    const getEventIcon = (tipo) => {
-        const icons = {
-            pliego: '📋',
-            propuesta: '📄',
-            audiencia: '👥',
-            documentacion: '📁',
-            revision: '🔍',
-            contrato: '✍️',
-            inicio: '🚀',
-            inspeccion: '🔧'
-        };
-        return icons[tipo] || '📅';
-    };
-
-    const getPriorityColor = (prioridad) => {
-        const colors = {
-            alta: '#f44336',
-            media: '#ff9800',
-            baja: '#4caf50'
-        };
-        return colors[prioridad] || '#757575';
-    };
-
-    const nextEvents = () => {
-        pauseAutoRotation();
-        setCurrentEventIndex(prev => {
-            const nextIndex = prev + 3 >= proximosEventos.length ? 0 : prev + 3;
-            setCurrentRotationIndex(Math.floor(nextIndex / 3));
-            return nextIndex;
-        });
-    };
-
-    const prevEvents = () => {
-        pauseAutoRotation();
-        setCurrentEventIndex(prev => {
-            const newIndex = prev - 3 < 0 ? Math.max(0, proximosEventos.length - 3) : prev - 3;
-            setCurrentRotationIndex(Math.floor(newIndex / 3));
-            return newIndex;
-        });
-    };
-
-    const visibleEvents = proximosEventos.slice(currentEventIndex, currentEventIndex + 3);
+    
 
     // Eliminar el array de municipios de ejemplo
     // const [municipios] = useState([...]);
@@ -295,36 +256,16 @@ const Dashboard = ({ user, onLogout }) => {
 
     // Estado para el contrato seleccionado en el modal
     const [modalContrato, setModalContrato] = useState(null);
-    const [autoRotationEnabled, setAutoRotationEnabled] = useState(true);
-    const [currentRotationIndex, setCurrentRotationIndex] = useState(0);
+  
 
     useEffect(() => {
         listFases();
         listProyectos();
-        listEventos();
     }, []);
 
-    // Rotación automática de eventos cada 10 segundos
-    useEffect(() => {
-        if (!autoRotationEnabled || proximosEventos.length <= 3) return;
+    
 
-        const interval = setInterval(() => {
-            setCurrentEventIndex(prev => {
-                const nextIndex = prev + 3 >= proximosEventos.length ? 0 : prev + 3;
-                setCurrentRotationIndex(Math.floor(nextIndex / 3));
-                return nextIndex;
-            });
-        }, 10000); // 10 segundos
-
-        return () => clearInterval(interval);
-    }, [proximosEventos.length, autoRotationEnabled]);
-
-    // Pausar rotación automática cuando el usuario interactúa
-    const pauseAutoRotation = () => {
-        setAutoRotationEnabled(false);
-        setTimeout(() => setAutoRotationEnabled(true), 30000); // Reanudar después de 30 segundos
-    };
-
+   
     // Cuando se abre un nuevo modal, resetear la pestaña activa
     useEffect(() => {
         if (modalProyecto) setModalProyectoTab('datos');
@@ -347,11 +288,7 @@ const Dashboard = ({ user, onLogout }) => {
         console.log(response.data);
     };
 
-    const listEventos = async () => {
-        const response = await axios.get('/eventos');
-        setProximosEventos(response.data);
-        console.log(response.data);
-    };
+ 
 
     // Mostrar solo las fases que tienen dashboard_fase === 1
     const fasesDashboard = fases.filter(fase => fase.dashboard === 1);
@@ -715,77 +652,7 @@ const Dashboard = ({ user, onLogout }) => {
                 </section>
 
                 {/* Sección de Eventos con Slider */}
-                <section className="eventos-section">
-                    <div className="eventos-header">
-                        <h2>Próximos Eventos</h2>
-                        <div className="slider-controls">
-                            <button onClick={prevEvents} className="slider-btn">
-                                ‹
-                            </button>
-                            <span className="slider-indicator">
-                                {Math.floor(currentEventIndex / 3) + 1} / {Math.ceil(proximosEventos.length / 3)}
-                            </span>
-                            <button onClick={nextEvents} className="slider-btn">
-                                ›
-                            </button>
-                        </div>
-                    </div>
-                    <div className="eventos-slider">
-                        <div className="eventos-grid">
-                            {visibleEvents.map(evento => (
-                                <div
-                                    key={evento.id}
-                                    className="evento-card"
-                                    style={{ borderLeftColor: evento.descripcion_prioridad.split(' ')[0].toUpperCase() }}
-                                >
-                                    <div className="evento-icon">
-                                        {evento.icono}
-                                    </div>
-                                    <div className="evento-content">
-                                        <h3>{evento.titulo}</h3>
-                                        <p className="evento-descripcion">{evento.descripcion}</p>
-                                        <div className="evento-fecha">
-                                            <span className="fecha-icon">📅</span>
-                                            <span>{formatDate(evento.fecha)}</span>
-                                        </div>
-                                        {evento.descripcion_responsable && (
-                                            <div className="evento-responsable">
-                                                <span className="responsable-icon">👤</span>
-                                                <span>{evento.descripcion_responsable}</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="evento-prioridad">
-                                        <span
-                                            className="prioridad-badge"
-                                            style={{ backgroundColor: evento.descripcion_prioridad.split(' ')[0].toUpperCase() }}
-                                        >
-                                            {evento.descripcion_prioridad.split(' ')[1].toUpperCase()}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Indicador de rotación automática */}
-                        {proximosEventos.length > 3 && (
-                            <div className="auto-rotation-indicator">
-                                {Array.from({ length: Math.ceil(proximosEventos.length / 3) }, (_, index) => (
-                                    <div
-                                        key={index}
-                                        className={`rotation-dot ${currentRotationIndex === index ? 'active' : ''}`}
-                                        onClick={() => {
-                                            pauseAutoRotation();
-                                            setCurrentEventIndex(index * 3);
-                                            setCurrentRotationIndex(index);
-                                        }}
-                                    />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </section>
+                <Eventos />
             </main>
             {modalProyecto && (
                 <div className="modal-proyecto-overlay" onClick={handleCloseModalProyecto}>

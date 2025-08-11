@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import Header from './Header';
 import axios from '../axios';
-import { faPlus, faTrash, faSave, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faTrash, faSave, faTimes, faCalculator } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import Swal from 'sweetalert2/dist/sweetalert2.js';
+import Swal from 'sweetalert2';
 import EmojiPicker from 'emoji-picker-react';
 
 const Parametros = ({ user, onLogout }) => {
@@ -11,6 +11,18 @@ const Parametros = ({ user, onLogout }) => {
     const [showModal, setShowModal] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
     const [modalType, setModalType] = useState('');
+    // Estados para el modal de contratos
+    const [showContratosModal, setShowContratosModal] = useState(false);
+    const [proyectoContratos, setProyectoContratos] = useState(null);
+    const [showContratoForm, setShowContratoForm] = useState(false);
+    const [editingContrato, setEditingContrato] = useState(null);
+    const [modalActiveTab, setModalActiveTab] = useState('datos');
+    const [contratoActiveTab, setContratoActiveTab] = useState('informacion');
+    const [anexos, setAnexos] = useState([]);
+    const [formAnexo, setFormAnexo] = useState({
+        descripcion: '',
+        archivo: null
+    });
     const [proyectos, setProyectos] = useState([]);
     const [municipios, setMunicipios] = useState([]);
     const [estados, setEstados] = useState([]);
@@ -22,6 +34,10 @@ const Parametros = ({ user, onLogout }) => {
     const [responsables, setResponsables] = useState([]);
     const [departamentos, setDepartamentos] = useState([]);
     const [detallesPresupuesto, setDetallesPresupuesto] = useState([]);
+    // Estado para búsqueda
+    const [searchText, setSearchText] = useState('');
+    // Estado para el modal de emoji
+    const [showEmojiModal, setShowEmojiModal] = useState(false);
     // Datos de ejemplo para los parámetros
     const [parametros, setParametros] = useState({
         municipios: [
@@ -74,7 +90,6 @@ const Parametros = ({ user, onLogout }) => {
 
     // Datos de proyectos y eventos
 
-
     useEffect(() => {
         listProyectos();
         listMunicipios();
@@ -90,7 +105,6 @@ const Parametros = ({ user, onLogout }) => {
         listDepartamentos();
 
     }, []);
-
 
     const listProyectos = async () => {
         const response = await axios.get('/proyectos');
@@ -149,7 +163,6 @@ const Parametros = ({ user, onLogout }) => {
         { value: 'cancelado', label: 'Cancelado' }
     ];
 
-
     const [formData, setFormData] = useState({
         id: '',
         nombre: '',
@@ -186,12 +199,6 @@ const Parametros = ({ user, onLogout }) => {
         accion: 'Agregar'
     });
 
-    const [modalActiveTab, setModalActiveTab] = useState('datos');
-    const [componentesPresupuesto, setComponentesPresupuesto] = useState([]);
-    // Estado para búsqueda
-    const [searchText, setSearchText] = useState("");
-    const [showEmojiModal, setShowEmojiModal] = useState(false);
-
     // Estados posibles para los contratos
     const estadosContratos = [
         { value: 'vigente', label: 'Vigente' },
@@ -215,13 +222,109 @@ const Parametros = ({ user, onLogout }) => {
         fecha_fin: '',
         interventoria: '',
         avance: '',
+        avance_financiero: '',
+        avance_fisico: '',
         estado: '',
+        proyecto: ''
     });
 
     // Manejar cambios en el formulario de contratos
     const handleContratoChange = (e) => {
         const { name, value } = e.target;
         setFormContrato(prev => ({ ...prev, [name]: value }));
+    };
+
+    // Manejar cambios en el formulario de anexos
+    const handleAnexoChange = (e) => {
+        const { name, value, files } = e.target;
+        if (name === 'archivo') {
+            setFormAnexo(prev => ({ ...prev, [name]: files[0] }));
+        } else {
+            setFormAnexo(prev => ({ ...prev, [name]: value }));
+        }
+    };
+
+    // Agregar anexo
+    const handleAddAnexo = async () => {
+        if (!formAnexo.descripcion || !formAnexo.archivo) {
+            Swal.fire({ icon: 'warning', title: 'La descripción y el archivo son obligatorios' });
+            return;
+        }
+
+        try {
+            // Crear FormData para enviar el archivo
+            const formData = new FormData();
+            formData.append('archivo', formAnexo.archivo);
+            formData.append('descripcion', formAnexo.descripcion);
+
+            // Subir archivo al servidor
+            const response = await axios.post('/subirAnexo', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                }
+            });
+
+            if (response.data.success) {
+                const nuevoAnexo = {
+                    id: Date.now(),
+                    descripcion: formAnexo.descripcion,
+                    nombreArchivo: formAnexo.archivo.name,
+                    rutaArchivo: response.data.ruta,
+                    fecha: new Date().toISOString().split('T')[0]
+                };
+
+                setAnexos(prev => [...prev, nuevoAnexo]);
+                setFormAnexo({ descripcion: '', archivo: null });
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Anexo agregado correctamente',
+                    text: response.data.mensaje
+                });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error al subir el archivo',
+                    text: response.data.mensaje
+                });
+            }
+        } catch (error) {
+            console.error('Error al subir anexo:', error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error al subir el archivo',
+                text: error.response?.data?.mensaje || 'Error interno del servidor'
+            });
+        }
+    };
+
+    // Eliminar anexo
+    const handleDeleteAnexo = async (id) => {
+        try {
+            const response = await axios.post('/eliminarAnexo', { id: id });
+
+            if (response.data.success) {
+                setAnexos(prev => prev.filter(anexo => anexo.id !== id));
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Anexo eliminado correctamente',
+                    text: response.data.mensaje
+                });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error al eliminar el anexo',
+                    text: response.data.mensaje
+                });
+            }
+        } catch (error) {
+            console.error('Error al eliminar anexo:', error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error al eliminar el anexo',
+                text: error.response?.data?.mensaje || 'Error interno del servidor'
+            });
+        }
     };
 
     // Agregar contrato a la lista
@@ -235,7 +338,13 @@ const Parametros = ({ user, onLogout }) => {
             { ...formContrato, id: Date.now() }
         ]);
         setFormContrato({
-            n_contrato: '', objeto: '', contratante: '', contratista: '', valor: '', fecha_inicio: '', fecha_fin: '', interventoria: '', avance: '', estado: ''
+            n_contrato: '', objeto: '', 
+            contratante: '', contratista: '', 
+            valor: '', fecha_inicio: '', 
+            fecha_fin: '', interventoria: '', 
+            avance_financiero: '', 
+            avance_fisico: '', estado: '',
+            proyecto: proyectoContratos.id || ''
         });
     };
 
@@ -243,6 +352,140 @@ const Parametros = ({ user, onLogout }) => {
     const handleDeleteContrato = (id) => {
         setContratos(prev => prev.filter(c => c.id !== id));
     };
+
+    // Editar contrato
+    const handleEditContrato = (contrato) => {
+        setEditingContrato(contrato);
+        setFormContrato({
+            id: contrato.id || '',
+            n_contrato: contrato.n_contrato || '',
+            objeto: contrato.objeto || '',
+            contratante: contrato.contratante || '',
+            contratista: contrato.contratista || '',
+            valor: contrato.valor || '',
+            fecha_inicio: contrato.fecha_inicio || '',
+            fecha_fin: contrato.fecha_fin || '',
+            interventoria: contrato.interventoria || '',
+            avance_financiero: contrato.avance_financiero || '',
+            avance_fisico: contrato.avance_fisico || '',
+            estado: contrato.estado || '',
+            proyecto: contrato.proyecto || ''
+        });
+        // Cargar anexos del contrato si existen
+        if (contrato.anexos && contrato.anexos.length > 0) {
+            const anexosFormateados = contrato.anexos.map(anexo => ({
+                id: anexo.id,
+                descripcion: anexo.descripcion,
+                nombreArchivo: anexo.nombre_archivo,
+                rutaArchivo: anexo.ruta_archivo,
+                fecha: anexo.fecha
+            }));
+            setAnexos(anexosFormateados);
+        } else {
+            setAnexos([]);
+        }
+        setShowContratoForm(true);
+    };
+
+    // Guardar contrato (agregar o actualizar)
+    const handleSaveContrato = async () => {
+        if (!formContrato.n_contrato || !formContrato.objeto || !formContrato.valor || !formContrato.estado) {
+            Swal.fire({ icon: 'warning', title: 'Los campos N° Contrato, Objeto, Valor y Estado son obligatorios' });
+            return;
+        }
+
+        if (editingContrato) {
+            // Actualizar contrato existente
+            setContratos(prev => prev.map(c =>
+                c.id === editingContrato.id ? { ...formContrato, id: c.id, anexos: anexos } : c
+            ));
+            setEditingContrato(null);
+        } else {
+            // Agregar nuevo contrato
+            setContratos(prev => [
+                ...prev,
+                { ...formContrato, id: Date.now(), anexos: anexos }
+            ]);
+        }
+
+        console.log(formContrato);
+        console.log(anexos);
+        // Actualizar el proyecto con los nuevos contratos con axios
+        const response = await axios.post('/guardarContrato', {
+            formContrato: formContrato,
+            anexos: anexos.map(anexo => ({
+                descripcion: anexo.descripcion,
+                nombreArchivo: anexo.nombreArchivo,
+                rutaArchivo: anexo.rutaArchivo,
+                fecha: anexo.fecha
+            }))
+        });
+        if (response.status === 200) {
+            Swal.fire({
+                title: 'Contrato guardado correctamente',
+                icon: 'success'
+            }).then(() => {
+                listContratos();
+                handleCloseModal();
+            });
+        }
+
+        // Limpiar formulario
+        setFormContrato({
+            n_contrato: '', objeto: '', contratante: '',
+            contratista: '', valor: '',
+            fecha_inicio: '', fecha_fin: '',
+            interventoria: '',
+            avance_financiero: '',
+            avance_fisico: '', estado: '',
+            proyecto: proyectoContratos.id || ''
+        });
+        setShowContratoForm(false);
+    };
+
+    // Cancelar edición/agregado de contrato
+    const handleCancelContratoForm = () => {
+        setShowContratoForm(false);
+        setEditingContrato(null);
+        setFormContrato({
+            n_contrato: '', objeto: '', contratante: '',
+            contratista: '', valor: '', fecha_inicio: '',
+            fecha_fin: '', interventoria: '',
+            avance_financiero: '',
+            avance_fisico: '',
+            estado: '',
+            proyecto: proyectoContratos.id || ''
+        });
+        setAnexos([]);
+        setFormAnexo({ descripcion: '', archivo: null });
+        setContratoActiveTab('informacion');
+    };
+
+    // Abrir formulario para agregar contrato
+    const handleAddNewContrato = () => {
+        setEditingContrato(null);
+        setFormContrato({
+            n_contrato: '', objeto: '', contratante: '',
+            contratista: '', valor: '', fecha_inicio: '',
+            fecha_fin: '', interventoria: '',
+            avance_financiero: '',
+            avance_fisico: '', estado: '',
+            proyecto: proyectoContratos.id || ''
+        });
+        setAnexos([]);
+        setFormAnexo({ descripcion: '', archivo: null });
+        setContratoActiveTab('informacion');
+        setShowContratoForm(true);
+    };
+
+    const listContratos = async () => {
+        const response = await axios.get('/listarContratos', {
+            params: {
+                proyecto: proyectoContratos.id
+            }
+        });
+        setContratos(response.data);
+    }
 
     const tabs = [
         { id: 'proyectos', label: 'Gestionar Proyectos', icon: '📋' },
@@ -276,13 +519,13 @@ const Parametros = ({ user, onLogout }) => {
 
         if (modalType === 'proyectos') {
             // Calcular el presupuesto total de los componentes
-            const presupuestoTotal = componentesPresupuesto.reduce((sum, comp) => sum + comp.valor, 0);
+            const presupuestoTotal = detallesPresupuesto.reduce((sum, comp) => sum + comp.valor, 0);
 
             const newProyecto = {
                 ...formData,
                 id: editingItem ? editingItem.id : Date.now(),
                 presupuesto: formatCurrency(presupuestoTotal),
-                componentesPresupuesto: componentesPresupuesto,
+                componentesPresupuesto: detallesPresupuesto,
                 contratos: contratos,
             };
             const response = await axios.post('/guardarProyecto', newProyecto);
@@ -426,7 +669,7 @@ const Parametros = ({ user, onLogout }) => {
                     handleCloseModal();
                 });
             }
-        } else if (modalType === 'entidades') {
+        } else if (type === 'entidades') {
             const newEntidad = {
                 ...formData,
                 id: editingItem ? editingItem.id : Date.now(),
@@ -444,7 +687,7 @@ const Parametros = ({ user, onLogout }) => {
                     handleCloseModal();
                 });
             }
-        
+
         } else {
             const newItem = {
                 ...formData,
@@ -506,7 +749,7 @@ const Parametros = ({ user, onLogout }) => {
         // Cargar componentes de presupuesto si es un proyecto
         if (type === 'proyectos' && item.componentesPresupuesto) {
             console.log(item.componentesPresupuesto);
-            setComponentesPresupuesto(
+            setDetallesPresupuesto(
                 item.componentesPresupuesto.map(componente => ({
                     id: componente.id,
                     descripcionComponente: componente.componente,
@@ -514,7 +757,7 @@ const Parametros = ({ user, onLogout }) => {
                 }))
             );
         } else {
-            setComponentesPresupuesto([]);
+            setDetallesPresupuesto([]);
         }
         // Cargar contratos si es un proyecto
         if (type === 'proyectos' && item.contratos) {
@@ -619,11 +862,6 @@ const Parametros = ({ user, onLogout }) => {
                             icon: 'success'
                         });
                     }
-                } else {
-                    setParametros(prev => ({
-                        ...prev,
-                        [type]: prev[type].filter(item => item.id !== id)
-                    }));
                 }
                 Swal.fire({
                     title: 'Elemento eliminado correctamente',
@@ -666,7 +904,7 @@ const Parametros = ({ user, onLogout }) => {
             fuenteFinanciamiento: '',
             accion: 'Agregar'
         });
-        setComponentesPresupuesto([]);
+        setDetallesPresupuesto([]);
         setContratos([]); // Resetear contratos al agregar nuevo
         setModalActiveTab('datos');
         setShowModal(true);
@@ -704,7 +942,7 @@ const Parametros = ({ user, onLogout }) => {
             fuenteFinanciamiento: '',
             accion: 'Agregar'
         });
-        setComponentesPresupuesto([]);
+        setDetallesPresupuesto([]);
         setContratos([]); // Resetear contratos al cerrar modal
         setModalActiveTab('datos');
     };
@@ -812,7 +1050,7 @@ const Parametros = ({ user, onLogout }) => {
                 descripcionComponente: formData.descripcionComponente,
                 valor: parseFloat(formData.valor)
             };
-            setComponentesPresupuesto(prev => [...prev, nuevoComponente]);
+            setDetallesPresupuesto(prev => [...prev, nuevoComponente]);
             setFormData(prev => ({
                 ...prev,
                 descripcionComponente: '',
@@ -823,12 +1061,36 @@ const Parametros = ({ user, onLogout }) => {
 
     const handleDeleteComponente = (id) => {
 
-        setComponentesPresupuesto(prev => prev.filter(comp => comp.id !== id));
+        setDetallesPresupuesto(prev => prev.filter(comp => comp.id !== id));
     };
 
     const calcularTotalPresupuesto = () => {
 
-        return componentesPresupuesto.reduce((sum, comp) => sum + comp.valor, 0);
+        return detallesPresupuesto.reduce((sum, comp) => sum + comp.valor, 0);
+    };
+
+    const handleAddContratoProyecto = (item, type) => {
+        console.log(item);
+        setProyectoContratos(item);
+        // Cargar contratos existentes del proyecto
+        if (item.contratos && item.contratos.length > 0) {
+            setContratos(item.contratos);
+        } else {
+            setContratos([]);
+        }
+        // Resetear estado del formulario
+        setShowContratoForm(false);
+        setEditingContrato(null);
+        setFormContrato({
+            n_contrato: '', objeto: '',
+             contratante: '', contratista: '', 
+             valor: '', fecha_inicio: '', 
+             fecha_fin: '', interventoria: '', 
+             avance_financiero: '', 
+             avance_fisico: '', estado: '',
+             proyecto: item.id || ''
+        });
+        setShowContratosModal(true);
     };
 
     const renderTable = (data, type) => {
@@ -944,6 +1206,15 @@ const Parametros = ({ user, onLogout }) => {
                                                     className={`btn-toggle ${item.dashboard ? 'deactivate' : 'activate'}`}
                                                 >
                                                     {item.dashboard ? 'Desactivar en Dashboard' : 'Activar en Dashboard'}
+                                                </button>
+                                            )}
+
+                                            {type === 'proyectos' && (
+                                                <button
+                                                    onClick={() => handleAddContratoProyecto(item, type)}
+                                                    className="btn-add-contrato-list"
+                                                >
+                                                    📋
                                                 </button>
                                             )}
 
@@ -1078,14 +1349,7 @@ const Parametros = ({ user, onLogout }) => {
                                     >
                                         💰 Financiación
                                     </button>
-                                    <button
-                                        type="button"
-                                        className={`modal-tab ${modalActiveTab === 'contratos' ? 'active' : ''}`}
-                                        onClick={() => setModalActiveTab('contratos')}
-                                    >
-                                        📄
-                                        Contratos 
-                                    </button>
+
                                 </div>
                             )}
 
@@ -1109,7 +1373,7 @@ const Parametros = ({ user, onLogout }) => {
                             {modalType === 'municipios' && (
                                 <div className="form-row">
                                     <div className="form-group">
-                                        <label htmlFor="nombre">Código *</label>
+                                        <label htmlFor="codigo">Código *</label>
                                         <input
                                             type="text"
                                             id="codigo"
@@ -1155,7 +1419,7 @@ const Parametros = ({ user, onLogout }) => {
                                     />
                                 </div>
                             )}
-                            
+
 
                             {/* Campos específicos para tipos de eventos */}
                             {modalType === 'tiposEventos' && (
@@ -1263,7 +1527,7 @@ const Parametros = ({ user, onLogout }) => {
 
                                         <div className="componentes-list">
                                             <h4>Componentes Agregados</h4>
-                                            {componentesPresupuesto.length === 0 ? (
+                                            {detallesPresupuesto.length === 0 ? (
                                                 <p className="no-componentes">No hay componentes agregados</p>
                                             ) : (
                                                 <div className="componentes-table">
@@ -1276,7 +1540,7 @@ const Parametros = ({ user, onLogout }) => {
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {componentesPresupuesto.map(componente => (
+                                                            {detallesPresupuesto.map(componente => (
                                                                 <tr key={componente.id}>
                                                                     <td>{componente.descripcionComponente}</td>
                                                                     <td>{formatCurrency(componente.valor)}</td>
@@ -1366,119 +1630,7 @@ const Parametros = ({ user, onLogout }) => {
                                 </>
                             )}
 
-                            {/* Pestaña de Contratos para proyectos */}
-                            {modalType === 'proyectos' && modalActiveTab === 'contratos' && (
-                                <>
-                                    <div className="contratos-modal-section">
-                                        <h3>Contratos</h3>
-                                        <p className="contratos-info">
-                                            Agregue los contratos asociados al proyecto. Todos los campos son obligatorios.
-                                        </p>
-                                        <div className="contrato-form">
-                                            <div className="form-row">
-                                                <div className="form-group">
-                                                    <label htmlFor="n_contrato">N° Contrato *</label>
-                                                    <input type="text" id="n_contrato" name="n_contrato" value={formContrato.n_contrato} onChange={handleContratoChange} />
-                                                </div>
-                                                <div className="form-group">
-                                                    <label htmlFor="valor">Valor *</label>
-                                                    <input type="number" id="valor" name="valor" value={formContrato.valor} onChange={handleContratoChange} min="0" step="1000" />
-                                                </div>
-                                               
-                                            </div>
-                                                <div className="form-group">
-                                                    <label htmlFor="objeto">Objeto *</label>
-                                                    <textarea type="text" 
-                                                    id="objeto" name="objeto" 
-                                                    value={formContrato.objeto} 
-                                                    onChange={handleContratoChange} 
-                                                    rows="4"
-                                                    placeholder="Ingrese el objeto del contrato"
-                                                    />
-                                                </div>
-                                           
-                                            <div className="form-row">
-                                                <div className="form-group">
-                                                    <label htmlFor="contratante">Contratante *</label>
-                                                    <input type="text" id="contratante" name="contratante" value={formContrato.contratante} onChange={handleContratoChange} />
-                                                </div>
-                                                <div className="form-group">
-                                                    <label htmlFor="contratista">Contratista *</label>
-                                                    <input type="text" id="contratista" name="contratista" value={formContrato.contratista} onChange={handleContratoChange} />
-                                                </div>
-                                            </div>
-                                            <div className="form-row">
-                                               
-                                                <div className="form-group">
-                                                    <label htmlFor="fecha_inicio">Fecha Inicio *</label>
-                                                    <input type="date" id="fecha_inicio" name="fecha_inicio" value={formContrato.fecha_inicio} onChange={handleContratoChange} />
-                                                </div>
-                                                <div className="form-group">
-                                                    <label htmlFor="fecha_fin">Fecha Fin *</label>
-                                                    <input type="date" id="fecha_fin" name="fecha_fin" value={formContrato.fecha_fin} onChange={handleContratoChange} />
-                                                </div>
-                                            </div>
-                                            <div className="form-row">
-                                                <div className="form-group">
-                                                    <label htmlFor="interventoria">Interventoría *</label>
-                                                    <input type="text" id="interventoria" name="interventoria" value={formContrato.interventoria} onChange={handleContratoChange} />
-                                                </div>
-                                                <div className="form-group">
-                                                    <label htmlFor="avance">Avance *</label>
-                                                    <input type="text" id="avance" name="avance" value={formContrato.avance} onChange={handleContratoChange} />
-                                                </div>
-                                                <div className="form-group">
-                                                    <label htmlFor="estado">Estado *</label>
-                                                    <select id="estado" name="estado" value={formContrato.estado} onChange={handleContratoChange}>
-                                                        <option value="">Seleccione un estado</option>
-                                                        {estadosContratos.map(e => (
-                                                            <option key={e.value} value={e.value}>{e.label}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <button type="button" onClick={handleAddContrato} className="btn-add-contrato" disabled={!formContrato.n_contrato || !formContrato.objeto || !formContrato.valor || !formContrato.estado}>
-                                                <FontAwesomeIcon icon={faPlus} /> Agregar Contrato
-                                            </button>
-                                        </div>
-                                        <div className="contratos-list">
-                                            <h4>Contratos Agregados</h4>
-                                            {contratos.length === 0 ? (
-                                                <p className="no-contratos">No hay contratos agregados</p>
-                                            ) : (
-                                                <div className="contratos-table">
-                                                    <table>
-                                                        <thead>
-                                                            <tr>
-                                                                <th>N° Contrato</th>
-                                                                <th>Objeto</th>
-                                                                <th>Valor</th>
-                                                                <th>Estado</th>
-                                                                <th>Acciones</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {contratos.map(contrato => (
-                                                                <tr key={contrato.id}>
-                                                                    <td>{contrato.n_contrato}</td>
-                                                                    <td>{contrato.objeto}</td>
-                                                                    <td>{formatCurrency(Number(contrato.valor))}</td>
-                                                                    <td>{estadosContratos.find(e => e.value === contrato.estado)?.label || contrato.estado}</td>
-                                                                    <td>
-                                                                        <button type="button" onClick={() => handleDeleteContrato(contrato.id)} className="btn-delete-contrato">
-                                                                            <FontAwesomeIcon icon={faTrash} />
-                                                                        </button>
-                                                                    </td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </>
-                            )}
+
 
                             {/* Campos específicos para proyectos - Pestaña Datos */}
                             {modalType === 'proyectos' && modalActiveTab === 'datos' && (
@@ -1712,6 +1864,332 @@ const Parametros = ({ user, onLogout }) => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal para gestión de contratos */}
+            {showContratosModal && (
+                <div className="modal-overlay">
+                    <div className="modal-content contratos-modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2>📄 Gestión de Contratos - {proyectoContratos?.nombre}</h2>
+                            <button onClick={() => setShowContratosModal(false)} className="btn-close">×</button>
+                        </div>
+
+                        <div className="contratos-modal-body">
+                            {!showContratoForm ? (
+                                // Vista de lista de contratos
+                                <>
+                                    <div className="contratos-list-header">
+                                        <h3>Contratos del Proyecto</h3>
+                                        <button
+                                            onClick={handleAddNewContrato}
+                                            className="btn-add-contrato-header"
+                                        >
+                                            <FontAwesomeIcon icon={faPlus} /> Agregar Contrato
+                                        </button>
+                                    </div>
+
+                                    <div className="contratos-list">
+                                        {contratos.length === 0 ? (
+                                            <div className="no-contratos-container">
+                                                <p className="no-contratos">No hay contratos registrados para este proyecto</p>
+                                                <button
+                                                    onClick={handleAddNewContrato}
+                                                    className="btn-add-first-contrato"
+                                                >
+                                                    <FontAwesomeIcon icon={faPlus} /> Agregar Primer Contrato
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="contratos-table">
+                                                <table>
+                                                    <thead>
+                                                        <tr>
+                                                            <th>N° Contrato</th>
+                                                            <th>Objeto</th>
+                                                            <th>Valor</th>
+                                                            <th>Estado</th>
+                                                            <th>Anexos</th>
+                                                            <th>Acciones</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {contratos.map(contrato => (
+                                                            <tr key={contrato.id}>
+                                                                <td>{contrato.n_contrato}</td>
+                                                                <td>{contrato.objeto}</td>
+                                                                <td>{formatCurrency(Number(contrato.valor))}</td>
+                                                                <td>{estadosContratos.find(e => e.value === contrato.estado)?.label || contrato.estado}</td>
+                                                                <td>
+                                                                    <span className="anexos-count">
+                                                                        {contrato.anexos ? contrato.anexos.length : 0} anexos
+                                                                    </span>
+                                                                </td>
+                                                                <td>
+                                                                    <div className="contrato-actions">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleEditContrato(contrato)}
+                                                                            className="btn-edit-contrato"
+                                                                            title="Editar contrato"
+                                                                        >
+                                                                            ✏️
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleDeleteContrato(contrato.id)}
+                                                                            className="btn-delete-contrato"
+                                                                            title="Eliminar contrato"
+                                                                        >
+                                                                            <FontAwesomeIcon icon={faTrash} />
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                // Vista del formulario
+                                <>
+                                    <div className="contrato-form-header">
+                                        <h3>{editingContrato ? 'Editar Contrato' : 'Agregar Nuevo Contrato'}</h3>
+                                        <button
+                                            onClick={handleCancelContratoForm}
+                                            className="btn-back-to-list"
+                                        >
+                                            ← Volver a la lista
+                                        </button>
+                                    </div>
+
+                                    {/* Pestañas del formulario de contrato */}
+                                    <div className="contrato-tabs">
+                                        <button
+                                            className={`contrato-tab ${contratoActiveTab === 'informacion' ? 'active' : ''}`}
+                                            onClick={() => setContratoActiveTab('informacion')}
+                                        >
+                                            📄 Información del Contrato
+                                        </button>
+                                        <button
+                                            className={`contrato-tab ${contratoActiveTab === 'anexos' ? 'active' : ''}`}
+                                            onClick={() => setContratoActiveTab('anexos')}
+                                        >
+                                            📎 Anexos ({anexos.length})
+                                        </button>
+                                    </div>
+
+                                    {/* Contenido de la pestaña de información */}
+                                    {contratoActiveTab === 'informacion' && (
+                                        <div className="contratos-modal-section">
+                                            <p className="contratos-info">
+                                                Complete los datos del contrato. Los campos marcados con * son obligatorios.
+                                            </p>
+                                            <div className="contrato-form">
+                                                <div className="form-row">
+                                                    <div className="form-group">
+                                                        <label htmlFor="n_contrato">N° Contrato *</label>
+                                                        <input type="text" id="n_contrato" name="n_contrato" value={formContrato.n_contrato} onChange={handleContratoChange} />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="valor">Valor *</label>
+                                                        <input type="number" id="valor" name="valor" value={formContrato.valor} onChange={handleContratoChange} min="0" step="1000" />
+                                                    </div>
+                                                </div>
+                                                <div className="form-group">
+                                                    <label htmlFor="objeto">Objeto *</label>
+                                                    <textarea
+                                                        id="objeto"
+                                                        name="objeto"
+                                                        value={formContrato.objeto}
+                                                        onChange={handleContratoChange}
+                                                        rows="4"
+                                                        placeholder="Ingrese el objeto del contrato"
+                                                    />
+                                                </div>
+                                                <div className="form-row">
+                                                    <div className="form-group">
+                                                        <label htmlFor="contratante">Contratante *</label>
+                                                        <input type="text" id="contratante" name="contratante" value={formContrato.contratante} onChange={handleContratoChange} />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="contratista">Contratista *</label>
+                                                        <input type="text" id="contratista" name="contratista" value={formContrato.contratista} onChange={handleContratoChange} />
+                                                    </div>
+                                                </div>
+                                                <div className="form-row">
+                                                    <div className="form-group">
+                                                        <label htmlFor="fecha_inicio">Fecha Inicio *</label>
+                                                        <input type="date" id="fecha_inicio" name="fecha_inicio" value={formContrato.fecha_inicio} onChange={handleContratoChange} />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="fecha_fin">Fecha Fin *</label>
+                                                        <input type="date" id="fecha_fin" name="fecha_fin" value={formContrato.fecha_fin} onChange={handleContratoChange} />
+                                                    </div>
+                                                </div>
+                                                <div className="form-row">
+                                                    <div className="form-group">
+                                                        <label htmlFor="interventoria">Interventoría *</label>
+                                                        <input type="text" id="interventoria" name="interventoria" value={formContrato.interventoria} onChange={handleContratoChange} />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="estado">Estado *</label>
+                                                        <select id="estado" name="estado" value={formContrato.estado} onChange={handleContratoChange}>
+                                                            <option value="">Seleccione un estado</option>
+                                                            {estadosContratos.map(e => (
+                                                                <option key={e.value} value={e.value}>{e.label}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="avance_financiero">Avance Financiero</label>
+                                                        <div className="avance-financiero-container">
+                                                            <input type="text" disabled id="avance_financiero" name="avance_financiero" value={formContrato.avance_financiero} onChange={handleContratoChange} />
+                                                            <button type="button" className="btn-calcular-avance" title='Calcular Avance Financiero'><FontAwesomeIcon icon={faCalculator} /></button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="avance_fisico">Avance Físico</label>
+                                                        <div className="avance-fisico-container">
+                                                            <input type="text" id="avance_fisico" disabled name="avance_fisico" value={formContrato.avance_fisico} onChange={handleContratoChange} />
+                                                            <button type="button" className="btn-calcular-avance" title='Calcular Avance Físico'><FontAwesomeIcon icon={faCalculator} /></button>
+                                                        </div>
+                                                    </div>
+
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Contenido de la pestaña de anexos */}
+                                    {contratoActiveTab === 'anexos' && (
+                                        <div className="contratos-modal-section">
+                                            <p className="contratos-info">
+                                                Gestione los anexos del contrato. Puede agregar y eliminar documentos relacionados.
+                                            </p>
+
+                                            {/* Formulario para agregar anexo */}
+                                            <div className="anexo-form">
+                                                <h4>Agregar Nuevo Anexo</h4>
+                                                <div className="form-row">
+                                                    <div className="form-group">
+                                                        <label htmlFor="descripcion_anexo">Descripción *</label>
+                                                        <input
+                                                            type="text"
+                                                            id="descripcion_anexo"
+                                                            name="descripcion"
+                                                            value={formAnexo.descripcion}
+                                                            onChange={handleAnexoChange}
+                                                            placeholder="Descripción del anexo"
+                                                        />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="archivo_anexo">Archivo *</label>
+                                                        <input
+                                                            type="file"
+                                                            id="archivo_anexo"
+                                                            name="archivo"
+                                                            onChange={handleAnexoChange}
+                                                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                                                        />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleAddAnexo}
+                                                            className="btn-add-anexo"
+                                                            disabled={!formAnexo.descripcion || !formAnexo.archivo}
+                                                        >
+                                                            <FontAwesomeIcon icon={faPlus} /> Agregar Anexo
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Lista de anexos */}
+                                            <div className="anexos-list">
+                                                <h4>Anexos del Contrato ({anexos.length})</h4>
+                                                {anexos.length === 0 ? (
+                                                    <div className="no-anexos">
+                                                        <p>No hay anexos agregados para este contrato</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="anexos-table">
+                                                        <table>
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Descripción</th>
+                                                                    <th>Archivo</th>
+                                                                    <th>Fecha</th>
+                                                                    <th>Acciones</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {anexos.map(anexo => (
+                                                                    <tr key={anexo.id}>
+                                                                        <td>{anexo.descripcion}</td>
+                                                                        <td>{anexo.nombreArchivo}</td>
+                                                                        <td>{anexo.fecha}</td>
+                                                                        <td>
+                                                                            <div className="anexo-actions">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => window.open('/' + anexo.rutaArchivo, '_blank')}
+                                                                                    className="btn-view-anexo"
+                                                                                    title="Ver anexo"
+                                                                                >
+                                                                                    👁️
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => handleDeleteAnexo(anexo.id)}
+                                                                                    className="btn-delete-anexo"
+                                                                                    title="Eliminar anexo"
+                                                                                >
+                                                                                    <FontAwesomeIcon icon={faTrash} />
+                                                                                </button>
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        <div className="modal-actions">
+                            {!showContratoForm && (
+                                <button type="button" onClick={() => setShowContratosModal(false)} className="btn-cancel">
+                                    <FontAwesomeIcon icon={faTimes} /> Cerrar
+                                </button>
+                            )}
+                            {showContratoForm && (
+                                <>
+                                    <button type="button" onClick={handleCancelContratoForm} className="btn-cancel">
+                                        <FontAwesomeIcon icon={faTimes} /> Cancelar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveContrato}
+                                        className="btn-save"
+                                        disabled={!formContrato.n_contrato || !formContrato.objeto || !formContrato.valor || !formContrato.estado}
+                                    >
+                                        <FontAwesomeIcon icon={faSave} /> {editingContrato ? 'Actualizar' : 'Guardar'} Contrato
+                                    </button>
+                                </>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

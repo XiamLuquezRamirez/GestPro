@@ -694,14 +694,13 @@ body, .dashboard-container {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1px;
-    background: linear-gradient(135deg, #fbc02d 0%, #f57f17 100%);
-    box-shadow: 0 4px 12px rgba(251, 192, 45, 0.3);
+    box-shadow: 0 4px 12px rgba(112, 111, 107, 0.3);
     transition: all 0.3s ease;
 }
 
 .evento-card:hover .prioridad-badge {
     transform: scale(1.1);
-    box-shadow: 0 6px 16px rgba(251, 192, 45, 0.4);
+    box-shadow: 0 6px 16px rgba(112, 111, 107, 0.4);
 }
 
 .evento-card[style*='f44336'] .prioridad-badge { 
@@ -759,7 +758,7 @@ body, .dashboard-container {
 .evento-card:hover {
     transform: translateY(-8px) scale(1.02) rotateY(5deg) translateZ(20px);
     box-shadow: 
-        0 25px 50px rgba(251, 192, 45, 0.3),
+        0 15px 30px rgba(112, 111, 107, 0.3),
         0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 

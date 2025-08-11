@@ -38,6 +38,9 @@ class ProyectoController extends Controller
                 DB::raw('estado.nombre as descripcion_estado')
             )
             ->get();
+
+        
+
         $totalPresupuesto = 0;
         foreach ($proyectos as $proyecto) {
             $componentesPresupuesto = DB::table('presupuesto_proyecto')
@@ -46,15 +49,27 @@ class ProyectoController extends Controller
                 ->get();
             $proyecto->componentesPresupuesto = $componentesPresupuesto;
             $totalPresupuesto = $componentesPresupuesto->sum('valor');
+
             $proyecto->totalPresupuesto = $totalPresupuesto;
 
             $contratos = DB::table('contratos')
-                ->select('n_contrato', 'objeto', 'valor', 'estado', 'contratante', 'contratista', 'fecha_inicio', 'fecha_fin', 'interventoria', 'avance')
+                ->select('id', 'n_contrato', 'objeto', 'valor', 'estado', 'contratante', 'contratista', 'fecha_inicio', 'fecha_fin', 'interventoria', 'avance_financiero', 'avance_fisico')
                 ->where('proyecto', $proyecto->id)
                 ->get();
+                
+            // Cargar anexos para cada contrato
+            foreach ($contratos as $contrato) {
+                $anexos = DB::table('anexos_contratos')
+                    ->select('id', 'descripcion', 'nombre_archivo', 'ruta_archivo', 'fecha')
+                    ->where('contrato_id', $contrato->id)
+                    ->get();
+                $contrato->anexos = $anexos;
+            }
+
+        
+            
             $proyecto->contratos = $contratos;
         }
-        
 
         return response()->json($proyectos);
     }
@@ -76,6 +91,8 @@ class ProyectoController extends Controller
                 'eventos.responsable',
                 'eventos.estado',
                 'tipo_eventos.icono',
+                'prioridades.color',
+                'prioridades.nombre',
                 DB::raw('proyectos.nombre as descripcion_proyecto'),
                 DB::raw('tipo_eventos.nombre as descripcion_tipo_evento'),
                 DB::raw('CONCAT(prioridades.color, " ", prioridades.nombre) as descripcion_prioridad'),
@@ -214,6 +231,8 @@ class ProyectoController extends Controller
     {
         $proyecto = $request->all();
         DB::beginTransaction();
+
+       
         try {
             if ($proyecto['accion'] == 'Agregar') {
                 $proyectoId = DB::table('proyectos')->insertGetId([
@@ -235,24 +254,6 @@ class ProyectoController extends Controller
                             'proyecto' => $proyectoId,
                             'componente' => $presupuesto['descripcionComponente'],
                             'valor' => $presupuesto['valor']
-                        ]);
-                    }
-                }
-
-                if (isset($proyecto['contratos']) && count($proyecto['contratos']) > 0) {
-                    foreach ($proyecto['contratos'] as $contrato) {
-                        DB::table('contratos')->insert([
-                            'proyecto' => $proyectoId,
-                            'n_contrato' => $contrato['n_contrato'],
-                            'objeto' => $contrato['objeto'],
-                            'contratante' => $contrato['contratante'],
-                            'contratista' => $contrato['contratista'],
-                            'valor' => $contrato['valor'],
-                            'fecha_inicio' => $contrato['fecha_inicio'],
-                            'fecha_fin' => $contrato['fecha_fin'],
-                            'interventoria' => $contrato['interventoria'],
-                            'avance' => $contrato['avance'],
-                            'estado' => $contrato['estado']
                         ]);
                     }
                 }
@@ -283,25 +284,6 @@ class ProyectoController extends Controller
                     }
                 }
 
-                DB::table('contratos')->where('proyecto', $proyecto['id'])->delete();
-                if (isset($proyecto['contratos']) && count($proyecto['contratos']) > 0) {
-                    foreach ($proyecto['contratos'] as $contrato) {
-                        DB::table('contratos')->insert([
-                            'proyecto' => $proyecto['id'],
-                            'n_contrato' => $contrato['n_contrato'],
-                            'objeto' => $contrato['objeto'],
-                            'contratante' => $contrato['contratante'],
-                            'contratista' => $contrato['contratista'],
-                            'valor' => $contrato['valor'],
-                            'fecha_inicio' => $contrato['fecha_inicio'],
-                            'fecha_fin' => $contrato['fecha_fin'],
-                            'interventoria' => $contrato['interventoria'],
-                            'avance' => $contrato['avance'],
-                            'estado' => $contrato['estado']
-                        ]);
-                    }
-                }
-
             }
         } catch (\Exception $e) {
             DB::rollBack();
@@ -309,6 +291,74 @@ class ProyectoController extends Controller
         }
         DB::commit();
         return response()->json(['success' => 'Proyecto guardado correctamente']);
+    }
+
+    public function guardarContrato(Request $request)
+    {
+        $data = $request->all();
+        $formContrato = $data['formContrato'] ?? $data;
+        $anexos = $data['anexos'] ?? [];
+        
+        DB::beginTransaction();
+        try {
+            $contratoId = null;
+            
+            if (isset($formContrato['id']) && $formContrato['id']) {
+                // Actualizar contrato existente
+                DB::table('contratos')->where('id', $formContrato['id'])->update([
+                    'n_contrato' => $formContrato['n_contrato'],
+                    'objeto' => $formContrato['objeto'],
+                    'contratante' => $formContrato['contratante'],
+                    'contratista' => $formContrato['contratista'],
+                    'valor' => $formContrato['valor'],
+                    'fecha_inicio' => $formContrato['fecha_inicio'],
+                    'fecha_fin' => $formContrato['fecha_fin'],
+                    'interventoria' => $formContrato['interventoria'],
+                    'avance_financiero' => $formContrato['avance_financiero'] ?? '',
+                    'avance_fisico' => $formContrato['avance_fisico'] ?? '',
+                    'estado' => $formContrato['estado']
+                ]);
+                $contratoId = $formContrato['id'];
+                
+                // Eliminar anexos existentes del contrato
+                DB::table('anexos_contratos')->where('contrato_id', $contratoId)->delete();
+            } else {
+                // Insertar nuevo contrato
+                $contratoId = DB::table('contratos')->insertGetId([
+                    'proyecto' => $formContrato['proyecto'] ?? null,
+                    'n_contrato' => $formContrato['n_contrato'],
+                    'objeto' => $formContrato['objeto'],
+                    'contratante' => $formContrato['contratante'],
+                    'contratista' => $formContrato['contratista'],
+                    'valor' => $formContrato['valor'],
+                    'fecha_inicio' => $formContrato['fecha_inicio'],
+                    'fecha_fin' => $formContrato['fecha_fin'],
+                    'interventoria' => $formContrato['interventoria'],
+                    'avance_financiero' => $formContrato['avance_financiero'] ?? '',
+                    'avance_fisico' => $formContrato['avance_fisico'] ?? '',
+                    'estado' => $formContrato['estado']
+                ]);
+            }
+            
+            // Guardar anexos
+            if (!empty($anexos) && $contratoId) {
+                foreach ($anexos as $anexo) {
+                    DB::table('anexos_contratos')->insert([
+                        'contrato_id' => $contratoId,
+                        'descripcion' => $anexo['descripcion'],
+                        'nombre_archivo' => $anexo['nombreArchivo'],
+                        'ruta_archivo' => $anexo['rutaArchivo'],
+                        'fecha' => $anexo['fecha']
+                    ]);
+                }
+            }
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+        DB::commit();
+        return response()->json(['success' => 'Contrato guardado correctamente']);
     }
 
     public function eliminarProyecto(Request $request)
@@ -635,4 +685,103 @@ class ProyectoController extends Controller
         return response()->json(['success' => 'Entidad eliminada correctamente']);
     }
 
+    public function subirAnexo(Request $request)
+    {
+        try {
+            if ($request->hasFile('archivo')) {
+                $archivo = $request->file('archivo');
+                $descripcion = $request->input('descripcion');
+                
+                // Validar el archivo
+                $request->validate([
+                    'archivo' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png|max:10240', // 10MB máximo
+                    'descripcion' => 'required|string|max:255'
+                ]);
+
+                // Generar nombre único para el archivo
+                $nombreArchivo = time() . '_' . uniqid() . '.' . $archivo->getClientOriginalExtension();
+                
+                // Crear directorio si no existe
+                $directorio = 'anexos_contratos';
+                $rutaCompleta = public_path($directorio);
+                if (!file_exists($rutaCompleta)) {
+                    mkdir($rutaCompleta, 0755, true);
+                }
+                
+                // Mover el archivo al directorio
+                $archivo->move($rutaCompleta, $nombreArchivo);
+                
+                // Ruta relativa para guardar en la base de datos
+                $rutaArchivo = $directorio . '/' . $nombreArchivo;
+                
+                return response()->json([
+                    'success' => true,
+                    'ruta' => $rutaArchivo,
+                    'nombre_original' => $archivo->getClientOriginalName(),
+                    'mensaje' => 'Archivo subido correctamente'
+                ]);
+            }
+            
+            return response()->json([
+                'success' => false,
+                'mensaje' => 'No se encontró ningún archivo'
+            ], 400);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'mensaje' => 'Error al subir el archivo: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function eliminarAnexo(Request $request)
+    {
+        try {
+            $anexoId = $request->input('id');
+            
+            // Obtener información del anexo
+            $anexo = DB::table('anexos_contratos')->where('id', $anexoId)->first();
+            
+            if (!$anexo) {
+                return response()->json([
+                    'success' => false,
+                    'mensaje' => 'Anexo no encontrado'
+                ], 404);
+            }
+            
+            // Eliminar archivo físico
+            $rutaCompleta = public_path($anexo->ruta_archivo);
+            if (file_exists($rutaCompleta)) {
+                unlink($rutaCompleta);
+            }
+            
+            // Eliminar registro de la base de datos
+            DB::table('anexos_contratos')->where('id', $anexoId)->delete();
+            
+            return response()->json([
+                'success' => true,
+                'mensaje' => 'Anexo eliminado correctamente'
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'mensaje' => 'Error al eliminar el anexo: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function listarContratos(Request $request)
+    {
+        $proyecto = $request->all();
+        $contratos = DB::table('contratos')->where('proyecto', $proyecto['proyecto'])->get();
+
+        foreach ($contratos as $contrato) {
+            $anexos = DB::table('anexos_contratos')->where('contrato_id', $contrato->id)->get();
+            $contrato->anexos = $anexos;
+        }
+
+        return response()->json($contratos);
+    }
 }

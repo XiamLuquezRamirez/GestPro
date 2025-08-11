@@ -694,14 +694,13 @@ body, .dashboard-container {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1px;
-    background: linear-gradient(135deg, #fbc02d 0%, #f57f17 100%);
-    box-shadow: 0 4px 12px rgba(251, 192, 45, 0.3);
+    box-shadow: 0 4px 12px rgba(112, 111, 107, 0.3);
     transition: all 0.3s ease;
 }
 
 .evento-card:hover .prioridad-badge {
     transform: scale(1.1);
-    box-shadow: 0 6px 16px rgba(251, 192, 45, 0.4);
+    box-shadow: 0 6px 16px rgba(112, 111, 107, 0.4);
 }
 
 .evento-card[style*='f44336'] .prioridad-badge { 
@@ -759,7 +758,7 @@ body, .dashboard-container {
 .evento-card:hover {
     transform: translateY(-8px) scale(1.02) rotateY(5deg) translateZ(20px);
     box-shadow: 
-        0 25px 50px rgba(251, 192, 45, 0.3),
+        0 15px 30px rgba(112, 111, 107, 0.3),
         0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
@@ -1334,6 +1333,7 @@ tr:hover {
 
 .btn-toggle,
 .btn-edit,
+.btn-add-contrato-list,
 .btn-delete {
     padding: 0.25rem 0.5rem;
     border: none;
@@ -1367,6 +1367,12 @@ tr:hover {
     animation: pulse 1s infinite;
 }
 
+.btn-add-contrato:hover {
+    background: #1976d2;
+    color: white;
+    animation: pulse 1s infinite;
+}
+
 .btn-delete {
     background: #ffebee;
     color: #f44336;
@@ -1376,6 +1382,8 @@ tr:hover {
     background: #ffcdd2;
     animation: pulse 1s infinite;
 }
+
+
 
 /* Modal */
 .modal-overlay {
@@ -1396,7 +1404,7 @@ tr:hover {
     background: white;
     border-radius: 12px;
     width: 100%;
-    max-width: 800px;
+    max-width: 1000px;
     max-height: 90vh;
     overflow-y: auto;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -1523,7 +1531,7 @@ tr:hover {
     display: flex;
     gap: 1rem;
     justify-content: flex-end;
-    padding-top: 1rem;
+    padding: 1rem;
     border-top: 1px solid #e0e6ed;
 }
 
@@ -1715,10 +1723,499 @@ tr:hover {
 }
 
 .search-input:focus {
+    outline: none;
     border-color: #1976d2;
-    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
 }
 
+/* Estilos para el modal de contratos */
+.contratos-modal {
+    background: white;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 1000px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.contratos-modal-body {
+    padding: 1.5rem;
+}
+
+.contratos-modal-section {
+    margin-bottom: 2rem;
+}
+
+.contratos-modal-section h3 {
+    color: #222b45;
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.contratos-info {
+    color: #8f9bb3;
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.4;
+}
+
+.contrato-form {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+}
+
+.contratos-list {
+    background: white;
+    border: 1px solid #e0e6ed;
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+.contratos-list h4 {
+    color: #222b45;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.no-contratos {
+    color: #8f9bb3;
+    text-align: center;
+    font-style: italic;
+    padding: 2rem;
+}
+
+.contratos-table {
+    overflow-x: auto;
+}
+
+.contratos-table table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+
+.contratos-table th {
+    background: #f8f9fa;
+    padding: 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    color: #222b45;
+    border-bottom: 2px solid #e0e6ed;
+}
+
+.contratos-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #e0e6ed;
+    vertical-align: middle;
+}
+
+.contratos-table tr:hover {
+    background: #f8f9fa;
+}
+
+.btn-delete-contrato {
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.3s ease;
+}
+
+.btn-delete-contrato:hover {
+    background: #d32f2f;
+}
+
+/* Responsive para el modal de contratos */
+@media (max-width: 768px) {
+    .contratos-modal {
+        width: 95vw;
+        max-height: 95vh;
+    }
+    
+    .contratos-modal-body {
+        padding: 1rem;
+    }
+    
+    .contrato-form {
+        padding: 1rem;
+    }
+    
+    .contratos-table {
+        font-size: 0.9rem;
+    }
+    
+    .contratos-table th,
+    .contratos-table td {
+        padding: 0.5rem;
+    }
+}
+
+/* Estilos para las nuevas funcionalidades del modal de contratos */
+.contratos-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e0e6ed;
+}
+
+.contratos-list-header h3 {
+    color: #222b45;
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.btn-add-contrato-header {
+    background: #1976d2;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-add-contrato-header:hover {
+    background: #1565c0;
+}
+
+.no-contratos-container {
+    text-align: center;
+    padding: 3rem 1rem;
+}
+
+.btn-add-first-contrato {
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 1rem 2rem;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 1rem auto 0;
+}
+
+.btn-add-first-contrato:hover {
+    background: #45a049;
+}
+
+.contrato-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+}
+
+.btn-edit-contrato {
+    background: #ff9800;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.3s ease;
+}
+
+.btn-edit-contrato:hover {
+    background: #f57c00;
+}
+
+.contrato-form-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e0e6ed;
+}
+
+.contrato-form-header h3 {
+    color: #222b45;
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.btn-back-to-list {
+    background: #757575;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-back-to-list:hover {
+    background: #616161;
+}
+
+/* Estilos para las pestañas del formulario de contrato */
+.contrato-tabs {
+    display: flex;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e6ed;
+    margin-bottom: 1rem;
+}
+
+.contrato-tab {
+    background: none;
+    border: none;
+    padding: 1rem 1.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #8f9bb3;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+    border-bottom: 3px solid transparent;
+}
+
+.contrato-tab:hover {
+    color: #1976d2;
+    background: #e3f2fd;
+}
+
+.contrato-tab.active {
+    color: #1976d2;
+    background: white;
+    border-bottom-color: #1976d2;
+}
+
+/* Estilos para el formulario de anexos */
+.anexo-form {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+}
+
+.anexo-form h4 {
+    color: #222b45;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.btn-add-anexo {
+    background: #4caf50;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+    margin-top: 1.5rem;
+}
+
+.btn-add-anexo:hover:not(:disabled) {
+    background: #45a049;
+    transform: translateY(-1px);
+}
+
+.btn-add-anexo:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Estilos para la lista de anexos */
+.anexos-list {
+    margin-top: 2rem;
+}
+
+.anexos-list h4 {
+    color: #222b45;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.no-anexos {
+    text-align: center;
+    padding: 2rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 2px dashed #dee2e6;
+}
+
+.no-anexos p {
+    color: #8f9bb3;
+    font-size: 1rem;
+    margin: 0;
+}
+
+.anexos-table {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.anexos-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.anexos-table th {
+    background: #f8f9fa;
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: #222b45;
+    border-bottom: 1px solid #e0e6ed;
+}
+
+.anexos-table td {
+    padding: 1rem;
+    border-bottom: 1px solid #f0f0f0;
+    color: #4a5568;
+}
+
+.anexos-table tr:hover {
+    background: #f8f9fa;
+}
+
+.btn-delete-anexo {
+    background: #f44336;
+    color: white;
+    border: none;
+    padding: 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.3s ease;
+}
+
+.btn-delete-anexo:hover {
+    background: #d32f2f;
+    transform: scale(1.05);
+}
+
+.anexo-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+}
+
+.btn-view-anexo {
+    background: #2196f3;
+    color: white;
+    border: none;
+    padding: 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.3s ease;
+}
+
+.btn-view-anexo:hover {
+    background: #1976d2;
+    transform: scale(1.05);
+}
+
+/* Estilo para el contador de anexos en la tabla */
+.anexos-count {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+/* Responsive para las pestañas de contrato */
+@media (max-width: 768px) {
+    .contrato-tabs {
+        flex-direction: column;
+    }
+    
+    .contrato-tab {
+        border-bottom: 1px solid #e0e6ed;
+        border-right: none;
+    }
+    
+    .anexo-form .form-row {
+        flex-direction: column;
+    }
+    
+    .anexos-table {
+        overflow-x: auto;
+    }
+    
+    .anexos-table table {
+        min-width: 600px;
+    }
+}
+
+.avance-financiero-container{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-calcular-avance{
+    background: #1976d2;
+    color: white;
+    border: none;
+    padding: 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.avance-fisico-container{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-calcular-avance:disabled{
+    background: #ccc;
+    cursor: not-allowed;
+    color: #666;
+    border: 1px solid #ccc;
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: not-allowed;
+    transition: all 0.2s ease;
+    opacity: 0.7;
+}
 /* Estilos para el componente de Login */
 .login-container {
     min-height: 100vh;
@@ -2087,415 +2584,6 @@ tr:hover {
         transform: translateY(0);
     }
 } 
-/* Estilos para Gestionar Proyectos */
-.gestionar-proyectos-container {
-    min-height: 100vh;
-    background: #f4f6fa;
-    font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
-}
-
-.content-wrapper {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 2rem;
-    padding-top: 6rem;
-}
-
-.page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid #e0e6ed;
-}
-
-.page-header h1 {
-    color: #222b45;
-    font-size: 2rem;
-    font-weight: 600;
-    margin: 0;
-}
-
-.btn-add {
-    background: #1976d2;
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: all 0.3s ease;
-}
-
-.btn-add:hover {
-    background: #1565c0;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
-}
-
-.btn-add span {
-    font-size: 1.2rem;
-    font-weight: bold;
-}
-
-/* Grid de proyectos */
-.proyectos-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-    gap: 1.5rem;
-}
-
-.proyecto-card {
-    background: white;
-    border-radius: 12px;
-    padding: 1.5rem;
-    box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
-    border-left: 4px solid #1976d2;
-    transition: all 0.3s ease;
-}
-
-.proyecto-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(44, 62, 80, 0.12);
-}
-
-.proyecto-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1rem;
-}
-
-.proyecto-header h3 {
-    color: #222b45;
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin: 0;
-    flex: 1;
-    margin-right: 1rem;
-}
-
-.proyecto-badges {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.estado-badge,
-.fase-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: white;
-    text-align: center;
-    text-transform: capitalize;
-}
-
-.proyecto-info {
-    margin-bottom: 1.5rem;
-}
-
-.info-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 0.75rem;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid #f0f2f5;
-}
-
-.info-item:last-child {
-    border-bottom: none;
-}
-
-.info-item .label {
-    font-weight: 500;
-    color: #8f9bb3;
-    font-size: 0.9rem;
-    min-width: 100px;
-}
-
-.info-item .value {
-    color: #2c3e50;
-    font-weight: 500;
-    text-align: right;
-    flex: 1;
-    margin-left: 1rem;
-}
-
-.info-item .value.description {
-    font-size: 0.85rem;
-    line-height: 1.4;
-    font-weight: normal;
-}
-
-.proyecto-actions {
-    display: flex;
-    gap: 0.75rem;
-}
-
-.btn-edit,
-.btn-delete {
-    flex: 1;
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-}
-
-.btn-edit {
-    background: #e3f2fd;
-    color: #1976d2;
-}
-
-.btn-edit:hover {
-    background: #bbdefb;
-}
-
-.btn-delete {
-    background: #ffebee;
-    color: #f44336;
-}
-
-.btn-delete:hover {
-    background: #ffcdd2;
-}
-
-/* Estado vacío */
-.empty-state {
-    text-align: center;
-    padding: 4rem 2rem;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
-}
-
-.empty-icon {
-    font-size: 4rem;
-    margin-bottom: 1rem;
-}
-
-.empty-state h3 {
-    color: #222b45;
-    font-size: 1.5rem;
-    margin-bottom: 0.5rem;
-}
-
-.empty-state p {
-    color: #8f9bb3;
-    margin-bottom: 2rem;
-}
-
-/* Modal */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 1rem;
-}
-
-.modal-content {
-    background: white;
-    border-radius: 12px;
-    width: 100%;
-    max-width: 1000px;
-    max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem;
-    border-bottom: 1px solid #e0e6ed;
-}
-
-.modal-header h2 {
-    color: #222b45;
-    font-size: 1.5rem;
-    font-weight: 600;
-    margin: 0;
-}
-
-.btn-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    color: #8f9bb3;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 50%;
-    transition: all 0.2s ease;
-}
-
-.btn-close:hover {
-    background: #f0f2f5;
-    color: #222b45;
-}
-
-.modal-form {
-    padding: 1.5rem;
-}
-
-.form-group {
-    margin-bottom: 1.5rem;
-}
-
-.form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    color: #222b45;
-    font-weight: 500;
-    font-size: 0.9rem;
-}
-
-.form-group input,
-.form-group select,
-.form-group textarea {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #e0e6ed;
-    border-radius: 6px;
-    font-size: 1rem;
-    transition: all 0.2s ease;
-    box-sizing: border-box;
-}
-
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-    outline: none;
-    border-color: #1976d2;
-    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
-}
-
-.form-group textarea {
-    resize: vertical;
-    min-height: 100px;
-}
-
-.modal-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: flex-end;
-    padding-top: 1rem;
-    border-top: 1px solid #e0e6ed;
-}
-
-.btn-cancel,
-.btn-save {
-    padding: 0.75rem 1.5rem;
-    border: none;
-    border-radius: 6px;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.btn-cancel {
-    background: #f0f2f5;
-    color: #8f9bb3;
-}
-
-.btn-cancel:hover {
-    background: #e0e6ed;
-    color: #222b45;
-}
-
-.btn-save {
-    background: #1976d2;
-    color: white;
-}
-
-.btn-save:hover {
-    background: #1565c0;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .content-wrapper {
-        padding: 1rem;
-        padding-top: 5rem;
-    }
-    
-    .page-header {
-        flex-direction: column;
-        gap: 1rem;
-        align-items: stretch;
-    }
-    
-    .proyectos-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-    
-    .proyecto-header {
-        flex-direction: column;
-        gap: 1rem;
-    }
-    
-    .proyecto-badges {
-        flex-direction: row;
-        justify-content: flex-start;
-    }
-    
-    .info-item {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.25rem;
-    }
-    
-    .info-item .value {
-        text-align: left;
-        margin-left: 0;
-    }
-    
-    .proyecto-actions {
-        flex-direction: column;
-    }
-    
-    .form-row {
-        grid-template-columns: 1fr;
-    }
-    
-    .modal-content {
-        margin: 1rem;
-        max-height: calc(100vh - 2rem);
-    }
-    
-    .modal-actions {
-        flex-direction: column;
-    }
-} 
 .dashboard-header {
     background: #fff;
     box-shadow: 0 2px 8px rgba(44, 62, 80, 0.04);
@@ -2852,421 +2940,6 @@ tr:hover {
     
     .module-content h3 {
         font-size: 1.1rem;
-    }
-} 
-/* Estilos para Gestionar Eventos */
-.gestionar-eventos-container {
-    min-height: 100vh;
-    background: #f4f6fa;
-    font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
-}
-
-.content-wrapper {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 2rem;
-    padding-top: 6rem;
-}
-
-.page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid #e0e6ed;
-}
-
-.page-header h1 {
-    color: #222b45;
-    font-size: 2rem;
-    font-weight: 600;
-    margin: 0;
-}
-
-.btn-add {
-    background: #1976d2;
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: all 0.3s ease;
-}
-
-.btn-add:hover {
-    background: #1565c0;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
-}
-
-.btn-add span {
-    font-size: 1.2rem;
-    font-weight: bold;
-}
-
-/* Grid de eventos */
-.eventos-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
-    gap: 1.5rem;
-}
-
-.evento-card {
-    background: white;
-    border-radius: 12px;
-    padding: 1.5rem;
-    box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
-    border-left: 4px solid #1976d2;
-    transition: all 0.3s ease;
-}
-
-.evento-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(44, 62, 80, 0.12);
-}
-
-.evento-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1rem;
-}
-
-.evento-icon {
-    font-size: 2rem;
-    margin-right: 1rem;
-}
-
-.evento-badges {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.prioridad-badge,
-.estado-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: white;
-    text-align: center;
-    text-transform: uppercase;
-}
-
-.evento-content h3 {
-    color: #222b45;
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin: 0 0 0.75rem 0;
-}
-
-.evento-descripcion {
-    color: #8f9bb3;
-    font-size: 0.9rem;
-    line-height: 1.4;
-    margin-bottom: 1rem;
-}
-
-.evento-info {
-    margin-bottom: 1.5rem;
-}
-
-.info-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 0.75rem;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid #f0f2f5;
-}
-
-.info-item:last-child {
-    border-bottom: none;
-}
-
-.info-item .label {
-    font-weight: 500;
-    color: #8f9bb3;
-    font-size: 0.9rem;
-    min-width: 100px;
-}
-
-.info-item .value {
-    color: #2c3e50;
-    font-weight: 500;
-    text-align: right;
-    flex: 1;
-    margin-left: 1rem;
-}
-
-.evento-actions {
-    display: flex;
-    gap: 0.75rem;
-}
-
-.btn-edit,
-.btn-delete {
-    flex: 1;
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-}
-
-.btn-edit {
-    background: #e3f2fd;
-    color: #1976d2;
-}
-
-.btn-edit:hover {
-    background: #bbdefb;
-}
-
-.btn-delete {
-    background: #ffebee;
-    color: #f44336;
-}
-
-.btn-delete:hover {
-    background: #ffcdd2;
-}
-
-/* Estado vacío */
-.empty-state {
-    text-align: center;
-    padding: 4rem 2rem;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
-}
-
-.empty-icon {
-    font-size: 4rem;
-    margin-bottom: 1rem;
-}
-
-.empty-state h3 {
-    color: #222b45;
-    font-size: 1.5rem;
-    margin-bottom: 0.5rem;
-}
-
-.empty-state p {
-    color: #8f9bb3;
-    margin-bottom: 2rem;
-}
-
-/* Modal */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 1rem;
-}
-
-.modal-content {
-    background: white;
-    border-radius: 12px;
-    width: 100%;
-    max-width: 600px;
-    max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem;
-    border-bottom: 1px solid #e0e6ed;
-}
-
-.modal-header h2 {
-    color: #222b45;
-    font-size: 1.5rem;
-    font-weight: 600;
-    margin: 0;
-}
-
-.btn-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    color: #8f9bb3;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 50%;
-    transition: all 0.2s ease;
-}
-
-.btn-close:hover {
-    background: #f0f2f5;
-    color: #222b45;
-}
-
-.modal-form {
-    padding: 1.5rem;
-}
-
-.form-group {
-    margin-bottom: 1.5rem;
-}
-
-.form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    color: #222b45;
-    font-weight: 500;
-    font-size: 0.9rem;
-}
-
-.form-group input,
-.form-group select,
-.form-group textarea {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #e0e6ed;
-    border-radius: 6px;
-    font-size: 1rem;
-    transition: all 0.2s ease;
-    box-sizing: border-box;
-}
-
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-    outline: none;
-    border-color: #1976d2;
-    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
-}
-
-.form-group textarea {
-    resize: vertical;
-    min-height: 80px;
-}
-
-.modal-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: flex-end;
-    padding-top: 1rem;
-    border-top: 1px solid #e0e6ed;
-}
-
-.btn-cancel,
-.btn-save {
-    padding: 0.75rem 1.5rem;
-    border: none;
-    border-radius: 6px;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.btn-cancel {
-    background: #f0f2f5;
-    color: #8f9bb3;
-}
-
-.btn-cancel:hover {
-    background: #e0e6ed;
-    color: #222b45;
-}
-
-.btn-save {
-    background: #1976d2;
-    color: white;
-}
-
-.btn-save:hover {
-    background: #1565c0;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .content-wrapper {
-        padding: 1rem;
-        padding-top: 5rem;
-    }
-    
-    .page-header {
-        flex-direction: column;
-        gap: 1rem;
-        align-items: stretch;
-    }
-    
-    .eventos-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-    
-    .evento-header {
-        flex-direction: column;
-        gap: 1rem;
-        align-items: flex-start;
-    }
-    
-    .evento-badges {
-        flex-direction: row;
-        justify-content: flex-start;
-        width: 100%;
-    }
-    
-    .info-item {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.25rem;
-    }
-    
-    .info-item .value {
-        text-align: left;
-        margin-left: 0;
-    }
-    
-    .evento-actions {
-        flex-direction: column;
-    }
-    
-    .form-row {
-        grid-template-columns: 1fr;
-    }
-    
-    .modal-content {
-        margin: 1rem;
-        max-height: calc(100vh - 2rem);
-    }
-    
-    .modal-actions {
-        flex-direction: column;
     }
 } 
 /* Reset CSS básico */

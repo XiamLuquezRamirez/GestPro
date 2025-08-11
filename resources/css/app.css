@@ -24,7 +24,5 @@ body {
 @import './Dashboard.css';
 @import './Parametros.css';
 @import './Login.css';
-@import './GestionarProyectos.css';
 @import './Header.css';
 @import './Navigation.css';
-@import './GestionarEventos.css';
