@@ -11,6 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // The 0001_01_01_000000_create_users_table migration already creates
+        // the sessions table. Guard against duplicate creation so a fresh
+        // migrate (e.g. RefreshDatabase in tests) doesn't fail.
+        if (Schema::hasTable('sessions')) {
+            return;
+        }
+
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();
             $table->foreignId('user_id')->nullable()->index();
