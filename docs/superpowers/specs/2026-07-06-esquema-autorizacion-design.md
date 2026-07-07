@@ -1,7 +1,7 @@
 # Esquema versionado y autorización por rol — GestPro
 
 **Fecha:** 2026-07-06
-**Estado:** Aprobado, pendiente de plan de implementación
+**Estado:** Implementado 2026-07-06
 
 ## Contexto
 
