@@ -854,4 +854,65 @@ body, .dashboard-container {
         max-width: 320px;
         min-width: auto;
     }
-} 
+}
+
+/* KPIs ejecutivos */
+.kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.kpi-tile {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    border-radius: 16px;
+    padding: 1.1rem 1.2rem;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+    border-left: 4px solid #1976d2;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.kpi-tile-riesgo {
+    border-left-color: #e53935;
+}
+
+.kpi-tile-riesgo .kpi-valor {
+    color: #e53935;
+}
+
+.kpi-icono {
+    font-size: 1.6rem;
+}
+
+.kpi-valor {
+    font-size: 1.7rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    color: #1976d2;
+}
+
+.kpi-etiqueta {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    margin-top: 0.3rem;
+    font-weight: 600;
+}
+
+@media (max-width: 1200px) {
+    .kpi-strip {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .kpi-strip {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
