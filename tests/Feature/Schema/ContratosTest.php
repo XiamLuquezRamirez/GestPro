@@ -53,4 +53,19 @@ class ContratosTest extends TestCase
 
         $this->assertSame(0, AnexoContrato::count());
     }
+
+    public function test_contrato_proceso_licitacion_becomes_null_when_proceso_is_deleted(): void
+    {
+        $proyecto = $this->crearProyecto();
+        $proceso = \App\Models\ProcesoLicitacion::create(['proyecto' => $proyecto->id, 'codigo_proceso' => 'LIC-003']);
+        $contrato = Contrato::create([
+            'proyecto' => $proyecto->id,
+            'n_contrato' => 'C-003',
+            'proceso_licitacion' => $proceso->id,
+        ]);
+
+        $proceso->delete();
+
+        $this->assertNull($contrato->fresh()->proceso_licitacion);
+    }
 }
