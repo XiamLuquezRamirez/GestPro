@@ -19,7 +19,7 @@ Solo existe la base local de desarrollo (no hay entorno de producción con datos
 Incluye:
 - Migraciones de Laravel para todas las tablas de negocio, con tipos corregidos y llaves foráneas reales.
 - Preservación de los datos de `municipios` y `departamentos` vía seeders; recreación vacía del resto de tablas de negocio.
-- Modelos Eloquent con relaciones para las 20 entidades de negocio.
+- Modelos Eloquent con relaciones para las 21 entidades de negocio.
 - Sistema de autorización por rol (Administrador / Gestor / Consulta) usando Gates nativos de Laravel + middleware `can:`.
 - Manejo de errores 403 coherente en backend y un mensaje claro en el interceptor de axios del frontend.
 - Tests de Feature para migraciones, seeders y Gates.
@@ -61,6 +61,10 @@ Un modelo por tabla de negocio: `Municipio`, `Departamento`, `Proyecto`, `Contra
 
 `ProyectoController.php` no se modifica en esta fase — sigue funcionando con `DB::table()` tal cual. Los modelos quedan disponibles para el refactor futuro del controlador y para el propio sistema de autorización.
 
+**Convención de nombres de relación (descubierta durante la implementación):** cuando una columna FK es una sola palabra que coincide con el nombre natural de la relación (ej. columna `estado` y relación `estado()`), Eloquent siempre devuelve el valor crudo de la columna en vez de resolver la relación — `getAttribute()` comprueba `hasAttribute()` antes que `isRelation()`. Por eso, en todos los modelos, ese tipo de relación se nombra con sufijo `Rel` (`estadoRel()`, `faseRel()`, `municipioRel()`, `proyectoRel()`, `procesoRel()`, `modalidadRel()`, `prioridadRel()`, `responsableRel()`, `departamentoRel()`, `sectorRel()`). Las relaciones cuya columna FK es snake_case (ej. `entidad_presenta`, `tipo_proceso`, `proceso_licitacion`) no necesitan el sufijo, porque el nombre camelCase del método nunca coincide con el de la columna. Cualquier código futuro (incluido el refactor de `ProyectoController.php`) que use estos modelos debe respetar esta convención.
+
+**Overrides de `$table` necesarios:** el pluralizador de Laravel adivina mal el nombre de tabla para tres modelos — `Entidad` (adivina `entidads`, la tabla real es `entidades`), `Modalidad` (adivina `modalidads`, real `modalidades`) y `AnexoContrato` (adivina `anexo_contratos`, real `anexos_contratos`). Los tres declaran `protected $table` explícito para corregirlo.
+
 ### 4. Autorización por rol
 
 - `App\Enums\Rol`: enum nativo de PHP con los casos `Administrador`, `Gestor`, `Consulta`.
@@ -90,7 +94,7 @@ Un Gate fallido lanza `AuthorizationException` (403). Se verifica que el manejad
 Tests de Feature (PHPUnit, ya presente en el proyecto):
 - `migrate:fresh --seed` corre sin error; el conteo de `municipios`/`departamentos` tras la siembra coincide con el dataset exportado.
 - Por cada Gate: un test que confirma que `Administrador` pasa; `Gestor` pasa `editar-datos` pero falla `gestionar-catalogos`/`gestionar-usuarios`; `Consulta` falla ambas rutas de escritura.
-- Tests de modelo verificando que las relaciones (`Proyecto->municipio`, `Contrato->proyecto`, `Estado->fase`, etc.) resuelven correctamente contra los datos semilla.
+- Tests de modelo verificando que las relaciones (`Proyecto->municipioRel`, `Contrato->proyectoRel`, `Estado->faseRel`, etc. — ver convención de nombres en la sección 3) resuelven correctamente contra los datos semilla.
 
 ## Decisiones registradas
 
