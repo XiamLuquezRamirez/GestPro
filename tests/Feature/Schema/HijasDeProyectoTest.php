@@ -18,8 +18,8 @@ class HijasDeProyectoTest extends TestCase
     private function crearProyecto(): Proyecto
     {
         $this->seed(\Database\Seeders\DepartamentosSeeder::class);
-        $municipio = Municipio::create(['nombre' => 'MEDELLÍN', 'activo' => true, 'departamento' => '05']);
-        return Proyecto::create(['municipio' => $municipio->id, 'nombre' => 'Proyecto de prueba']);
+        $municipio = Municipio::create(['codigo' => '05001', 'nombre' => 'MEDELLÍN', 'activo' => true, 'departamento' => '05']);
+        return Proyecto::create(['municipio' => $municipio->codigo, 'nombre' => 'Proyecto de prueba']);
     }
 
     public function test_presupuesto_proyecto_belongs_to_proyecto(): void

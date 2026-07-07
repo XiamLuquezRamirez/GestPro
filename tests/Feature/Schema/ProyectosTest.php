@@ -41,7 +41,7 @@ class ProyectosTest extends TestCase
         $c = $this->crearCatalogosBase();
 
         $proyecto = Proyecto::create([
-            'municipio' => $c['municipio']->id,
+            'municipio' => $c['municipio']->codigo,
             'nombre' => 'Pavimentación vía rural',
             'descripcion' => 'Prueba',
             'fecha_inicio' => '2026-01-01',
@@ -67,7 +67,7 @@ class ProyectosTest extends TestCase
     public function test_cannot_delete_a_municipio_with_proyectos(): void
     {
         $c = $this->crearCatalogosBase();
-        Proyecto::create(['municipio' => $c['municipio']->id, 'nombre' => 'X']);
+        Proyecto::create(['municipio' => $c['municipio']->codigo, 'nombre' => 'X']);
 
         $this->expectException(\Illuminate\Database\QueryException::class);
         $c['municipio']->delete();

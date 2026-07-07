@@ -17,8 +17,8 @@ class AvancesTest extends TestCase
     private function crearContrato(): Contrato
     {
         $this->seed(\Database\Seeders\DepartamentosSeeder::class);
-        $municipio = Municipio::create(['nombre' => 'MEDELLÍN', 'activo' => true, 'departamento' => '05']);
-        $proyecto = Proyecto::create(['municipio' => $municipio->id, 'nombre' => 'Proyecto de prueba']);
+        $municipio = Municipio::create(['codigo' => '05001', 'nombre' => 'MEDELLÍN', 'activo' => true, 'departamento' => '05']);
+        $proyecto = Proyecto::create(['municipio' => $municipio->codigo, 'nombre' => 'Proyecto de prueba']);
         return Contrato::create(['proyecto' => $proyecto->id, 'n_contrato' => 'C-001']);
     }
 

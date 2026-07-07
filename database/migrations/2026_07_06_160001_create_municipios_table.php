@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('municipios', function (Blueprint $table) {
             $table->id();
-            $table->string('codigo', 20)->nullable();
+            $table->string('codigo', 20)->nullable()->unique();
             $table->string('nombre');
             $table->boolean('activo')->default(true);
             $table->string('departamento', 5);

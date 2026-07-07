@@ -25,13 +25,14 @@ class DemoDataSeeder extends Seeder
         $sectores = $this->seedSectores();
         $entidades = $this->seedEntidades();
 
-        // IDs reales del catálogo de municipios (Antioquia) ya sembrado por MunicipiosSeeder.
+        // Códigos DANE reales del catálogo de municipios (Antioquia) ya sembrado por
+        // MunicipiosSeeder. proyectos.municipio referencia municipios.codigo, no .id.
         $municipios = [
-            'medellin' => 1,
-            'bello' => 19,
-            'itagui' => 59,
-            'envigado' => 47,
-            'rionegro' => 85,
+            'medellin' => '05001',
+            'bello' => '05088',
+            'itagui' => '05360',
+            'envigado' => '05266',
+            'rionegro' => '05615',
         ];
 
         $proyectos = $this->seedProyectos($fases, $estados, $sectores, $entidades, $municipios);
@@ -118,7 +119,7 @@ class DemoDataSeeder extends Seeder
 
         $proyectos = [];
         $i = 0;
-        foreach ($municipios as $municipioNombre => $municipioId) {
+        foreach ($municipios as $municipioNombre => $municipioCodigo) {
             foreach ($combinaciones as [$faseNombre, $estadoNombre, $progresoBase]) {
                 $i++;
                 $nombre = $nombresProyecto[$i % count($nombresProyecto)] . ' - ' . ucfirst($municipioNombre);
@@ -129,7 +130,7 @@ class DemoDataSeeder extends Seeder
                 $proyecto = Proyecto::updateOrCreate(
                     ['nombre' => $nombre],
                     [
-                        'municipio' => $municipioId,
+                        'municipio' => $municipioCodigo,
                         'descripcion' => 'Proyecto de demostración para visualizar el dashboard.',
                         'fecha_inicio' => now()->subMonths(rand(1, 10))->format('Y-m-d'),
                         'estado' => $estados[$estadoNombre]->id,

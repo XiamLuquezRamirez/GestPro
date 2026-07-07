@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('proyectos', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('municipio')->nullable()->constrained('municipios')->restrictOnDelete();
+            $table->string('municipio', 20)->nullable();
             $table->text('nombre')->nullable();
             $table->text('descripcion')->nullable();
             $table->date('fecha_inicio')->nullable();
@@ -22,6 +22,11 @@ return new class extends Migration
             $table->text('fuente_financiacion')->nullable();
             $table->unsignedTinyInteger('progreso')->nullable();
             $table->foreignId('sector')->nullable()->constrained('sectores')->restrictOnDelete();
+
+            // References municipios.codigo (not .id): the real proyecto-creation form
+            // (Parametros.jsx) submits the municipio's codigo, matching the app's
+            // original pre-migration schema — not the Eloquent default id-based FK.
+            $table->foreign('municipio')->references('codigo')->on('municipios')->restrictOnDelete();
         });
     }
 
