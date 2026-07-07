@@ -6,7 +6,7 @@ const KpiStrip = ({ proyectos }) => {
     const total = proyectos.length;
 
     const presupuestoTotal = proyectos.reduce((sum, p) => sum + (parseFloat(p.presupuesto) || 0), 0);
-    const contratosActivos = proyectos.reduce((sum, p) => sum + (p.contratos ? p.contratos.length : 0), 0);
+    const totalContratos = proyectos.reduce((sum, p) => sum + (p.contratos ? p.contratos.length : 0), 0);
     const enRiesgo = proyectos.filter(p => p.descripcion_estado === 'Con retraso').length;
     const avancePromedio = total > 0
         ? Math.round(proyectos.reduce((sum, p) => sum + (parseInt(p.progreso, 10) || 0), 0) / total)
@@ -32,8 +32,8 @@ const KpiStrip = ({ proyectos }) => {
             <div className="kpi-tile">
                 <span className="kpi-icono">📄</span>
                 <div>
-                    <div className="kpi-valor">{contratosActivos}</div>
-                    <div className="kpi-etiqueta">Contratos activos</div>
+                    <div className="kpi-valor">{totalContratos}</div>
+                    <div className="kpi-etiqueta">Total de contratos</div>
                 </div>
             </div>
             <div className="kpi-tile kpi-tile-riesgo">
