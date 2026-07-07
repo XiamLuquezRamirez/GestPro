@@ -220,7 +220,7 @@ Add this block to the end of `resources/css/Dashboard.css`:
     font-size: 0.68rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #64748b;
+    color: #6c757d;
     margin-top: 0.3rem;
     font-weight: 600;
 }
@@ -432,7 +432,7 @@ git commit -m "feat: add budget, average progress, risk label, and detail button
     justify-content: space-between;
     margin-top: 0.7rem;
     font-size: 0.78rem;
-    color: #64748b;
+    color: #6c757d;
 }
 
 .municipio-presupuesto b {
@@ -456,7 +456,7 @@ git commit -m "feat: add budget, average progress, risk label, and detail button
 
 .municipio-avance-valor {
     font-size: 0.72rem;
-    color: #64748b;
+    color: #6c757d;
     margin-top: 0.3rem;
 }
 
