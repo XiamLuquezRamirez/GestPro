@@ -60,4 +60,15 @@ class HijasDeProyectoTest extends TestCase
 
         $this->assertSame(0, PresupuestoProyecto::count());
     }
+
+    public function test_deleting_a_proceso_licitacion_directly_cascades_its_own_eventos(): void
+    {
+        $proyecto = $this->crearProyecto();
+        $proceso = ProcesoLicitacion::create(['proyecto' => $proyecto->id, 'codigo_proceso' => 'LIC-002']);
+        EventoLicitacion::create(['proyecto' => $proyecto->id, 'proceso' => $proceso->id, 'cumplido' => false]);
+
+        $proceso->delete();
+
+        $this->assertSame(0, EventoLicitacion::count());
+    }
 }
