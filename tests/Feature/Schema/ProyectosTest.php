@@ -72,4 +72,15 @@ class ProyectosTest extends TestCase
         $this->expectException(\Illuminate\Database\QueryException::class);
         $c['municipio']->delete();
     }
+
+    public function test_municipio_inverse_relation_resolves_its_proyectos(): void
+    {
+        $c = $this->crearCatalogosBase();
+        $proyecto = Proyecto::create(['municipio' => $c['municipio']->codigo, 'nombre' => 'Vía terciaria']);
+
+        $proyectosDelMunicipio = $c['municipio']->fresh()->proyectos;
+
+        $this->assertCount(1, $proyectosDelMunicipio);
+        $this->assertTrue($proyectosDelMunicipio->first()->is($proyecto));
+    }
 }
