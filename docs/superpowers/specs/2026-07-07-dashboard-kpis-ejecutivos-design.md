@@ -12,7 +12,7 @@ Todo lo necesario ya existe en los datos que `GET /proyectos` devuelve hoy — c
 ## Alcance
 
 Incluye:
-- Un componente `KpiStrip.jsx` con 6 indicadores globales, visible siempre (no cambia por pestaña de fase): Total de proyectos, Presupuesto total, Contratos activos, Proyectos en riesgo, % de avance promedio, Proyectos finalizados.
+- Un componente `KpiStrip.jsx` con 6 indicadores globales, visible siempre (no cambia por pestaña de fase): Total de proyectos, Presupuesto total, Total de contratos, Proyectos en riesgo, % de avance promedio, Proyectos finalizados.
 - Ampliar `MunicipioCard.jsx` (ya existente, ver spec anterior) para mostrar, además de lo que ya tiene: presupuesto total del municipio, barra de % de avance promedio, etiqueta de estado general, y un botón "Ver detalle" explícito.
 
 No incluye (fuera de alcance, subsistemas futuros ya identificados en la propuesta gráfica):
@@ -29,7 +29,7 @@ Recibe una sola prop: `proyectos` (el arreglo completo sin filtrar por fase, el 
 
 - **Total de proyectos:** `proyectos.length`.
 - **Presupuesto total:** suma de `proyecto.presupuesto` (numérico, viene como string desde la API por el cast `decimal:2` de Eloquent — se convierte con `parseFloat` antes de sumar).
-- **Contratos activos:** suma de `proyecto.contratos.length` de cada proyecto (el payload de `/proyectos` ya incluye `contratos` anidados por proyecto, usado hoy en el modal de detalle).
+- **Total de contratos:** suma de `proyecto.contratos.length` de cada proyecto (el payload de `/proyectos` ya incluye `contratos` anidados por proyecto, usado hoy en el modal de detalle). No se filtra por `estado` del contrato porque esa columna es texto libre sin valores sembrados en los datos de demostración — filtrar por "activo" inventaría una categoría que los datos reales no sustentan hoy, así que se etiqueta y calcula honestamente como el total.
 - **En riesgo:** cantidad de proyectos con `descripcion_estado === 'Con retraso'` — el mismo estado real del catálogo que ya existe, sin inventar una regla de riesgo nueva.
 - **% de avance promedio:** promedio de `proyecto.progreso` (columna real, numérica 0-100) sobre todos los proyectos.
 - **Finalizados:** fijo en `0`, con un atributo `title` (tooltip nativo) explicando "Aún no existe un estado de tipo Finalizado en el catálogo" — se muestra la tarjeta para no romper la expectativa de 6 KPIs, pero de forma honesta.

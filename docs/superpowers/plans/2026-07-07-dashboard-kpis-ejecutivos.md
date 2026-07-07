@@ -34,7 +34,7 @@ const KpiStrip = ({ proyectos }) => {
     const total = proyectos.length;
 
     const presupuestoTotal = proyectos.reduce((sum, p) => sum + (parseFloat(p.presupuesto) || 0), 0);
-    const contratosActivos = proyectos.reduce((sum, p) => sum + (p.contratos ? p.contratos.length : 0), 0);
+    const totalContratos = proyectos.reduce((sum, p) => sum + (p.contratos ? p.contratos.length : 0), 0);
     const enRiesgo = proyectos.filter(p => p.descripcion_estado === 'Con retraso').length;
     const avancePromedio = total > 0
         ? Math.round(proyectos.reduce((sum, p) => sum + (parseInt(p.progreso, 10) || 0), 0) / total)
@@ -60,8 +60,8 @@ const KpiStrip = ({ proyectos }) => {
             <div className="kpi-tile">
                 <span className="kpi-icono">📄</span>
                 <div>
-                    <div className="kpi-valor">{contratosActivos}</div>
-                    <div className="kpi-etiqueta">Contratos activos</div>
+                    <div className="kpi-valor">{totalContratos}</div>
+                    <div className="kpi-etiqueta">Total de contratos</div>
                 </div>
             </div>
             <div className="kpi-tile kpi-tile-riesgo">
@@ -522,7 +522,7 @@ If Apache/XAMPP is already serving the app at `http://localhost/GestPro`, use th
 Log in with `admin@gestpro.local` / `Admin123!`. On the Dashboard, confirm above the tabs:
 - **Total proyectos: 30**
 - **Presupuesto total: $17.021 M**
-- **Contratos activos: 4**
+- **Total de contratos: 4**
 - **En riesgo: 5**
 - **Avance promedio:** some percentage between 0-100 (exact value depends on the random `progreso` values `DemoDataSeeder` generated — not a fixed number to check against, just confirm it's a plausible percentage, not `NaN%` or `0%`)
 - **Finalizados: 0**, and hovering it shows the tooltip explaining why.
