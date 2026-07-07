@@ -4,6 +4,7 @@ import axios from 'axios';
 import '../../css/Dashboard.css';
 import '../../css/Dashboard-Extras.css';
 import Eventos from './eventos';
+import MunicipioCard from './MunicipioCard';
 
 const Dashboard = ({ user, onLogout }) => {
     const [activeTab, setActiveTab] = useState(''); // Inicialmente vacío
@@ -345,26 +346,13 @@ const Dashboard = ({ user, onLogout }) => {
                                                     .map(municipio => {
                                                         const proyectosDelMunicipio = getProyectosPorMunicipioYNombreFase(municipio.nombre, fase.nombre) || [];
                                                         return (
-                                                            <div
+                                                            <MunicipioCard
                                                                 key={municipio.nombre}
-                                                                className="municipio-card-modern"
-                                                                style={{ borderLeftColor: municipio.color }}
+                                                                municipio={municipio}
+                                                                proyectos={proyectosDelMunicipio}
+                                                                faseNombre={fase.nombre}
                                                                 onClick={() => handleMunicipioClick(municipio.nombre)}
-                                                            >
-                                                                <div className="municipio-card-content">
-                                                                    <div className="municipio-icon-modern">
-                                                                        {municipio.icon}
-                                                                    </div>
-                                                                    <div className="municipio-info-modern">
-                                                                        <h3>{municipio.nombre}</h3>
-                                                                        <div className="proyectos-count-modern">
-                                                                            <span className="count-number-modern">{proyectosDelMunicipio.length}</span>
-                                                                            <span className="count-label-modern">proyectos en {fase.nombre.toLowerCase()}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="municipio-arrow">→</div>
-                                                                </div>
-                                                            </div>
+                                                            />
                                                         );
                                                     })}
                                             </div>
