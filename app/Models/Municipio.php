@@ -21,8 +21,10 @@ class Municipio extends Model
         return $this->belongsTo(Departamento::class, 'departamento', 'codigo');
     }
 
+    // References codigo, not id: proyectos.municipio holds the municipio's codigo
+    // (see Proyecto::municipioRel() and the FK comment in the proyectos migration).
     public function proyectos(): HasMany
     {
-        return $this->hasMany(Proyecto::class, 'municipio');
+        return $this->hasMany(Proyecto::class, 'municipio', 'codigo');
     }
 }

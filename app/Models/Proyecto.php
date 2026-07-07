@@ -30,7 +30,7 @@ class Proyecto extends Model
     // never matches the camelCase method name, so there's no collision.
     public function municipioRel(): BelongsTo
     {
-        return $this->belongsTo(Municipio::class, 'municipio');
+        return $this->belongsTo(Municipio::class, 'municipio', 'codigo');
     }
 
     public function estadoRel(): BelongsTo

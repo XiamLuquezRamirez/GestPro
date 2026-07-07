@@ -52,7 +52,7 @@ class AutorizacionTest extends TestCase
     public function test_gestor_can_create_a_proyecto_via_api(): void
     {
         $this->seed(\Database\Seeders\DepartamentosSeeder::class);
-        $municipio = \App\Models\Municipio::create(['nombre' => 'MEDELLÍN', 'activo' => true, 'departamento' => '05']);
+        $municipio = \App\Models\Municipio::create(['codigo' => '05001', 'nombre' => 'MEDELLÍN', 'activo' => true, 'departamento' => '05']);
         $gestor = User::factory()->create(['rol' => Rol::Gestor]);
         $token = auth('api')->login($gestor);
 
@@ -61,7 +61,7 @@ class AutorizacionTest extends TestCase
         $response = $this->withHeader('Authorization', "Bearer {$token}")
             ->postJson('/GestPro/guardarProyecto', [
                 'accion' => 'Agregar',
-                'municipio' => $municipio->id,
+                'municipio' => $municipio->codigo,
                 'nombre' => 'Proyecto vía API',
                 'descripcion' => 'Creado desde el test de autorización',
                 'fechaInicio' => '2026-01-01',

@@ -18,8 +18,8 @@ class EventosTest extends TestCase
     public function test_evento_resolves_all_optional_relationships(): void
     {
         $this->seed(\Database\Seeders\DepartamentosSeeder::class);
-        $municipio = Municipio::create(['nombre' => 'MEDELLÍN', 'activo' => true, 'departamento' => '05']);
-        $proyecto = Proyecto::create(['municipio' => $municipio->id, 'nombre' => 'Proyecto de prueba']);
+        $municipio = Municipio::create(['codigo' => '05001', 'nombre' => 'MEDELLÍN', 'activo' => true, 'departamento' => '05']);
+        $proyecto = Proyecto::create(['municipio' => $municipio->codigo, 'nombre' => 'Proyecto de prueba']);
         $tipo = TipoEvento::create(['nombre' => 'Reunión', 'activo' => true]);
         $prioridad = Prioridad::create(['nombre' => 'Alta', 'activo' => true]);
         $responsable = Responsable::create(['nombre' => 'Juan Pérez', 'activo' => true]);
