@@ -163,10 +163,19 @@ body, .dashboard-container {
     opacity: 1;
 }
 
-.municipio-card-modern:nth-child(1) { border-left: 5px solid #1976d2; }
-.municipio-card-modern:nth-child(2) { border-left: 5px solid #43a047; }
-.municipio-card-modern:nth-child(3) { border-left: 5px solid #fbc02d; }
-.municipio-card-modern:nth-child(4) { border-left: 5px solid #e53935; }
+.municipio-estado-bar {
+    display: flex;
+    height: 8px;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 0.8rem;
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.municipio-estado-segmento {
+    display: block;
+    height: 100%;
+}
 
 .municipio-card-modern:hover {
     transform: translateY(-8px) scale(1.02);
