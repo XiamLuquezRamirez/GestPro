@@ -854,4 +854,129 @@ body, .dashboard-container {
         max-width: 320px;
         min-width: auto;
     }
-} 
+}
+
+/* KPIs ejecutivos */
+.kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.kpi-tile {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    border-radius: 16px;
+    padding: 1.1rem 1.2rem;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+    border-left: 4px solid #1976d2;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.kpi-tile-riesgo {
+    border-left-color: #e53935;
+}
+
+.kpi-tile-riesgo .kpi-valor {
+    color: #e53935;
+}
+
+.kpi-icono {
+    font-size: 1.6rem;
+}
+
+.kpi-valor {
+    font-size: 1.7rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    color: #1976d2;
+}
+
+.kpi-etiqueta {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6c757d;
+    margin-top: 0.3rem;
+    font-weight: 600;
+}
+
+@media (max-width: 1200px) {
+    .kpi-strip {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .kpi-strip {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Ampliación de la tarjeta de municipio: presupuesto, avance, riesgo, botón */
+.municipio-presupuesto {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.7rem;
+    font-size: 0.78rem;
+    color: #6c757d;
+}
+
+.municipio-presupuesto b {
+    color: #2c3e50;
+    font-variant-numeric: tabular-nums;
+}
+
+.municipio-avance-bar {
+    height: 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.06);
+    margin-top: 0.5rem;
+    overflow: hidden;
+}
+
+.municipio-avance-fill {
+    height: 100%;
+    background: #1976d2;
+    border-radius: 6px;
+}
+
+.municipio-avance-valor {
+    font-size: 0.72rem;
+    color: #6c757d;
+    margin-top: 0.3rem;
+}
+
+.municipio-estado-general {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #43a047;
+    margin-top: 0.6rem;
+}
+
+.municipio-estado-general.en-riesgo {
+    color: #e53935;
+}
+
+.municipio-btn-detalle {
+    margin-top: 0.8rem;
+    width: 100%;
+    padding: 0.55rem;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.municipio-btn-detalle:hover {
+    opacity: 0.92;
+}

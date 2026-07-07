@@ -5,6 +5,7 @@ import '../../css/Dashboard.css';
 import '../../css/Dashboard-Extras.css';
 import Eventos from './eventos';
 import MunicipioCard from './MunicipioCard';
+import KpiStrip from './KpiStrip';
 
 const Dashboard = ({ user, onLogout }) => {
     const [activeTab, setActiveTab] = useState(''); // Inicialmente vacío
@@ -314,6 +315,9 @@ const Dashboard = ({ user, onLogout }) => {
 
             {/* Contenido principal */}
             <main className="dashboard-main ocultar-scroll">
+                {/* KPIs ejecutivos — globales, no cambian por pestaña */}
+                <KpiStrip proyectos={proyectos} />
+
                 {/* Pestañas de Proyectos */}
                 <section className="proyectos-tabs-section">
                     <div className="tabs-container">
