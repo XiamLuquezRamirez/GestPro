@@ -291,17 +291,7 @@ body, .dashboard-container {
         max-width: 2000px;
         padding: 2rem 4rem;
     }
-    
-    .municipios-grid {
-        grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-        gap: 2.5rem;
-    }
-    
-    .proyectos-grid {
-        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-        gap: 2rem;
-    }
-    
+
     .eventos-grid {
         gap: 2rem;
     }
@@ -318,17 +308,7 @@ body, .dashboard-container {
         max-width: 2400px;
         padding: 3rem 5rem;
     }
-    
-    .municipios-grid {
-        grid-template-columns: repeat(auto-fit, minmax(550px, 1fr));
-        gap: 3rem;
-    }
-    
-    .proyectos-grid {
-        grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
-        gap: 2.5rem;
-    }
-    
+
     .eventos-grid {
         gap: 2.5rem;
     }
@@ -346,17 +326,7 @@ body, .dashboard-container {
         padding: 1rem;
         max-width: 100%;
     }
-    
-    .municipios-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-    
-    .proyectos-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-    
+
     .eventos-grid {
         gap: 1rem;
         flex-direction: column;
