@@ -36,7 +36,7 @@ const CentradorMunicipio = ({ municipio, puntos }) => {
         if (puntosDelMunicipio.length > 0) {
             map.fitBounds(puntosDelMunicipio.map(p => [p.lat, p.lng]), { maxZoom: 14, padding: [40, 40] });
         }
-    }, [municipio]);
+    }, [municipio, puntos]);
 
     return null;
 };
@@ -44,11 +44,13 @@ const CentradorMunicipio = ({ municipio, puntos }) => {
 const MapaUbicaciones = ({ proyectos, onProyectoClick, municipioResaltado }) => {
     const puntos = useMemo(() => (
         proyectos.flatMap(proyecto =>
-            (proyecto.puntosUbicacion || []).map(punto => ({
-                lat: parseFloat(punto.lat),
-                lng: parseFloat(punto.lng),
-                proyecto,
-            }))
+            (proyecto.puntosUbicacion || [])
+                .map(punto => ({
+                    lat: parseFloat(punto.lat),
+                    lng: parseFloat(punto.lng),
+                    proyecto,
+                }))
+                .filter(punto => Number.isFinite(punto.lat) && Number.isFinite(punto.lng))
         )
     ), [proyectos]);
 
