@@ -96,7 +96,14 @@ const DistribucionMunicipios = ({ proyectos, onMunicipioClick, municipioSeleccio
                                     <td>{fila.municipio}</td>
                                     <td>{fila.total}</td>
                                     <td>{formatearPresupuesto(fila.presupuestoTotal)}</td>
-                                    <td>{fila.avancePromedio}%</td>
+                                    <td>
+                                        <div className="tabla-avance-celda">
+                                            <div className="tabla-avance-bar">
+                                                <div className="tabla-avance-fill" style={{ width: `${fila.avancePromedio}%` }}></div>
+                                            </div>
+                                            <span className="tabla-avance-valor">{fila.avancePromedio}%</span>
+                                        </div>
+                                    </td>
                                     <td>
                                         <span
                                             className="tabla-estado-pastilla"

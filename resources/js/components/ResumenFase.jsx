@@ -27,6 +27,9 @@ const ResumenFase = ({ proyectos, nombreFase }) => {
             </div>
             <div className="resumen-fase-stat">
                 <span className="resumen-fase-valor">{resumen.avancePromedio}%</span>
+                <div className="resumen-fase-avance-bar">
+                    <div className="resumen-fase-avance-fill" style={{ width: `${resumen.avancePromedio}%` }}></div>
+                </div>
                 <span className="resumen-fase-etiqueta">Avance promedio</span>
             </div>
             <div className="resumen-fase-stat">
