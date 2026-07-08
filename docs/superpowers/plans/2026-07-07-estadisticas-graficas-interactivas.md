@@ -1675,7 +1675,7 @@ Add this block to the end of `resources/css/Dashboard-Extras.css`:
 .filtros-limpiar-btn {
     padding: 0.6rem 1.2rem;
     border: none;
-    border-radius: 8px;
+    border-radius: 12px;
     background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
     color: #fff;
     font-family: inherit;
