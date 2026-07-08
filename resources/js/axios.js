@@ -1,11 +1,16 @@
 import axios from 'axios';
 
 // Base URL: siempre el mismo origen (protocolo+host+puerto) desde el que se
-// cargó la página, más el subdirectorio real de la app (window.__APP_BASE__,
-// inyectado por resources/views/app.blade.php). Evita depender de un puerto
-// hardcodeado que no coincide con el servidor que realmente sirvió la página
-// (causaba fallos de CSRF/cookies por ser un origen cruzado distinto).
-axios.defaults.baseURL = window.location.origin + (window.__APP_BASE__ || '') + '/';
+// cargó la página — evita depender de un puerto hardcodeado que no coincide
+// con el servidor que realmente sirvió la página (causaba fallos de CSRF/
+// cookies por ser un origen cruzado distinto).
+//
+// El prefijo '/GestPro' es el `apiPrefix` fijado en bootstrap/app.php: todas
+// las rutas de routes/api.php viven ahí siempre, en cualquier entorno — no
+// depende de bajo qué subdirectorio se sirvan los archivos estáticos (eso es
+// lo que representa window.__APP_BASE__, un concepto distinto), así que se
+// hardcodea aquí en vez de reutilizar esa variable.
+axios.defaults.baseURL = window.location.origin + '/GestPro/';
 
 // Incluir credenciales en cross-origin si lo necesitas
 axios.defaults.withCredentials = true; // Cambiado a true para CSRF
