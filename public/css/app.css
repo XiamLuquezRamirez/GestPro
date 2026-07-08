@@ -502,6 +502,50 @@ body, .dashboard-container {
     font-size: 0.8rem;
 }
 
+.resumen-fase-avance-bar {
+    height: 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    margin: 0.4rem 0;
+}
+
+.resumen-fase-avance-fill {
+    height: 100%;
+    background: #1976d2;
+    border-radius: 6px;
+}
+
+/* Barra de progreso de la columna "Avance promedio" en Distribución por municipio */
+.tabla-avance-celda {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 120px;
+}
+
+.tabla-avance-bar {
+    flex: 1;
+    height: 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+}
+
+.tabla-avance-fill {
+    height: 100%;
+    background: #1976d2;
+    border-radius: 6px;
+}
+
+.tabla-avance-valor {
+    font-size: 0.85rem;
+    color: #2c3e50;
+    font-variant-numeric: tabular-nums;
+    min-width: 2.4rem;
+    text-align: right;
+}
+
 /* Panel "Próximos eventos" */
 .proximos-eventos-panel {
     background: rgba(255, 255, 255, 0.95);
