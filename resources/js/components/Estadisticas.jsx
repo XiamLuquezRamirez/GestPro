@@ -170,7 +170,7 @@ const Estadisticas = ({ proyectos }) => {
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                                 <XAxis type="number" allowDecimals={false} />
                                 <YAxis type="category" dataKey="estado" width={140} />
-                                <Tooltip formatter={(value) => [`${value} proyectos`, '']} />
+                                <Tooltip formatter={(value) => [`${value} proyectos (${Math.round((value / proyectosFiltrados.length) * 100)}%)`, '']} />
                                 <Bar dataKey="cantidad" radius={[0, 4, 4, 0]}>
                                     {dataPorEstado.map(entry => (
                                         <Cell key={entry.estado} fill={entry.color} />
@@ -200,8 +200,12 @@ const Estadisticas = ({ proyectos }) => {
                                         <Cell key={entry.fase} fill={entry.color} />
                                     ))}
                                 </Pie>
-                                <Tooltip formatter={(value, name) => [`${value} proyectos`, name]} />
-                                <Legend />
+                                <Tooltip formatter={(value, name) => [`${value} proyectos (${Math.round((value / proyectosFiltrados.length) * 100)}%)`, name]} />
+                                <Legend formatter={(value) => {
+                                    const entry = dataPorFase.find(d => d.fase === value);
+                                    const pct = Math.round((entry.cantidad / proyectosFiltrados.length) * 100);
+                                    return `${value}: ${entry.cantidad} (${pct}%)`;
+                                }} />
                             </PieChart>
                         </ResponsiveContainer>
                     )}
