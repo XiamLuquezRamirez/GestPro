@@ -35,11 +35,6 @@ const Dashboard = ({ user, onLogout }) => {
         return proyectos.filter(proyecto => proyecto.descripcion_fase?.toLowerCase() === fase.toLowerCase());
     };
 
-    // Función para filtrar proyectos por estado (usando descripcion_estado)
-    const getProyectosPorEstado = (estado) => {
-        return proyectos.filter(proyecto => proyecto.descripcion_estado === estado);
-    };
-
     // Función para filtrar proyectos por municipio y fase
     const getProyectosPorMunicipioYFase = (municipio, fase) => {
         return proyectos.filter(proyecto =>
@@ -56,130 +51,6 @@ const Dashboard = ({ user, onLogout }) => {
         );
     };
 
-    // Función para obtener estadísticas de proyectos por estado
-    const getEstadisticasPorEstado = () => {
-        const estadisticas = {};
-        proyectos.forEach(proyecto => {
-            const estado = proyecto.descripcion_estado;
-            if (!estadisticas[estado]) {
-                estadisticas[estado] = 0;
-            }
-            estadisticas[estado]++;
-        });
-        console.log("Estadísticas por estado:", estadisticas);
-        return estadisticas;
-    };
-
-    // Función para obtener estadísticas por fase
-    const getEstadisticasPorFase = () => {
-        const estadisticas = {};
-        proyectos.forEach(proyecto => {
-            const fase = proyecto.descripcion_fase;
-            if (!estadisticas[fase]) {
-                estadisticas[fase] = 0;
-            }
-            estadisticas[fase]++;
-        });
-        console.log("Estadísticas por fase:", estadisticas);
-        return estadisticas;
-    };
-
-    // Función para obtener estadísticas por municipio
-    const getEstadisticasPorMunicipio = () => {
-        const estadisticas = {};
-        proyectos.forEach(proyecto => {
-            const municipio = proyecto.descripcion_municipio;
-            if (!estadisticas[municipio]) {
-                estadisticas[municipio] = 0;
-            }
-            estadisticas[municipio]++;
-        });
-        console.log("Estadísticas por municipio:", estadisticas);
-        return estadisticas;
-    };
-
-    // Función para obtener datos de progreso de proyectos en ejecución
-    const getDatosProgreso = () => {
-        const proyectosEnEjecucion = getProyectosPorFase('Ejecución');
-        console.log("Proyectos en ejecución:", proyectosEnEjecucion);
-        return proyectosEnEjecucion.map(proyecto => ({
-            nombre: proyecto.nombre,
-            progreso: proyecto.progreso || 0,
-            municipio: proyecto.descripcion_municipio
-        }));
-    };
-
-    // Función para obtener presupuesto total por municipio
-    const getPresupuestoPorMunicipio = () => {
-        const presupuestos = {};
-        proyectos.forEach(proyecto => {
-            if (proyecto.totalPresupuesto) {
-                const valor = parseInt(proyecto.totalPresupuesto);
-                if (!presupuestos[proyecto.descripcion_municipio]) {
-                    presupuestos[proyecto.descripcion_municipio] = 0;
-                }
-                presupuestos[proyecto.descripcion_municipio] += valor;
-            }
-        });
-        console.log("Presupuesto por municipio:", presupuestos);
-        return presupuestos;
-    };
-
-    // Función para obtener datos de evolución temporal
-    const getDatosEvolucionTemporal = () => {
-        const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-        const datos = {};
-
-        // Simular datos de evolución por mes
-        meses.forEach((mes, index) => {
-            datos[mes] = {
-                formulacion: Math.floor(Math.random() * 10) + 5,
-                licitacion: Math.floor(Math.random() * 8) + 3,
-                ejecucion: Math.floor(Math.random() * 6) + 2
-            };
-        });
-
-        return { meses, datos };
-    };
-
-    // Función para obtener datos de presupuesto por mes
-    const getDatosPresupuestoMensual = () => {
-        const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-        const presupuestos = meses.map(() => Math.floor(Math.random() * 5000000) + 2000000);
-        return { meses, presupuestos };
-    };
-
-    // Funciones para colores de gráficas
-    const getEstadoColor = (estado) => {
-        const colores = {
-            'Aprobado': '#4CAF50',
-            'En revisión': '#FF9800',
-            'Abierta': '#2196F3',
-            'En evaluación': '#9C27B0',
-            'En ejecución': '#1976D2'
-        };
-        return colores[estado] || '#757575';
-    };
-
-    const getFaseColor = (fase) => {
-        const colores = {
-            'Formulación': '#FF9800',
-            'Licitación': '#2196F3',
-            'Ejecución': '#4CAF50'
-        };
-        return colores[fase] || '#757575';
-    };
-
-    const getMunicipioColor = (municipio) => {
-        const colores = {
-            'Valledupar': '#1976D2',
-            'Aguachica': '#43A047',
-            'Codazzi': '#FF9800',
-            'La Paz': '#9C27B0'
-        };
-        return colores[municipio] || '#757575';
-    };
-
     // Obtener proyectos por fase para usar en el componente
     const proyectosFormulacion = getProyectosPorFase('Formulación');
     const proyectosLicitacion = getProyectosPorFase('Licitación');
@@ -189,13 +60,6 @@ const Dashboard = ({ user, onLogout }) => {
         formulacion: proyectosFormulacion.length,
         licitacion: proyectosLicitacion.length,
         ejecucion: proyectosEjecucion.length
-    });
-
-    // Generar dinámicamente los arrays de proyectos por estado
-    const estadosExistentes = Object.keys(getEstadisticasPorEstado());
-    const proyectosPorEstado = {};
-    estadosExistentes.forEach(estado => {
-        proyectosPorEstado[estado] = getProyectosPorEstado(estado);
     });
 
 
