@@ -66,9 +66,14 @@ class ProyectoController extends Controller
                 $contrato->anexos = $anexos;
             }
 
-        
-            
+
+
             $proyecto->contratos = $contratos;
+
+            $proyecto->puntosUbicacion = DB::table('proyecto_ubicaciones')
+                ->select('id', 'lat', 'lng')
+                ->where('proyecto', $proyecto->id)
+                ->get();
         }
 
         return response()->json($proyectos);
@@ -258,6 +263,16 @@ class ProyectoController extends Controller
                     }
                 }
 
+                if (isset($proyecto['puntosUbicacion']) && count($proyecto['puntosUbicacion']) > 0) {
+                    foreach ($proyecto['puntosUbicacion'] as $punto) {
+                        DB::table('proyecto_ubicaciones')->insert([
+                            'proyecto' => $proyectoId,
+                            'lat' => $punto['lat'],
+                            'lng' => $punto['lng']
+                        ]);
+                    }
+                }
+
             } else {
 
                 DB::table('proyectos')->where('id', $proyecto['id'])->update([
@@ -280,6 +295,17 @@ class ProyectoController extends Controller
                             'proyecto' => $proyecto['id'],
                             'componente' => $presupuesto['descripcionComponente'],
                             'valor' => $presupuesto['valor']
+                        ]);
+                    }
+                }
+
+                DB::table('proyecto_ubicaciones')->where('proyecto', $proyecto['id'])->delete();
+                if (isset($proyecto['puntosUbicacion']) && count($proyecto['puntosUbicacion']) > 0) {
+                    foreach ($proyecto['puntosUbicacion'] as $punto) {
+                        DB::table('proyecto_ubicaciones')->insert([
+                            'proyecto' => $proyecto['id'],
+                            'lat' => $punto['lat'],
+                            'lng' => $punto['lng']
                         ]);
                     }
                 }
