@@ -61,6 +61,7 @@ const Parametros = ({ user, onLogout }) => {
     const [responsables, setResponsables] = useState([]);
     const [departamentos, setDepartamentos] = useState([]);
     const [detallesPresupuesto, setDetallesPresupuesto] = useState([]);
+    const [puntosUbicacion, setPuntosUbicacion] = useState([]);
     // Estado para búsqueda
     const [searchText, setSearchText] = useState('');
     // Estado para el modal de emoji
@@ -554,6 +555,7 @@ const Parametros = ({ user, onLogout }) => {
                 presupuesto: formatCurrency(presupuestoTotal),
                 componentesPresupuesto: detallesPresupuesto,
                 contratos: contratos,
+                puntosUbicacion: puntosUbicacion,
             };
             const response = await axios.post('/guardarProyecto', newProyecto);
             if (response.status === 200) {
@@ -793,6 +795,18 @@ const Parametros = ({ user, onLogout }) => {
             setContratos([]);
         }
 
+        // Cargar puntos de ubicación si es un proyecto
+        if (type === 'proyectos' && item.puntosUbicacion) {
+            setPuntosUbicacion(
+                item.puntosUbicacion.map(punto => ({
+                    lat: parseFloat(punto.lat),
+                    lng: parseFloat(punto.lng)
+                }))
+            );
+        } else {
+            setPuntosUbicacion([]);
+        }
+
         setModalActiveTab('datos');
         setShowModal(true);
     };
@@ -933,6 +947,7 @@ const Parametros = ({ user, onLogout }) => {
         });
         setDetallesPresupuesto([]);
         setContratos([]); // Resetear contratos al agregar nuevo
+        setPuntosUbicacion([]);
         setModalActiveTab('datos');
         setShowModal(true);
     };
@@ -971,6 +986,7 @@ const Parametros = ({ user, onLogout }) => {
         });
         setDetallesPresupuesto([]);
         setContratos([]); // Resetear contratos al cerrar modal
+        setPuntosUbicacion([]);
         setModalActiveTab('datos');
     };
 
