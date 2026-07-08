@@ -814,7 +814,21 @@ Add this block to the end of `resources/css/Dashboard.css`:
         position: static;
     }
 }
+
+/* .municipios-grid/.proyectos-grid ya tienen reglas responsive que ensanchan su
+   minmax a partir de 1200px (pensadas para cuando ocupaban el ancho completo).
+   Ahora viven dentro de la columna angosta .dashboard-fase-main junto al panel
+   de alertas, así que ese ensanche deja entrar menos tarjetas por fila de las
+   que cabrían, forzando scroll. Esta regla (más específica, gana sin !important)
+   las mantiene en un minmax más chico solo cuando están dentro de ese contexto. */
+.dashboard-fase-main .municipios-grid,
+.dashboard-fase-main .proyectos-grid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
 ```
+
+(This last rule — `.dashboard-fase-main .municipios-grid`/`.proyectos-grid` — wasn't part of the original Step 6 block; it was added during Task 6's manual verification after measuring real scroll overflow at 1920x1080. See Task 6 Step 5 for the measurements.)
 
 - [ ] **Step 7: Verify the build compiles**
 
@@ -854,7 +868,7 @@ Log in with `admin@gestpro.local` / `Admin123!`. Confirm the Dashboard loads wit
 
 On the "Formulación" tab (or whichever fase tab is active by default), confirm a sidebar labeled "Alertas y Prioridades" appears to the right of the municipio cards, showing:
 - A "⚠️ Proyectos en riesgo" block listing 5 projects (one per municipio, matching the KPI strip's "En riesgo: 5").
-- A "🔴 Eventos de alta prioridad" block listing 4 events (from the 8 seeded, the ones with prioridad Alta and not cancelado/completado — 5 are Alta but 1 of those is cancelado, so 4 should show), sorted with the soonest date first.
+- A "🔴 Eventos de alta prioridad" block listing 3 events (from the 8 seeded, the ones with prioridad Alta and not cancelado/completado — 5 are Alta, but 1 of those is `cancelado` and 1 is `completado`, so 3 should show), sorted with the soonest date first.
 
 - [ ] **Step 4: Confirm clicking a risk project opens its modal**
 
@@ -863,6 +877,8 @@ Click one of the rows under "Proyectos en riesgo". Confirm the same project-deta
 - [ ] **Step 5: Confirm the layout fits without scrolling on a large screen**
 
 Resize the browser (or use dev tools device toolbar) to 1920x1080. Confirm the Formulación/Licitación/Ejecución tabs show the municipio cards and the alerts panel side-by-side without needing to scroll the page to see all the municipio cards for that fase (5 municipios should fit in the narrower grid column — if any wrapping causes a slight scroll, that's an acceptable trade-off of the `auto-fit` grid, not a regression to chase further in this task).
+
+**Found and fixed during this step:** the pre-existing `@media (min-width: 1200px)` rule widened `.municipios-grid`'s `minmax` to 500px (tuned for when the grid spanned the full dashboard width). Nested inside the new, narrower `.dashboard-fase-main` column, that wider minmax let only 2 cards fit per row instead of 3, forcing an extra row and ~565px of scroll overflow at 1920x1080 — directly working against this task's own goal. Fixed with a more specific override (added to the end of Task 5's CSS, see that section) that keeps `.municipios-grid`/`.proyectos-grid` at their narrower ~320px minmax specifically when nested inside `.dashboard-fase-main`, cutting the overflow to ~175px. That residual ~175px is the "slight scroll" trade-off this step already anticipated — not chased further, since doing so would mean shrinking the already-approved `MunicipioCard` padding/font sizes, out of scope here.
 
 - [ ] **Step 6: Confirm Estadísticas is unaffected**
 
