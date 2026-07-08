@@ -3,14 +3,16 @@ import Header from './Header';
 import axios from 'axios';
 import '../../css/Dashboard.css';
 import '../../css/Dashboard-Extras.css';
-import MunicipioCard from './MunicipioCard';
 import KpiStrip from './KpiStrip';
 import Estadisticas from './Estadisticas';
-import AlertasPanel from './AlertasPanel';
+import MapaUbicaciones from './MapaUbicaciones';
+import DistribucionMunicipios from './DistribucionMunicipios';
+import ResumenFase from './ResumenFase';
+import ProximosEventos from './ProximosEventos';
 
 const Dashboard = ({ user, onLogout }) => {
     const [activeTab, setActiveTab] = useState(''); // Inicialmente vacío
-    const [selectedMunicipio, setSelectedMunicipio] = useState(null);
+    const [municipioResaltado, setMunicipioResaltado] = useState(null);
     const [fases, setFases] = useState([]);
     const [proyectos, setProyectos] = useState([]);
     const [modalProyecto, setModalProyecto] = useState(null);
@@ -29,89 +31,14 @@ const Dashboard = ({ user, onLogout }) => {
         return () => window.removeEventListener('resize', checkScreenSize);
     }, []);
 
-    // Función para filtrar proyectos por fase (usando descripcion_fase)
-    const getProyectosPorFase = (fase) => {
-        return proyectos.filter(proyecto => proyecto.descripcion_fase?.toLowerCase() === fase.toLowerCase());
-    };
-
-    // Función para filtrar proyectos por municipio y fase
-    const getProyectosPorMunicipioYFase = (municipio, fase) => {
-        return proyectos.filter(proyecto =>
-            proyecto.descripcion_municipio === municipio && proyecto.descripcion_fase?.toLowerCase() === fase.toLowerCase()
-        );
-    };
-
-    // Función para filtrar proyectos por municipio, fase y estado
-    const getProyectosPorMunicipioFaseYEstado = (municipio, fase, estado) => {
-        return proyectos.filter(proyecto =>
-            proyecto.descripcion_municipio === municipio &&
-            proyecto.descripcion_fase?.toLowerCase() === fase.toLowerCase() &&
-            proyecto.descripcion_estado?.toLowerCase() === estado.toLowerCase()
-        );
-    };
-
-    // Obtener proyectos por fase para usar en el componente
-    const proyectosFormulacion = getProyectosPorFase('Formulación');
-    const proyectosLicitacion = getProyectosPorFase('Licitación');
-    const proyectosEjecucion = getProyectosPorFase('Ejecución');
-
-    console.log("Proyectos por fase:", {
-        formulacion: proyectosFormulacion.length,
-        licitacion: proyectosLicitacion.length,
-        ejecucion: proyectosEjecucion.length
-    });
-
-
-
-
-    const formatDate = (dateString) => {
-        const options = { year: 'numeric', month: 'long', day: 'numeric' };
-        return new Date(dateString).toLocaleDateString('es-ES', options);
-    };
-
-    
-
-    // Eliminar el array de municipios de ejemplo
-    // const [municipios] = useState([...]);
-
-    // Generar municipios únicos a partir de los proyectos
-    const municipios = Array.from(
-        new Map(
-            proyectos.map(p => [p.descripcion_municipio, {
-                nombre: p.descripcion_municipio,
-                color: '#4CAF50', // Puedes personalizar el color si tienes un campo en el backend
-                icon: '🏙️' // Puedes personalizar el icono si tienes un campo en el backend
-            }])
-        ).values()
-    );
-
-    // Agrupar proyectos por municipio usando las nuevas funciones de filtrado
-    const proyectosPorMunicipio = municipios.reduce((acc, municipio) => {
-        acc[municipio.nombre] = getProyectosPorMunicipioYFase(municipio.nombre, 'Formulación');
-        return acc;
-    }, {});
-
-    const proyectosLicitacionPorMunicipio = municipios.reduce((acc, municipio) => {
-        acc[municipio.nombre] = getProyectosPorMunicipioYFase(municipio.nombre, 'Licitación');
-        return acc;
-    }, {});
-
-    const proyectosEjecucionPorMunicipio = municipios.reduce((acc, municipio) => {
-        acc[municipio.nombre] = getProyectosPorMunicipioYFase(municipio.nombre, 'Ejecución');
-        return acc;
-    }, {});
-
-    const handleMunicipioClick = (municipio) => {
-        setSelectedMunicipio(selectedMunicipio === municipio ? null : municipio);
-    };
-
-    const handleBackToMunicipios = () => {
-        setSelectedMunicipio(null);
+    // Función para filtrar proyectos por nombre de fase
+    const getProyectosPorNombreFase = (nombreFase) => {
+        return proyectos.filter(proyecto => proyecto.descripcion_fase === nombreFase);
     };
 
     const handleTabChange = (tab) => {
         setActiveTab(tab);
-        setSelectedMunicipio(null); // Reset municipio selection when changing tabs
+        setMunicipioResaltado(null); // Reset al cambiar de pestaña
     };
 
     const handleOpenModalProyecto = (proyecto) => setModalProyecto(proyecto);
@@ -122,16 +49,12 @@ const Dashboard = ({ user, onLogout }) => {
 
     // Estado para el contrato seleccionado en el modal
     const [modalContrato, setModalContrato] = useState(null);
-  
 
     useEffect(() => {
         listFases();
         listProyectos();
     }, []);
 
-    
-
-   
     // Cuando se abre un nuevo modal, resetear la pestaña activa
     useEffect(() => {
         if (modalProyecto) setModalProyectoTab('datos');
@@ -154,23 +77,12 @@ const Dashboard = ({ user, onLogout }) => {
         console.log(response.data);
     };
 
- 
-
     // Mostrar solo las fases que tienen dashboard_fase === 1
     const fasesDashboard = fases.filter(fase => fase.dashboard === 1);
     console.log(fasesDashboard);
 
-    // Función para filtrar proyectos por nombre de fase
-    const getProyectosPorNombreFase = (nombreFase) => {
-        return proyectos.filter(proyecto => proyecto.descripcion_fase === nombreFase);
-    };
-
-    // Agrupar proyectos por municipio y nombre de fase
-    const getProyectosPorMunicipioYNombreFase = (municipio, nombreFase) => {
-        return proyectos.filter(proyecto =>
-            proyecto.descripcion_municipio === municipio && proyecto.descripcion_fase === nombreFase
-        );
-    };
+    const faseActiva = fasesDashboard.find(fase => fase.nombre === activeTab);
+    const proyectosDeLaFaseActiva = faseActiva ? getProyectosPorNombreFase(faseActiva.nombre) : [];
 
     return (
         <div className="dashboard-container">
@@ -204,85 +116,31 @@ const Dashboard = ({ user, onLogout }) => {
                         </div>
 
                         <div className="tab-content">
-                            {activeTab !== 'estadisticas' && (
-                            <div className="dashboard-fase-grid">
-                            <div className="dashboard-fase-main">
-                            {fasesDashboard.map(fase => (
-                                activeTab === fase.nombre && (
-                                    <div key={fase.id} className="formulacion-content">
-                                        {!selectedMunicipio ? (
-                                            <div className="municipios-grid">
-                                                {municipios
-                                                    .filter(municipio => getProyectosPorMunicipioYNombreFase(municipio.nombre, fase.nombre).length > 0)
-                                                    .map(municipio => {
-                                                        const proyectosDelMunicipio = getProyectosPorMunicipioYNombreFase(municipio.nombre, fase.nombre) || [];
-                                                        return (
-                                                            <MunicipioCard
-                                                                key={municipio.nombre}
-                                                                municipio={municipio}
-                                                                proyectos={proyectosDelMunicipio}
-                                                                faseNombre={fase.nombre}
-                                                                onClick={() => handleMunicipioClick(municipio.nombre)}
-                                                            />
-                                                        );
-                                                    })}
-                                            </div>
-                                        ) : (
-                                            <div className="municipio-proyectos-view">
-                                                <div className="municipio-header-back">
-                                                    <button onClick={handleBackToMunicipios} className="back-btn">
-                                                        ← Volver a municipios
-                                                    </button>
-                                                    <div className="municipio-info-header">
-                                                        <span className="municipio-icon-header">
-                                                            {municipios.find(m => m.nombre === selectedMunicipio)?.icon || '🏙️'}
-                                                        </span>
-                                                        <h3 className="municipio-nombre">{selectedMunicipio}</h3>
-                                                        <span className="proyectos-count-header">
-                                                            {getProyectosPorMunicipioYNombreFase(selectedMunicipio, fase.nombre)?.length || 0} proyectos
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="proyectos-grid">
-                                                    {getProyectosPorMunicipioYNombreFase(selectedMunicipio, fase.nombre)?.length > 0 ? (
-                                                        getProyectosPorMunicipioYNombreFase(selectedMunicipio, fase.nombre).map(proyecto => (
-                                                            <div key={proyecto.id} className="proyecto-card" onClick={() => handleOpenModalProyecto(proyecto)}>
-                                                                <div className="proyecto-header">
-                                                                    <h3>{proyecto.nombre}</h3>
-                                                                    <span className="municipio-tag">{proyecto.descripcion_municipio}</span>
-                                                                </div>
-                                                                <div className="proyecto-info">
-                                                                    <div className="info-item">
-                                                                        <span className="info-label">Presupuesto:</span>
-                                                                        <span className="info-value">$ {proyecto.totalPresupuesto?.toLocaleString()}</span>
-                                                                    </div>
-                                                                    <div className="info-item">
-                                                                        <span className="info-label">Fecha Inicio:</span>
-                                                                        <span className="info-value">{formatDate(proyecto.fecha_inicio)}</span>
-                                                                    </div>
-                                                                    <div className="info-item">
-                                                                        <span className="info-label">Estado:</span>
-                                                                        <span className={`estado-badge ${proyecto.descripcion_estado?.toLowerCase().replace(' ', '-')}`}>
-                                                                            {proyecto.descripcion_estado}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        ))
-                                                    ) : (
-                                                        <div className="no-proyectos">
-                                                            <p>No hay proyectos en {fase.nombre.toLowerCase()} para este municipio.</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
+                            {faseActiva && (
+                                <div className="dashboard-fase-grid">
+                                    <div className="dashboard-fase-main">
+                                        <div className="fase-vista-header">
+                                            <h2>Proyectos en {faseActiva.nombre}</h2>
+                                            <p className="fase-vista-subtitulo">Ubicación geográfica de los proyectos</p>
+                                        </div>
+                                        <MapaUbicaciones
+                                            proyectos={proyectos}
+                                            onProyectoClick={handleOpenModalProyecto}
+                                            municipioResaltado={municipioResaltado}
+                                        />
+                                        <DistribucionMunicipios
+                                            proyectos={proyectosDeLaFaseActiva}
+                                            onMunicipioClick={setMunicipioResaltado}
+                                        />
                                     </div>
-                                )
-                            ))}
-                            </div>
-                            <AlertasPanel proyectos={proyectos} onProyectoClick={handleOpenModalProyecto} />
-                            </div>
+                                    <div className="dashboard-fase-lateral">
+                                        <ResumenFase
+                                            proyectos={proyectosDeLaFaseActiva}
+                                            nombreFase={faseActiva.nombre}
+                                        />
+                                        <ProximosEventos />
+                                    </div>
+                                </div>
                             )}
                             {activeTab === 'estadisticas' && <Estadisticas proyectos={proyectos} />}
                         </div>
