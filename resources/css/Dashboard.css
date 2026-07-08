@@ -586,3 +586,76 @@ body, .dashboard-container {
     white-space: nowrap;
 }
 
+/* Vista de detalle al hacer clic en un municipio de "Distribución por municipio" */
+.municipio-drilldown-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.2rem;
+}
+
+.municipio-drilldown-volver {
+    background: #f8f9fa;
+    color: #1976d2;
+    border: 1px solid #1976d2;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+}
+
+.municipio-drilldown-volver:hover {
+    background: #1976d2;
+    color: #fff;
+}
+
+.municipio-drilldown-header h3 {
+    color: #1a237e;
+    font-size: 1.2rem;
+    font-weight: 700;
+    flex: 1;
+    margin: 0;
+}
+
+.municipio-drilldown-conteo {
+    color: #6c757d;
+    font-size: 0.85rem;
+}
+
+.municipio-drilldown-lista {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.municipio-drilldown-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.7rem 0.9rem;
+    background: rgba(248, 249, 250, 0.8);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.municipio-drilldown-item:hover {
+    background: rgba(227, 242, 253, 0.8);
+}
+
+.municipio-drilldown-nombre {
+    color: #1a237e;
+    font-weight: 600;
+    font-size: 0.9rem;
+    flex: 1;
+}
+
+.municipio-drilldown-presupuesto {
+    color: #6c757d;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+

@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 
 const formatearPresupuesto = (valor) => '$' + Math.round(valor / 1_000_000).toLocaleString('es-CO') + ' M';
 
-const DistribucionMunicipios = ({ proyectos, onMunicipioClick }) => {
+const DistribucionMunicipios = ({ proyectos, onMunicipioClick, municipioSeleccionado, onVolver, onProyectoClick }) => {
     const filas = useMemo(() => {
         const porMunicipio = proyectos.reduce((acc, proyecto) => {
             const municipio = proyecto.descripcion_municipio || 'Sin municipio';
@@ -24,6 +24,49 @@ const DistribucionMunicipios = ({ proyectos, onMunicipioClick }) => {
             return { municipio, total, presupuestoTotal, avancePromedio, enRiesgo };
         });
     }, [proyectos]);
+
+    const proyectosDelMunicipioSeleccionado = useMemo(() => {
+        if (!municipioSeleccionado) return null;
+        return proyectos.filter(p => (p.descripcion_municipio || 'Sin municipio') === municipioSeleccionado);
+    }, [proyectos, municipioSeleccionado]);
+
+    if (municipioSeleccionado && proyectosDelMunicipioSeleccionado) {
+        return (
+            <div className="estadisticas-tabla-section">
+                <div className="municipio-drilldown-header">
+                    <button type="button" className="municipio-drilldown-volver" onClick={onVolver}>
+                        ← Volver
+                    </button>
+                    <h3>{municipioSeleccionado}</h3>
+                    <span className="municipio-drilldown-conteo">{proyectosDelMunicipioSeleccionado.length} proyecto(s)</span>
+                </div>
+                {proyectosDelMunicipioSeleccionado.length === 0 ? (
+                    <p className="tabla-sin-datos">No hay proyectos en este municipio.</p>
+                ) : (
+                    <ul className="municipio-drilldown-lista">
+                        {proyectosDelMunicipioSeleccionado.map(proyecto => (
+                            <li
+                                key={proyecto.id}
+                                className="municipio-drilldown-item"
+                                onClick={() => onProyectoClick(proyecto)}
+                            >
+                                <span className="municipio-drilldown-nombre">{proyecto.nombre}</span>
+                                <span className="municipio-drilldown-presupuesto">
+                                    {formatearPresupuesto(parseFloat(proyecto.presupuesto) || 0)}
+                                </span>
+                                <span
+                                    className="tabla-estado-pastilla"
+                                    style={{ backgroundColor: proyecto.color_estado || '#9e9e9e' }}
+                                >
+                                    {proyecto.descripcion_estado}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className="estadisticas-tabla-section">

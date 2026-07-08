@@ -124,13 +124,16 @@ const Dashboard = ({ user, onLogout }) => {
                                             <p className="fase-vista-subtitulo">Ubicación geográfica de los proyectos</p>
                                         </div>
                                         <MapaUbicaciones
-                                            proyectos={proyectos}
+                                            proyectos={proyectosDeLaFaseActiva}
                                             onProyectoClick={handleOpenModalProyecto}
                                             municipioResaltado={municipioResaltado}
                                         />
                                         <DistribucionMunicipios
                                             proyectos={proyectosDeLaFaseActiva}
                                             onMunicipioClick={setMunicipioResaltado}
+                                            municipioSeleccionado={municipioResaltado}
+                                            onVolver={() => setMunicipioResaltado(null)}
+                                            onProyectoClick={handleOpenModalProyecto}
                                         />
                                     </div>
                                     <div className="dashboard-fase-lateral">
