@@ -3,8 +3,13 @@ import axios from 'axios';
 
 const MESES_CORTOS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 
+const parseFechaLocal = (fechaStr) => {
+    const [anio, mes, dia] = fechaStr.split('-').map(Number);
+    return new Date(anio, mes - 1, dia);
+};
+
 const formatearFechaCorta = (fechaStr) => {
-    const fecha = new Date(fechaStr);
+    const fecha = parseFechaLocal(fechaStr);
     return {
         dia: String(fecha.getDate()).padStart(2, '0'),
         mes: MESES_CORTOS[fecha.getMonth()],
@@ -23,8 +28,8 @@ const ProximosEventos = () => {
         hoy.setHours(0, 0, 0, 0);
 
         return eventos
-            .filter(e => new Date(e.fecha) >= hoy)
-            .sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
+            .filter(e => e.estado !== 'cancelado' && e.estado !== 'completado' && parseFechaLocal(e.fecha) >= hoy)
+            .sort((a, b) => parseFechaLocal(a.fecha) - parseFechaLocal(b.fecha))
             .slice(0, 5);
     }, [eventos]);
 
