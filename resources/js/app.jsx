@@ -50,7 +50,7 @@ function App() {
   if (loading) return <div>Cargando...</div>;
 
   return (
-    <Router basename={window.__APP_BASE__ || ''}>
+    <Router basename={window.__ROUTER_BASE__ || ''}>
       <Routes>
         <Route
           path="/"
