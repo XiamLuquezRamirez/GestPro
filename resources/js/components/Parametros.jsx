@@ -1680,13 +1680,35 @@ const Parametros = ({ user, onLogout }) => {
                                 </>
                             )}
 
-                            {/* */}
                             {modalType === 'proyectos' && modalActiveTab === 'ubicacion' && (
                                 <>
-                                    <div className="form-group">
-                                        
+                                    <p className="mapa-ubicacion-instrucciones">
+                                        Haz clic en el mapa para agregar un punto. Haz clic en un punto existente para quitarlo.
+                                    </p>
+                                    <div className="mapa-ubicacion-container">
+                                        <MapContainer center={[6.2442, -75.5812]} zoom={9} style={{ height: '400px', width: '100%' }}>
+                                            <TileLayer
+                                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                            />
+                                            <CapturadorClicMapa onAgregarPunto={(punto) => setPuntosUbicacion(prev => [...prev, punto])} />
+                                            {puntosUbicacion.map((punto, index) => (
+                                                <Marker
+                                                    key={index}
+                                                    position={[punto.lat, punto.lng]}
+                                                    eventHandlers={{
+                                                        click: () => setPuntosUbicacion(prev => prev.filter((_, i) => i !== index)),
+                                                    }}
+                                                />
+                                            ))}
+                                        </MapContainer>
                                     </div>
-                                    
+                                    <div className="mapa-ubicacion-info">
+                                        <span>{puntosUbicacion.length} punto(s) seleccionado(s)</span>
+                                        <button type="button" className="btn-limpiar-puntos" onClick={() => setPuntosUbicacion([])}>
+                                            Limpiar todos los puntos
+                                        </button>
+                                    </div>
                                 </>
                             )}
 
