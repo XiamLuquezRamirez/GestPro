@@ -5,10 +5,14 @@ namespace Database\Seeders;
 use App\Models\Contrato;
 use App\Models\Entidad;
 use App\Models\Estado;
+use App\Models\Evento;
 use App\Models\Fase;
 use App\Models\PresupuestoProyecto;
+use App\Models\Prioridad;
 use App\Models\Proyecto;
+use App\Models\Responsable;
 use App\Models\Sector;
+use App\Models\TipoEvento;
 use Illuminate\Database\Seeder;
 
 /**
@@ -37,6 +41,7 @@ class DemoDataSeeder extends Seeder
 
         $proyectos = $this->seedProyectos($fases, $estados, $sectores, $entidades, $municipios);
         $this->seedContratos($proyectos);
+        $this->seedEventos($proyectos);
     }
 
     private function seedFases(): array
@@ -179,6 +184,56 @@ class DemoDataSeeder extends Seeder
             PresupuestoProyecto::updateOrCreate(
                 ['proyecto' => $proyecto->id, 'componente' => 'Interventoría'],
                 ['valor' => round(((float) $proyecto->presupuesto) * 0.08, 2)]
+            );
+        }
+    }
+
+    private function seedEventos(array $proyectos): void
+    {
+        $prioridades = [
+            'Alta' => Prioridad::updateOrCreate(['nombre' => 'Alta'], ['color' => '#e53935', 'activo' => true]),
+            'Media' => Prioridad::updateOrCreate(['nombre' => 'Media'], ['color' => '#fbc02d', 'activo' => true]),
+            'Baja' => Prioridad::updateOrCreate(['nombre' => 'Baja'], ['color' => '#43a047', 'activo' => true]),
+        ];
+
+        $tipos = [
+            'Revisión' => TipoEvento::updateOrCreate(['nombre' => 'Revisión'], ['icono' => 'revision', 'activo' => true]),
+            'Contrato' => TipoEvento::updateOrCreate(['nombre' => 'Contrato'], ['icono' => 'contrato', 'activo' => true]),
+            'Inspección' => TipoEvento::updateOrCreate(['nombre' => 'Inspección'], ['icono' => 'inspeccion', 'activo' => true]),
+            'Documentación' => TipoEvento::updateOrCreate(['nombre' => 'Documentación'], ['icono' => 'documentacion', 'activo' => true]),
+        ];
+
+        $responsables = [
+            'Ana Gómez' => Responsable::updateOrCreate(['nombre' => 'Ana Gómez'], ['cargo' => 'Supervisora de obra', 'activo' => true]),
+            'Carlos Ruiz' => Responsable::updateOrCreate(['nombre' => 'Carlos Ruiz'], ['cargo' => 'Interventor', 'activo' => true]),
+            'Laura Pérez' => Responsable::updateOrCreate(['nombre' => 'Laura Pérez'], ['cargo' => 'Coordinadora jurídica', 'activo' => true]),
+        ];
+
+        // [índice en $proyectos, título, tipo, prioridad, días desde hoy (negativo = pasado), responsable, estado_evento]
+        $definiciones = [
+            [0, 'Revisión de avance físico', 'Revisión', 'Alta', 3, 'Ana Gómez', 'pendiente'],
+            [2, 'Publicación de pliego de condiciones', 'Documentación', 'Alta', 5, 'Laura Pérez', 'pendiente'],
+            [4, 'Inspección de obra en sitio', 'Inspección', 'Alta', 7, 'Carlos Ruiz', 'pendiente'],
+            [6, 'Firma de contrato de interventoría', 'Contrato', 'Media', 10, 'Carlos Ruiz', 'pendiente'],
+            [8, 'Revisión de informe mensual', 'Revisión', 'Media', 14, 'Ana Gómez', 'pendiente'],
+            [10, 'Entrega de documentación técnica', 'Documentación', 'Baja', 20, 'Laura Pérez', 'pendiente'],
+            [12, 'Auditoría de cierre', 'Inspección', 'Alta', -5, 'Carlos Ruiz', 'completado'],
+            [1, 'Seguimiento a hallazgos', 'Revisión', 'Alta', 2, 'Ana Gómez', 'cancelado'],
+        ];
+
+        foreach ($definiciones as [$index, $titulo, $tipoNombre, $prioridadNombre, $dias, $responsableNombre, $estadoEvento]) {
+            $proyecto = $proyectos[$index]['proyecto'];
+
+            Evento::updateOrCreate(
+                ['titulo' => $titulo, 'proyecto' => $proyecto->id],
+                [
+                    'descripcion' => 'Evento de demostración para ' . $proyecto->nombre . '.',
+                    'fecha' => now()->addDays($dias)->format('Y-m-d'),
+                    'tipo_eventos' => $tipos[$tipoNombre]->id,
+                    'prioridad' => $prioridades[$prioridadNombre]->id,
+                    'estado_evento' => $estadoEvento,
+                    'responsable' => $responsables[$responsableNombre]->id,
+                ]
             );
         }
     }
