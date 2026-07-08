@@ -50,7 +50,7 @@ function App() {
   if (loading) return <div>Cargando...</div>;
 
   return (
-    <Router>
+    <Router basename={window.__APP_BASE__ || ''}>
       <Routes>
         <Route
           path="/"
@@ -58,15 +58,15 @@ function App() {
         />
         <Route
           path="/navigation"
-          element={user ? <Navigation user={user} onLogout={logout} /> : <Navigate to="/GestPro" />}
+          element={user ? <Navigation user={user} onLogout={logout} /> : <Navigate to="/" />}
         />
         <Route
           path="/dashboard"
-          element={user ? <Dashboard user={user} onLogout={logout} /> : <Navigate to="/GestPro" />}
+          element={user ? <Dashboard user={user} onLogout={logout} /> : <Navigate to="/" />}
         />
         <Route
           path="/parametros"
-          element={user ? <Parametros user={user} onLogout={logout} /> : <Navigate to="/GestPro" />}
+          element={user ? <Parametros user={user} onLogout={logout} /> : <Navigate to="/" />}
         />
       </Routes>
     </Router>

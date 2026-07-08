@@ -1,10 +1,11 @@
 import axios from 'axios';
 
-// Base URL según entorno
-axios.defaults.baseURL =
-    process.env.NODE_ENV === 'development'
-        ? 'http://localhost:8000/GestPro/'
-        : 'https://ingeer.co/GestPro/';
+// Base URL: siempre el mismo origen (protocolo+host+puerto) desde el que se
+// cargó la página, más el subdirectorio real de la app (window.__APP_BASE__,
+// inyectado por resources/views/app.blade.php). Evita depender de un puerto
+// hardcodeado que no coincide con el servidor que realmente sirvió la página
+// (causaba fallos de CSRF/cookies por ser un origen cruzado distinto).
+axios.defaults.baseURL = window.location.origin + (window.__APP_BASE__ || '') + '/';
 
 // Incluir credenciales en cross-origin si lo necesitas
 axios.defaults.withCredentials = true; // Cambiado a true para CSRF
