@@ -3,14 +3,13 @@ import Header from './Header';
 import axios from 'axios';
 import '../../css/Dashboard.css';
 import '../../css/Dashboard-Extras.css';
-import Eventos from './eventos';
 import MunicipioCard from './MunicipioCard';
 import KpiStrip from './KpiStrip';
 import Estadisticas from './Estadisticas';
+import AlertasPanel from './AlertasPanel';
 
 const Dashboard = ({ user, onLogout }) => {
     const [activeTab, setActiveTab] = useState(''); // Inicialmente vacío
-    const [currentEventIndex, setCurrentEventIndex] = useState(0);
     const [selectedMunicipio, setSelectedMunicipio] = useState(null);
     const [fases, setFases] = useState([]);
     const [proyectos, setProyectos] = useState([]);
@@ -205,6 +204,9 @@ const Dashboard = ({ user, onLogout }) => {
                         </div>
 
                         <div className="tab-content">
+                            {activeTab !== 'estadisticas' && (
+                            <div className="dashboard-fase-grid">
+                            <div className="dashboard-fase-main">
                             {fasesDashboard.map(fase => (
                                 activeTab === fase.nombre && (
                                     <div key={fase.id} className="formulacion-content">
@@ -278,13 +280,14 @@ const Dashboard = ({ user, onLogout }) => {
                                     </div>
                                 )
                             ))}
+                            </div>
+                            <AlertasPanel proyectos={proyectos} onProyectoClick={handleOpenModalProyecto} />
+                            </div>
+                            )}
                             {activeTab === 'estadisticas' && <Estadisticas proyectos={proyectos} />}
                         </div>
                     </div>
                 </section>
-
-                {/* Sección de Eventos con Slider */}
-                <Eventos />
             </main>
             {modalProyecto && (
                 <div className="modal-proyecto-overlay" onClick={handleCloseModalProyecto}>
