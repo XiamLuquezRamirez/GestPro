@@ -5,6 +5,33 @@ import { faPlus, faTrash, faSave, faTimes, faCalculator } from '@fortawesome/fre
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
 import EmojiPicker from 'emoji-picker-react';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+// Leaflet's default marker icon references image URLs that bundlers (webpack/Mix
+// included) don't resolve automatically. This re-points them at the actual
+// bundled asset URLs — a standard, documented fix for using Leaflet with webpack.
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: markerIcon2x,
+    iconUrl: markerIcon,
+    shadowUrl: markerShadow,
+});
+
+// Componente auxiliar: escucha clics en el mapa y reporta la coordenada al padre.
+// Debe vivir dentro de <MapContainer> — el hook useMapEvents solo funciona ahí.
+const CapturadorClicMapa = ({ onAgregarPunto }) => {
+    useMapEvents({
+        click(e) {
+            onAgregarPunto({ lat: e.latlng.lat, lng: e.latlng.lng });
+        },
+    });
+    return null;
+};
 
 const Parametros = ({ user, onLogout }) => {
     const [activeTab, setActiveTab] = useState('proyectos');
@@ -1349,6 +1376,13 @@ const Parametros = ({ user, onLogout }) => {
                                     >
                                         💰 Financiación
                                     </button>
+                                    <button
+                                        type="button"
+                                        className={`modal-tab ${modalActiveTab === 'ubicacion' ? 'active' : ''}`}
+                                        onClick={() => setModalActiveTab('ubicacion')}
+                                    >
+                                        📍 Ubicación
+                                    </button>
 
                                 </div>
                             )}
@@ -1630,7 +1664,15 @@ const Parametros = ({ user, onLogout }) => {
                                 </>
                             )}
 
-
+                            {/* */}
+                            {modalType === 'proyectos' && modalActiveTab === 'ubicacion' && (
+                                <>
+                                    <div className="form-group">
+                                        
+                                    </div>
+                                    
+                                </>
+                            )}
 
                             {/* Campos específicos para proyectos - Pestaña Datos */}
                             {modalType === 'proyectos' && modalActiveTab === 'datos' && (
