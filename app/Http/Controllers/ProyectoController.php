@@ -89,7 +89,7 @@ class ProyectoController extends Controller
                 'eventos.tipo_eventos',
                 'eventos.prioridad',
                 'eventos.responsable',
-                'eventos.estado',
+                DB::raw('eventos.estado_evento as estado'),
                 'tipo_eventos.icono',
                 'prioridades.color',
                 'prioridades.nombre',
