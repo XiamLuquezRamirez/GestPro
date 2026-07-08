@@ -940,3 +940,15 @@ body, .dashboard-container {
         position: static;
     }
 }
+
+/* .municipios-grid/.proyectos-grid ya tienen reglas responsive que ensanchan su
+   minmax a partir de 1200px (pensadas para cuando ocupaban el ancho completo).
+   Ahora viven dentro de la columna angosta .dashboard-fase-main junto al panel
+   de alertas, así que ese ensanche deja entrar menos tarjetas por fila de las
+   que cabrían, forzando scroll. Esta regla (más específica, gana sin !important)
+   las mantiene en un minmax más chico solo cuando están dentro de ese contexto. */
+.dashboard-fase-main .municipios-grid,
+.dashboard-fase-main .proyectos-grid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
