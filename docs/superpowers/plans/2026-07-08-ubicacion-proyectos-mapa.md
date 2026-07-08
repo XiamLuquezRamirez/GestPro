@@ -618,9 +618,9 @@ Add this block to the end of `resources/css/Parametros.css`:
 
 .btn-limpiar-puntos {
     padding: 0.5rem 1rem;
-    border: 1px solid #e53935;
+    border: 1px solid #f44336;
     background: #fff;
-    color: #e53935;
+    color: #f44336;
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.85rem;
@@ -628,7 +628,7 @@ Add this block to the end of `resources/css/Parametros.css`:
 }
 
 .btn-limpiar-puntos:hover {
-    background: #e53935;
+    background: #f44336;
     color: #fff;
 }
 ```
