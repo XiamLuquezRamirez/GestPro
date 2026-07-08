@@ -42,22 +42,29 @@ const DistribucionMunicipios = ({ proyectos, onMunicipioClick }) => {
                         </tr>
                     </thead>
                     <tbody>
-                        {filas.map(fila => (
-                            <tr key={fila.municipio} onClick={() => onMunicipioClick(fila.municipio)} style={{ cursor: 'pointer' }}>
-                                <td>{fila.municipio}</td>
-                                <td>{fila.total}</td>
-                                <td>{formatearPresupuesto(fila.presupuestoTotal)}</td>
-                                <td>{fila.avancePromedio}%</td>
-                                <td>
-                                    <span
-                                        className="tabla-estado-pastilla"
-                                        style={{ backgroundColor: fila.enRiesgo > 0 ? '#e53935' : '#43a047' }}
-                                    >
-                                        {fila.enRiesgo > 0 ? `▲ ${fila.enRiesgo} en riesgo` : '● Buen ritmo'}
-                                    </span>
-                                </td>
-                            </tr>
-                        ))}
+                        {filas.map(fila => {
+                            const esClicable = fila.municipio !== 'Sin municipio';
+                            return (
+                                <tr
+                                    key={fila.municipio}
+                                    onClick={esClicable ? () => onMunicipioClick(fila.municipio) : undefined}
+                                    style={esClicable ? { cursor: 'pointer' } : undefined}
+                                >
+                                    <td>{fila.municipio}</td>
+                                    <td>{fila.total}</td>
+                                    <td>{formatearPresupuesto(fila.presupuestoTotal)}</td>
+                                    <td>{fila.avancePromedio}%</td>
+                                    <td>
+                                        <span
+                                            className="tabla-estado-pastilla"
+                                            style={{ backgroundColor: fila.enRiesgo > 0 ? '#e53935' : '#43a047' }}
+                                        >
+                                            {fila.enRiesgo > 0 ? `▲ ${fila.enRiesgo} en riesgo` : '● Buen ritmo'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             )}
