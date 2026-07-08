@@ -552,7 +552,7 @@ const Parametros = ({ user, onLogout }) => {
             const newProyecto = {
                 ...formData,
                 id: editingItem ? editingItem.id : Date.now(),
-                presupuesto: formatCurrency(presupuestoTotal),
+                presupuesto: presupuestoTotal,
                 componentesPresupuesto: detallesPresupuesto,
                 contratos: contratos,
                 puntosUbicacion: puntosUbicacion,
