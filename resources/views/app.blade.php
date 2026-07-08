@@ -7,18 +7,19 @@
     // "" cuando se sirve directo en la raíz, como con `php artisan serve` o
     // `php -S -t public`). Esto NO es lo mismo que el prefijo de la API
     // ('/GestPro', fijo en bootstrap/app.php) — depende de qué servidor está
-    // sirviendo esta petición en concreto, así que se detecta comparando el
-    // host:puerto real de la petición contra el de APP_URL (.env): coinciden
-    // solo cuando de verdad es el mismo servidor para el que APP_URL fue
-    // configurado (ej. Apache en localhost:80). Si no coinciden (otro puerto,
-    // otro servidor de desarrollo), asumimos que no hay subcarpeta real y los
-    // assets viven en la raíz — `request()->getBaseUrl()` no sirve aquí porque
-    // la cadena de rewrites de .htaccess (raíz -> public/ -> index.php) hace
-    // que no lo calcule de forma confiable.
+    // sirviendo esta petición en concreto. Se detecta comparando el PUERTO real
+    // de la petición contra el de APP_URL (.env) — no el host, para que acceder
+    // por la IP de red (u otro hostname) en vez de "localhost" siga
+    // reconociendo a Apache correctamente. El puerto es un buen indicador
+    // porque Apache (con la subcarpeta real) siempre escucha en el mismo
+    // puerto fijo (80 aquí), mientras que cualquier servidor de desarrollo
+    // ad-hoc (`php artisan serve`, `php -S`) usa otro puerto alto, sin
+    // importar por qué IP se acceda a él. `request()->getBaseUrl()` no sirve
+    // aquí porque la cadena de rewrites de .htaccess (raíz -> public/ ->
+    // index.php) hace que no lo calcule de forma confiable.
     $appUrl = parse_url(config('app.url'));
     $appPort = $appUrl['port'] ?? (($appUrl['scheme'] ?? 'http') === 'https' ? 443 : 80);
-    $mismoServidor = ($appUrl['host'] ?? null) === request()->getHost()
-        && $appPort === request()->getPort();
+    $mismoServidor = $appPort === request()->getPort();
     $base = $mismoServidor ? ($appUrl['path'] ?? '') : '';
 
     // El subdirectorio bajo el que el navegador está posicionado AHORA MISMO
