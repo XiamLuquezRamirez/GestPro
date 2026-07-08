@@ -81,6 +81,9 @@ const Dashboard = ({ user, onLogout }) => {
     const fasesDashboard = fases.filter(fase => fase.dashboard === 1);
     console.log(fasesDashboard);
 
+    const faseActiva = fasesDashboard.find(fase => fase.nombre === activeTab);
+    const proyectosDeLaFaseActiva = faseActiva ? getProyectosPorNombreFase(faseActiva.nombre) : [];
+
     return (
         <div className="dashboard-container">
             {/* Header */}
@@ -113,34 +116,32 @@ const Dashboard = ({ user, onLogout }) => {
                         </div>
 
                         <div className="tab-content">
-                            {activeTab !== 'estadisticas' && fasesDashboard.map(fase => (
-                                activeTab === fase.nombre && (
-                                    <div key={fase.id} className="dashboard-fase-grid">
-                                        <div className="dashboard-fase-main">
-                                            <div className="fase-vista-header">
-                                                <h2>Proyectos en {fase.nombre}</h2>
-                                                <p className="fase-vista-subtitulo">Ubicación geográfica de los proyectos</p>
-                                            </div>
-                                            <MapaUbicaciones
-                                                proyectos={proyectos}
-                                                onProyectoClick={handleOpenModalProyecto}
-                                                municipioResaltado={municipioResaltado}
-                                            />
-                                            <DistribucionMunicipios
-                                                proyectos={getProyectosPorNombreFase(fase.nombre)}
-                                                onMunicipioClick={setMunicipioResaltado}
-                                            />
+                            {faseActiva && (
+                                <div className="dashboard-fase-grid">
+                                    <div className="dashboard-fase-main">
+                                        <div className="fase-vista-header">
+                                            <h2>Proyectos en {faseActiva.nombre}</h2>
+                                            <p className="fase-vista-subtitulo">Ubicación geográfica de los proyectos</p>
                                         </div>
-                                        <div className="dashboard-fase-lateral">
-                                            <ResumenFase
-                                                proyectos={getProyectosPorNombreFase(fase.nombre)}
-                                                nombreFase={fase.nombre}
-                                            />
-                                            <ProximosEventos />
-                                        </div>
+                                        <MapaUbicaciones
+                                            proyectos={proyectos}
+                                            onProyectoClick={handleOpenModalProyecto}
+                                            municipioResaltado={municipioResaltado}
+                                        />
+                                        <DistribucionMunicipios
+                                            proyectos={proyectosDeLaFaseActiva}
+                                            onMunicipioClick={setMunicipioResaltado}
+                                        />
                                     </div>
-                                )
-                            ))}
+                                    <div className="dashboard-fase-lateral">
+                                        <ResumenFase
+                                            proyectos={proyectosDeLaFaseActiva}
+                                            nombreFase={faseActiva.nombre}
+                                        />
+                                        <ProximosEventos />
+                                    </div>
+                                </div>
+                            )}
                             {activeTab === 'estadisticas' && <Estadisticas proyectos={proyectos} />}
                         </div>
                     </div>
