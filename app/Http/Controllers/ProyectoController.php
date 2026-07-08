@@ -86,11 +86,13 @@ class ProyectoController extends Controller
             ->leftJoin('tipo_eventos', 'eventos.tipo_eventos', 'tipo_eventos.id')
             ->leftJoin('prioridades', 'eventos.prioridad', 'prioridades.id')
             ->leftJoin('responsable', 'eventos.responsable', 'responsable.id')
+            ->leftJoin('municipios', 'proyectos.municipio', 'municipios.codigo')
             ->select(
                 'eventos.id',
                 'eventos.titulo',
                 'eventos.descripcion',
                 'eventos.fecha',
+                'eventos.proyecto',
                 'eventos.tipo_eventos',
                 'eventos.prioridad',
                 'eventos.responsable',
@@ -99,6 +101,7 @@ class ProyectoController extends Controller
                 'prioridades.color',
                 'prioridades.nombre',
                 DB::raw('proyectos.nombre as descripcion_proyecto'),
+                DB::raw('municipios.nombre as descripcion_municipio'),
                 DB::raw('tipo_eventos.nombre as descripcion_tipo_evento'),
                 DB::raw('CONCAT(prioridades.color, " ", prioridades.nombre) as descripcion_prioridad'),
                 DB::raw('responsable.nombre as descripcion_responsable')
