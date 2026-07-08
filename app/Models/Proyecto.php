@@ -63,6 +63,11 @@ class Proyecto extends Model
         return $this->hasMany(PresupuestoProyecto::class, 'proyecto');
     }
 
+    public function puntosUbicacion(): HasMany
+    {
+        return $this->hasMany(ProyectoUbicacion::class, 'proyecto');
+    }
+
     public function procesosLicitacion(): HasMany
     {
         return $this->hasMany(ProcesoLicitacion::class, 'proyecto');

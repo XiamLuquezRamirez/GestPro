@@ -5,6 +5,33 @@ import { faPlus, faTrash, faSave, faTimes, faCalculator } from '@fortawesome/fre
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
 import EmojiPicker from 'emoji-picker-react';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+// Leaflet's default marker icon references image URLs that bundlers (webpack/Mix
+// included) don't resolve automatically. This re-points them at the actual
+// bundled asset URLs — a standard, documented fix for using Leaflet with webpack.
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: markerIcon2x,
+    iconUrl: markerIcon,
+    shadowUrl: markerShadow,
+});
+
+// Componente auxiliar: escucha clics en el mapa y reporta la coordenada al padre.
+// Debe vivir dentro de <MapContainer> — el hook useMapEvents solo funciona ahí.
+const CapturadorClicMapa = ({ onAgregarPunto }) => {
+    useMapEvents({
+        click(e) {
+            onAgregarPunto({ lat: e.latlng.lat, lng: e.latlng.lng });
+        },
+    });
+    return null;
+};
 
 const Parametros = ({ user, onLogout }) => {
     const [activeTab, setActiveTab] = useState('proyectos');
@@ -34,6 +61,7 @@ const Parametros = ({ user, onLogout }) => {
     const [responsables, setResponsables] = useState([]);
     const [departamentos, setDepartamentos] = useState([]);
     const [detallesPresupuesto, setDetallesPresupuesto] = useState([]);
+    const [puntosUbicacion, setPuntosUbicacion] = useState([]);
     // Estado para búsqueda
     const [searchText, setSearchText] = useState('');
     // Estado para el modal de emoji
@@ -524,9 +552,10 @@ const Parametros = ({ user, onLogout }) => {
             const newProyecto = {
                 ...formData,
                 id: editingItem ? editingItem.id : Date.now(),
-                presupuesto: formatCurrency(presupuestoTotal),
+                presupuesto: presupuestoTotal,
                 componentesPresupuesto: detallesPresupuesto,
                 contratos: contratos,
+                puntosUbicacion: puntosUbicacion,
             };
             const response = await axios.post('/guardarProyecto', newProyecto);
             if (response.status === 200) {
@@ -766,6 +795,18 @@ const Parametros = ({ user, onLogout }) => {
             setContratos([]);
         }
 
+        // Cargar puntos de ubicación si es un proyecto
+        if (type === 'proyectos' && item.puntosUbicacion) {
+            setPuntosUbicacion(
+                item.puntosUbicacion.map(punto => ({
+                    lat: parseFloat(punto.lat),
+                    lng: parseFloat(punto.lng)
+                }))
+            );
+        } else {
+            setPuntosUbicacion([]);
+        }
+
         setModalActiveTab('datos');
         setShowModal(true);
     };
@@ -906,6 +947,7 @@ const Parametros = ({ user, onLogout }) => {
         });
         setDetallesPresupuesto([]);
         setContratos([]); // Resetear contratos al agregar nuevo
+        setPuntosUbicacion([]);
         setModalActiveTab('datos');
         setShowModal(true);
     };
@@ -944,6 +986,7 @@ const Parametros = ({ user, onLogout }) => {
         });
         setDetallesPresupuesto([]);
         setContratos([]); // Resetear contratos al cerrar modal
+        setPuntosUbicacion([]);
         setModalActiveTab('datos');
     };
 
@@ -1349,6 +1392,13 @@ const Parametros = ({ user, onLogout }) => {
                                     >
                                         💰 Financiación
                                     </button>
+                                    <button
+                                        type="button"
+                                        className={`modal-tab ${modalActiveTab === 'ubicacion' ? 'active' : ''}`}
+                                        onClick={() => setModalActiveTab('ubicacion')}
+                                    >
+                                        📍 Ubicación
+                                    </button>
 
                                 </div>
                             )}
@@ -1630,7 +1680,37 @@ const Parametros = ({ user, onLogout }) => {
                                 </>
                             )}
 
-
+                            {modalType === 'proyectos' && modalActiveTab === 'ubicacion' && (
+                                <>
+                                    <p className="mapa-ubicacion-instrucciones">
+                                        Haz clic en el mapa para agregar un punto. Haz clic en un punto existente para quitarlo.
+                                    </p>
+                                    <div className="mapa-ubicacion-container">
+                                        <MapContainer center={[6.2442, -75.5812]} zoom={9} style={{ height: '400px', width: '100%' }}>
+                                            <TileLayer
+                                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                            />
+                                            <CapturadorClicMapa onAgregarPunto={(punto) => setPuntosUbicacion(prev => [...prev, punto])} />
+                                            {puntosUbicacion.map((punto, index) => (
+                                                <Marker
+                                                    key={index}
+                                                    position={[punto.lat, punto.lng]}
+                                                    eventHandlers={{
+                                                        click: () => setPuntosUbicacion(prev => prev.filter((_, i) => i !== index)),
+                                                    }}
+                                                />
+                                            ))}
+                                        </MapContainer>
+                                    </div>
+                                    <div className="mapa-ubicacion-info">
+                                        <span>{puntosUbicacion.length} punto(s) seleccionado(s)</span>
+                                        <button type="button" className="btn-limpiar-puntos" onClick={() => setPuntosUbicacion([])}>
+                                            Limpiar todos los puntos
+                                        </button>
+                                    </div>
+                                </>
+                            )}
 
                             {/* Campos específicos para proyectos - Pestaña Datos */}
                             {modalType === 'proyectos' && modalActiveTab === 'datos' && (
