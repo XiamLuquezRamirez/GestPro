@@ -50,4 +50,9 @@ class Contrato extends Model
     {
         return $this->hasMany(AvanceFisico::class, 'contrato_id');
     }
+
+    public function actividades(): HasMany
+    {
+        return $this->hasMany(ActividadContrato::class, 'contrato_id');
+    }
 }

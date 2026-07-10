@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Schema;
 
+use App\Models\ActividadAvance;
+use App\Models\ActividadContrato;
 use App\Models\AvanceFinanciero;
 use App\Models\AvanceFisico;
 use App\Models\Contrato;
@@ -53,5 +55,42 @@ class AvancesTest extends TestCase
 
         $this->assertTrue($avance->fresh()->contrato->is($contrato));
         $this->assertSame(60, $avance->fresh()->valor_avance_fisico);
+    }
+
+    public function test_actividad_contrato_belongs_to_contrato(): void
+    {
+        $contrato = $this->crearContrato();
+
+        $actividad = ActividadContrato::create([
+            'contrato_id' => $contrato->id,
+            'nombre' => 'Cimentación',
+            'peso' => 30,
+        ]);
+
+        $this->assertTrue($actividad->fresh()->contrato->is($contrato));
+        $this->assertSame(30, $actividad->fresh()->peso);
+    }
+
+    public function test_actividad_avance_belongs_to_actividad_and_tracks_history(): void
+    {
+        $contrato = $this->crearContrato();
+        $actividad = ActividadContrato::create(['contrato_id' => $contrato->id, 'nombre' => 'Estructura', 'peso' => 40]);
+
+        ActividadAvance::create(['actividad_id' => $actividad->id, 'fecha' => '2026-01-01', 'porcentaje_ejecucion' => 20]);
+        $segundo = ActividadAvance::create(['actividad_id' => $actividad->id, 'fecha' => '2026-02-01', 'porcentaje_ejecucion' => 50]);
+
+        $this->assertTrue($segundo->fresh()->actividad->is($actividad));
+        $this->assertCount(2, $actividad->fresh()->avances);
+    }
+
+    public function test_deleting_actividad_cascades_to_its_avances(): void
+    {
+        $contrato = $this->crearContrato();
+        $actividad = ActividadContrato::create(['contrato_id' => $contrato->id, 'nombre' => 'Acabados', 'peso' => 30]);
+        ActividadAvance::create(['actividad_id' => $actividad->id, 'fecha' => '2026-01-01', 'porcentaje_ejecucion' => 10]);
+
+        $actividad->delete();
+
+        $this->assertDatabaseCount('actividad_avances', 0);
     }
 }
