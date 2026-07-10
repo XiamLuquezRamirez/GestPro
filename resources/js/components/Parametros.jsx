@@ -401,6 +401,12 @@ const Parametros = ({ user, onLogout }) => {
                     valor_presente_acta: '', porcentaje_ejecutado: '', archivo: null
                 });
                 Swal.fire({ icon: 'success', title: 'Acta agregada correctamente' });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error al guardar el acta',
+                    text: response.data.mensaje
+                });
             }
         } catch (error) {
             console.error('Error al agregar acta financiera:', error);
@@ -415,6 +421,12 @@ const Parametros = ({ user, onLogout }) => {
             if (response.data.success) {
                 setActasFinancieras(prev => prev.filter(acta => acta.id !== id));
                 Swal.fire({ icon: 'success', title: 'Acta eliminada correctamente' });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error al eliminar el acta',
+                    text: response.data.mensaje
+                });
             }
         } catch (error) {
             console.error('Error al eliminar acta financiera:', error);
