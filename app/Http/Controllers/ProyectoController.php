@@ -806,6 +806,7 @@ class ProyectoController extends Controller
     {
         $data = $request->all();
 
+        $nullableDate = fn ($value) => ($value === '' || $value === null) ? null : $value;
         $nullableDecimal = fn ($value) => ($value === '' || $value === null) ? null : (float) $value;
         $nullableInt = fn ($value) => ($value === '' || $value === null) ? null : (int) $value;
         $nullableString = fn ($value) => ($value === '' || $value === null) ? null : $value;
@@ -814,7 +815,7 @@ class ProyectoController extends Controller
             $id = DB::table('avance_financiero')->insertGetId([
                 'contrato_id' => $data['contrato_id'],
                 'descripcion' => $nullableString($data['descripcion'] ?? null),
-                'fecha_acta' => $data['fecha_acta'],
+                'fecha_acta' => $nullableDate($data['fecha_acta'] ?? null),
                 'valor_facturado' => $nullableDecimal($data['valor_facturado'] ?? null),
                 'amortizacion_50' => $nullableDecimal($data['amortizacion_50'] ?? null),
                 'valor_presente_acta' => $nullableDecimal($data['valor_presente_acta'] ?? null),
