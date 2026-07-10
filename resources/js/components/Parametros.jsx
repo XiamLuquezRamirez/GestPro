@@ -464,6 +464,12 @@ const Parametros = ({ user, onLogout }) => {
                 ]);
                 setFormActividad({ nombre: '', peso: '' });
                 Swal.fire({ icon: 'success', title: 'Actividad agregada correctamente' });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error al agregar la actividad',
+                    text: response.data.mensaje
+                });
             }
         } catch (error) {
             console.error('Error al agregar actividad:', error);
@@ -478,6 +484,12 @@ const Parametros = ({ user, onLogout }) => {
             if (response.data.success) {
                 setActividades(prev => prev.filter(act => act.id !== id));
                 Swal.fire({ icon: 'success', title: 'Actividad eliminada correctamente' });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error al eliminar la actividad',
+                    text: response.data.mensaje
+                });
             }
         } catch (error) {
             console.error('Error al eliminar actividad:', error);
@@ -514,6 +526,12 @@ const Parametros = ({ user, onLogout }) => {
                 setActividadRegistrandoAvance(null);
                 setFormNuevoAvance({ fecha: '', porcentaje_ejecucion: '' });
                 Swal.fire({ icon: 'success', title: 'Avance registrado correctamente' });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error al registrar el avance',
+                    text: response.data.mensaje
+                });
             }
         } catch (error) {
             console.error('Error al registrar avance:', error);
