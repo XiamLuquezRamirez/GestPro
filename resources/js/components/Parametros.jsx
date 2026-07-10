@@ -539,6 +539,32 @@ const Parametros = ({ user, onLogout }) => {
         }
     };
 
+    // Calcular avance financiero: suma de valor_presente_acta de todas las actas / valor del contrato
+    const handleCalcularAvanceFinanciero = () => {
+        if (actasFinancieras.length === 0) {
+            Swal.fire({ icon: 'warning', title: 'No hay actas de avance financiero registradas' });
+            return;
+        }
+        const valorContrato = parseCurrencyValue(formContrato.valor);
+        if (!valorContrato) {
+            Swal.fire({ icon: 'warning', title: 'Ingrese el valor del contrato antes de calcular' });
+            return;
+        }
+        const totalEjecutado = actasFinancieras.reduce((sum, acta) => sum + (parseFloat(acta.valor_presente_acta) || 0), 0);
+        const porcentaje = Math.round((totalEjecutado / valorContrato) * 100);
+        setFormContrato(prev => ({ ...prev, avance_financiero: porcentaje }));
+    };
+
+    // Calcular avance físico: suma ponderada de (peso x último % de ejecución) de cada actividad
+    const handleCalcularAvanceFisico = () => {
+        if (actividades.length === 0) {
+            Swal.fire({ icon: 'warning', title: 'No hay actividades de avance físico registradas' });
+            return;
+        }
+        const total = actividades.reduce((sum, act) => sum + ((act.peso || 0) / 100) * (act.ultimo_avance || 0), 0);
+        setFormContrato(prev => ({ ...prev, avance_fisico: Math.round(total) }));
+    };
+
     // Agregar contrato a la lista
     const handleAddContrato = () => {
         const valorNumerico = parseCurrencyValue(formContrato.valor);
@@ -597,6 +623,8 @@ const Parametros = ({ user, onLogout }) => {
         } else {
             setAnexos([]);
         }
+        setActasFinancieras(contrato.avancesFinancieros || []);
+        setActividades(contrato.actividades || []);
         setShowContratoForm(true);
     };
 
@@ -674,6 +702,15 @@ const Parametros = ({ user, onLogout }) => {
         });
         setAnexos([]);
         setFormAnexo({ descripcion: '', archivo: null });
+        setActasFinancieras([]);
+        setFormActaFinanciera({
+            descripcion: '', fecha_acta: '', valor_facturado: '', amortizacion_50: '',
+            valor_presente_acta: '', porcentaje_ejecutado: '', archivo: null
+        });
+        setActividades([]);
+        setFormActividad({ nombre: '', peso: '' });
+        setActividadRegistrandoAvance(null);
+        setFormNuevoAvance({ fecha: '', porcentaje_ejecucion: '' });
         setContratoActiveTab('informacion');
     };
 
@@ -690,6 +727,15 @@ const Parametros = ({ user, onLogout }) => {
         });
         setAnexos([]);
         setFormAnexo({ descripcion: '', archivo: null });
+        setActasFinancieras([]);
+        setFormActaFinanciera({
+            descripcion: '', fecha_acta: '', valor_facturado: '', amortizacion_50: '',
+            valor_presente_acta: '', porcentaje_ejecutado: '', archivo: null
+        });
+        setActividades([]);
+        setFormActividad({ nombre: '', peso: '' });
+        setActividadRegistrandoAvance(null);
+        setFormNuevoAvance({ fecha: '', porcentaje_ejecucion: '' });
         setContratoActiveTab('informacion');
         setShowContratoForm(true);
     };
@@ -2352,14 +2398,14 @@ const Parametros = ({ user, onLogout }) => {
                                                         <label htmlFor="avance_financiero">Avance Financiero</label>
                                                         <div className="avance-financiero-container">
                                                             <input type="text" disabled id="avance_financiero" name="avance_financiero" value={formContrato.avance_financiero} onChange={handleContratoChange} />
-                                                            <button type="button" className="btn-calcular-avance" title='Calcular Avance Financiero'><FontAwesomeIcon icon={faCalculator} /></button>
+                                                            <button type="button" className="btn-calcular-avance" title='Calcular Avance Financiero' onClick={handleCalcularAvanceFinanciero}><FontAwesomeIcon icon={faCalculator} /></button>
                                                         </div>
                                                     </div>
                                                     <div className="form-group">
                                                         <label htmlFor="avance_fisico">Avance Físico</label>
                                                         <div className="avance-fisico-container">
                                                             <input type="text" id="avance_fisico" disabled name="avance_fisico" value={formContrato.avance_fisico} onChange={handleContratoChange} />
-                                                            <button type="button" className="btn-calcular-avance" title='Calcular Avance Físico'><FontAwesomeIcon icon={faCalculator} /></button>
+                                                            <button type="button" className="btn-calcular-avance" title='Calcular Avance Físico' onClick={handleCalcularAvanceFisico}><FontAwesomeIcon icon={faCalculator} /></button>
                                                         </div>
                                                     </div>
 
