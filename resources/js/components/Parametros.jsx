@@ -2322,6 +2322,22 @@ const Parametros = ({ user, onLogout }) => {
                                         >
                                             <FontAwesomeIcon icon={faFile} /> Anexos ({anexos.length})
                                         </button>
+                                        {editingContrato && (
+                                            <button
+                                                className={`contrato-tab ${contratoActiveTab === 'avance_financiero' ? 'active' : ''}`}
+                                                onClick={() => setContratoActiveTab('avance_financiero')}
+                                            >
+                                                <FontAwesomeIcon icon={faCalculator} /> Avance Financiero ({actasFinancieras.length})
+                                            </button>
+                                        )}
+                                        {editingContrato && (
+                                            <button
+                                                className={`contrato-tab ${contratoActiveTab === 'avance_fisico' ? 'active' : ''}`}
+                                                onClick={() => setContratoActiveTab('avance_fisico')}
+                                            >
+                                                <FontAwesomeIcon icon={faCalculator} /> Avance Físico ({actividades.length})
+                                            </button>
+                                        )}
                                     </div>
 
                                     {/* Contenido de la pestaña de información */}
@@ -2508,6 +2524,239 @@ const Parametros = ({ user, onLogout }) => {
                                                             </tbody>
                                                         </table>
                                                     </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Contenido de la pestaña de avance financiero */}
+                                    {contratoActiveTab === 'avance_financiero' && (
+                                        <div className="contratos-modal-section">
+                                            <p className="contratos-info">
+                                                Registre las actas de avance financiero del contrato. El avance financiero se calcula sumando el valor presente de todas las actas.
+                                            </p>
+
+                                            <div className="anexo-form">
+                                                <h4>Agregar Nueva Acta</h4>
+                                                <div className="form-row">
+                                                    <div className="form-group">
+                                                        <label htmlFor="descripcion_acta_financiera">Descripción</label>
+                                                        <input type="text" id="descripcion_acta_financiera" name="descripcion" value={formActaFinanciera.descripcion} onChange={handleActaFinancieraChange} placeholder="Descripción del acta" />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="fecha_acta">Fecha del Acta *</label>
+                                                        <input type="date" id="fecha_acta" name="fecha_acta" value={formActaFinanciera.fecha_acta} onChange={handleActaFinancieraChange} />
+                                                    </div>
+                                                </div>
+                                                <div className="form-row">
+                                                    <div className="form-group">
+                                                        <label htmlFor="valor_facturado">Valor Facturado *</label>
+                                                        <input type="number" id="valor_facturado" name="valor_facturado" value={formActaFinanciera.valor_facturado} onChange={handleActaFinancieraChange} />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="amortizacion_50">Amortización 50%</label>
+                                                        <input type="number" id="amortizacion_50" name="amortizacion_50" value={formActaFinanciera.amortizacion_50} onChange={handleActaFinancieraChange} />
+                                                    </div>
+                                                </div>
+                                                <div className="form-row">
+                                                    <div className="form-group">
+                                                        <label htmlFor="valor_presente_acta">Valor Presente del Acta</label>
+                                                        <input type="number" id="valor_presente_acta" name="valor_presente_acta" value={formActaFinanciera.valor_presente_acta} onChange={handleActaFinancieraChange} />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="porcentaje_ejecutado">% Ejecutado</label>
+                                                        <input type="number" id="porcentaje_ejecutado" name="porcentaje_ejecutado" value={formActaFinanciera.porcentaje_ejecutado} onChange={handleActaFinancieraChange} min="0" max="100" />
+                                                    </div>
+                                                </div>
+                                                <div className="form-row">
+                                                    <div className="form-group">
+                                                        <label htmlFor="archivo_acta_financiera">Archivo (opcional)</label>
+                                                        <input
+                                                            type="file"
+                                                            id="archivo_acta_financiera"
+                                                            name="archivo"
+                                                            onChange={handleActaFinancieraChange}
+                                                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                                                        />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleAddActaFinanciera}
+                                                            className="btn-add-anexo"
+                                                            disabled={!formActaFinanciera.fecha_acta || !formActaFinanciera.valor_facturado}
+                                                        >
+                                                            <FontAwesomeIcon icon={faPlus} /> Agregar Acta
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="anexos-list">
+                                                <h4>Actas Registradas ({actasFinancieras.length})</h4>
+                                                {actasFinancieras.length === 0 ? (
+                                                    <div className="no-anexos">
+                                                        <p>No hay actas de avance financiero registradas</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="anexos-table">
+                                                        <table>
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Fecha</th>
+                                                                    <th>Valor Facturado</th>
+                                                                    <th>Valor Presente</th>
+                                                                    <th>% Ejecutado</th>
+                                                                    <th>Archivo</th>
+                                                                    <th>Acciones</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {actasFinancieras.map(acta => (
+                                                                    <tr key={acta.id}>
+                                                                        <td>{acta.fecha_acta}</td>
+                                                                        <td>$ {Number(acta.valor_facturado || 0).toLocaleString()}</td>
+                                                                        <td>$ {Number(acta.valor_presente_acta || 0).toLocaleString()}</td>
+                                                                        <td>{acta.porcentaje_ejecutado ? `${acta.porcentaje_ejecutado}%` : '-'}</td>
+                                                                        <td>
+                                                                            {acta.anexo ? (
+                                                                                <button type="button" onClick={() => window.open('/' + acta.anexo, '_blank')} className="btn-view-anexo" title="Ver archivo">
+                                                                                    👁️
+                                                                                </button>
+                                                                            ) : '-'}
+                                                                        </td>
+                                                                        <td>
+                                                                            <button type="button" onClick={() => handleDeleteActaFinanciera(acta.id)} className="btn-delete-anexo" title="Eliminar acta">
+                                                                                <FontAwesomeIcon icon={faTrash} />
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Contenido de la pestaña de avance físico */}
+                                    {contratoActiveTab === 'avance_fisico' && (
+                                        <div className="contratos-modal-section">
+                                            <p className="contratos-info">
+                                                Registre las actividades del contrato con su peso relativo (deben sumar 100%). El avance físico total es la suma de (peso × % de ejecución) de cada actividad.
+                                            </p>
+
+                                            <div className="anexo-form">
+                                                <h4>Agregar Nueva Actividad</h4>
+                                                <div className="form-row">
+                                                    <div className="form-group">
+                                                        <label htmlFor="nombre_actividad">Nombre *</label>
+                                                        <input type="text" id="nombre_actividad" name="nombre" value={formActividad.nombre} onChange={handleActividadChange} placeholder="Ej: Cimentación" />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="peso_actividad">Peso (%) *</label>
+                                                        <input type="number" id="peso_actividad" name="peso" value={formActividad.peso} onChange={handleActividadChange} min="0" max="100" />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleAddActividad}
+                                                            className="btn-add-anexo"
+                                                            disabled={!formActividad.nombre || !formActividad.peso}
+                                                        >
+                                                            <FontAwesomeIcon icon={faPlus} /> Agregar Actividad
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="anexos-list">
+                                                <h4>Actividades del Contrato ({actividades.length})</h4>
+                                                {actividades.length === 0 ? (
+                                                    <div className="no-anexos">
+                                                        <p>No hay actividades registradas</p>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <div className="anexos-table">
+                                                            <table>
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>Actividad</th>
+                                                                        <th>Peso</th>
+                                                                        <th>% Ejecución</th>
+                                                                        <th>Última actualización</th>
+                                                                        <th>Acciones</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {actividades.map(actividad => (
+                                                                        <React.Fragment key={actividad.id}>
+                                                                            <tr>
+                                                                                <td>{actividad.nombre}</td>
+                                                                                <td>{actividad.peso}%</td>
+                                                                                <td>{actividad.ultimo_avance !== null && actividad.ultimo_avance !== undefined ? `${actividad.ultimo_avance}%` : 'Sin registrar'}</td>
+                                                                                <td>{actividad.fecha_ultimo_avance || '-'}</td>
+                                                                                <td>
+                                                                                    <div className="anexo-actions">
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => {
+                                                                                                setActividadRegistrandoAvance(actividadRegistrandoAvance === actividad.id ? null : actividad.id);
+                                                                                                setFormNuevoAvance({ fecha: '', porcentaje_ejecucion: '' });
+                                                                                            }}
+                                                                                            className="btn-view-anexo"
+                                                                                            title="Registrar avance"
+                                                                                        >
+                                                                                            <FontAwesomeIcon icon={faCalculator} />
+                                                                                        </button>
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => handleDeleteActividad(actividad.id)}
+                                                                                            className="btn-delete-anexo"
+                                                                                            title="Eliminar actividad"
+                                                                                        >
+                                                                                            <FontAwesomeIcon icon={faTrash} />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                            {actividadRegistrandoAvance === actividad.id && (
+                                                                                <tr>
+                                                                                    <td colSpan="5">
+                                                                                        <div className="form-row">
+                                                                                            <div className="form-group">
+                                                                                                <label htmlFor="fecha_nuevo_avance">Fecha</label>
+                                                                                                <input type="date" id="fecha_nuevo_avance" name="fecha" value={formNuevoAvance.fecha} onChange={handleNuevoAvanceChange} />
+                                                                                            </div>
+                                                                                            <div className="form-group">
+                                                                                                <label htmlFor="porcentaje_nuevo_avance">% Ejecución</label>
+                                                                                                <input type="number" id="porcentaje_nuevo_avance" name="porcentaje_ejecucion" value={formNuevoAvance.porcentaje_ejecucion} onChange={handleNuevoAvanceChange} min="0" max="100" />
+                                                                                            </div>
+                                                                                            <div className="form-group">
+                                                                                                <button type="button" onClick={() => handleRegistrarAvance(actividad.id)} className="btn-add-anexo">
+                                                                                                    <FontAwesomeIcon icon={faSave} /> Guardar
+                                                                                                </button>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </td>
+                                                                                </tr>
+                                                                            )}
+                                                                        </React.Fragment>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                        <div className="avance-fisico-resumen">
+                                                            <span className={`avance-fisico-suma-pesos ${actividades.reduce((s, a) => s + (a.peso || 0), 0) !== 100 ? 'advertencia' : ''}`}>
+                                                                Suma de pesos: {actividades.reduce((s, a) => s + (a.peso || 0), 0)}%
+                                                            </span>
+                                                            <span className="avance-fisico-total">
+                                                                Avance físico total: {Math.round(actividades.reduce((s, a) => s + ((a.peso || 0) / 100) * (a.ultimo_avance || 0), 0))}%
+                                                            </span>
+                                                        </div>
+                                                    </>
                                                 )}
                                             </div>
                                         </div>
