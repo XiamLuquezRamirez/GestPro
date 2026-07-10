@@ -243,6 +243,12 @@ const Parametros = ({ user, onLogout }) => {
         proyecto: ''
     });
 
+    const [actasFinancieras, setActasFinancieras] = useState([]);
+    const [formActaFinanciera, setFormActaFinanciera] = useState({
+        descripcion: '', fecha_acta: '', valor_facturado: '', amortizacion_50: '',
+        valor_presente_acta: '', porcentaje_ejecutado: '', archivo: null
+    });
+
     // Manejar cambios en el formulario de contratos
     const handleContratoChange = (e) => {
         const { name, value } = e.target;
@@ -339,6 +345,80 @@ const Parametros = ({ user, onLogout }) => {
                 title: 'Error al eliminar el anexo',
                 text: error.response?.data?.mensaje || 'Error interno del servidor'
             });
+        }
+    };
+
+    // Manejar cambios en el formulario de acta financiera
+    const handleActaFinancieraChange = (e) => {
+        const { name, value, files } = e.target;
+        if (name === 'archivo') {
+            setFormActaFinanciera(prev => ({ ...prev, archivo: files[0] }));
+        } else {
+            setFormActaFinanciera(prev => ({ ...prev, [name]: value }));
+        }
+    };
+
+    // Agregar acta de avance financiero
+    const handleAddActaFinanciera = async () => {
+        if (!formActaFinanciera.fecha_acta || !formActaFinanciera.valor_facturado) {
+            Swal.fire({ icon: 'warning', title: 'La fecha del acta y el valor facturado son obligatorios' });
+            return;
+        }
+
+        try {
+            let rutaAnexo = null;
+            if (formActaFinanciera.archivo) {
+                const formData = new FormData();
+                formData.append('archivo', formActaFinanciera.archivo);
+                const uploadResponse = await axios.post('/subirActa', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                if (!uploadResponse.data.success) {
+                    Swal.fire({ icon: 'error', title: 'Error al subir el archivo', text: uploadResponse.data.mensaje });
+                    return;
+                }
+                rutaAnexo = uploadResponse.data.ruta;
+            }
+
+            const response = await axios.post('/guardarActaFinanciera', {
+                contrato_id: editingContrato.id,
+                descripcion: formActaFinanciera.descripcion,
+                fecha_acta: formActaFinanciera.fecha_acta,
+                valor_facturado: formActaFinanciera.valor_facturado,
+                amortizacion_50: formActaFinanciera.amortizacion_50,
+                valor_presente_acta: formActaFinanciera.valor_presente_acta,
+                porcentaje_ejecutado: formActaFinanciera.porcentaje_ejecutado,
+                anexo: rutaAnexo
+            });
+
+            if (response.data.success) {
+                setActasFinancieras(prev => [
+                    { ...formActaFinanciera, id: response.data.id, anexo: rutaAnexo },
+                    ...prev
+                ]);
+                setFormActaFinanciera({
+                    descripcion: '', fecha_acta: '', valor_facturado: '', amortizacion_50: '',
+                    valor_presente_acta: '', porcentaje_ejecutado: '', archivo: null
+                });
+                Swal.fire({ icon: 'success', title: 'Acta agregada correctamente' });
+            }
+        } catch (error) {
+            console.error('Error al agregar acta financiera:', error);
+            Swal.fire({ icon: 'error', title: 'Error al agregar el acta', text: error.response?.data?.mensaje || 'Error interno del servidor' });
+        }
+    };
+
+    // Eliminar acta de avance financiero
+    const handleDeleteActaFinanciera = async (id) => {
+        try {
+            const response = await axios.post('/eliminarActaFinanciera', { id });
+            if (response.data.success) {
+                setActasFinancieras(prev => prev.filter(acta => acta.id !== id));
+                Swal.fire({ icon: 'success', title: 'Acta eliminada correctamente' });
+            }
+        } catch (error) {
+            console.error('Error al eliminar acta financiera:', error);
+            Swal.fire({ icon: 'error', title: 'Error al eliminar el acta', text: error.response?.data?.mensaje || 'Error interno del servidor' });
         }
     };
 
