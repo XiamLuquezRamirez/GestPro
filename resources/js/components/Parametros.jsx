@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Header from './Header';
 import axios from '../axios';
-import { faPlus, faTrash, faSave, faTimes, faCalculator } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faTrash, faSave, faTimes, faCalculator, faFile,faInfo,faEdit } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
 import EmojiPicker from 'emoji-picker-react';
@@ -344,20 +344,21 @@ const Parametros = ({ user, onLogout }) => {
 
     // Agregar contrato a la lista
     const handleAddContrato = () => {
-        if (!formContrato.n_contrato || !formContrato.objeto || !formContrato.valor || !formContrato.estado) {
+        const valorNumerico = parseCurrencyValue(formContrato.valor);
+        if (!formContrato.n_contrato || !formContrato.objeto || valorNumerico <= 0 || !formContrato.estado) {
             Swal.fire({ icon: 'warning', title: 'Los campos N° Contrato, Objeto, Valor y Estado son obligatorios' });
             return;
         }
         setContratos(prev => [
             ...prev,
-            { ...formContrato, id: Date.now() }
+            { ...formContrato, id: Date.now(), valor: valorNumerico }
         ]);
         setFormContrato({
-            n_contrato: '', objeto: '', 
-            contratante: '', contratista: '', 
-            valor: '', fecha_inicio: '', 
-            fecha_fin: '', interventoria: '', 
-            avance_financiero: '', 
+            n_contrato: '', objeto: '',
+            contratante: '', contratista: '',
+            valor: '', fecha_inicio: '',
+            fecha_fin: '', interventoria: '',
+            avance_financiero: '',
             avance_fisico: '', estado: '',
             proyecto: proyectoContratos.id || ''
         });
@@ -377,7 +378,7 @@ const Parametros = ({ user, onLogout }) => {
             objeto: contrato.objeto || '',
             contratante: contrato.contratante || '',
             contratista: contrato.contratista || '',
-            valor: contrato.valor || '',
+            valor: contrato.valor ? formatCurrency(Number(contrato.valor)) : '',
             fecha_inicio: contrato.fecha_inicio || '',
             fecha_fin: contrato.fecha_fin || '',
             interventoria: contrato.interventoria || '',
@@ -404,30 +405,33 @@ const Parametros = ({ user, onLogout }) => {
 
     // Guardar contrato (agregar o actualizar)
     const handleSaveContrato = async () => {
-        if (!formContrato.n_contrato || !formContrato.objeto || !formContrato.valor || !formContrato.estado) {
+        const valorNumerico = parseCurrencyValue(formContrato.valor);
+        if (!formContrato.n_contrato || !formContrato.objeto || valorNumerico <= 0 || !formContrato.estado) {
             Swal.fire({ icon: 'warning', title: 'Los campos N° Contrato, Objeto, Valor y Estado son obligatorios' });
             return;
         }
 
+        const contratoData = { ...formContrato, valor: valorNumerico };
+
         if (editingContrato) {
             // Actualizar contrato existente
             setContratos(prev => prev.map(c =>
-                c.id === editingContrato.id ? { ...formContrato, id: c.id, anexos: anexos } : c
+                c.id === editingContrato.id ? { ...contratoData, id: c.id, anexos: anexos } : c
             ));
             setEditingContrato(null);
         } else {
             // Agregar nuevo contrato
             setContratos(prev => [
                 ...prev,
-                { ...formContrato, id: Date.now(), anexos: anexos }
+                { ...contratoData, id: Date.now(), anexos: anexos }
             ]);
         }
 
-        console.log(formContrato);
+        console.log(contratoData);
         console.log(anexos);
         // Actualizar el proyecto con los nuevos contratos con axios
         const response = await axios.post('/guardarContrato', {
-            formContrato: formContrato,
+            formContrato: contratoData,
             anexos: anexos.map(anexo => ({
                 descripcion: anexo.descripcion,
                 nombreArchivo: anexo.nombreArchivo,
@@ -1073,12 +1077,35 @@ const Parametros = ({ user, onLogout }) => {
         }).format(amount);
     };
 
+    const parseCurrencyValue = (value) => {
+        if (value === '' || value === null || value === undefined) return 0;
+        const numeric = String(value).replace(/\D/g, '');
+        return numeric ? parseInt(numeric, 10) : 0;
+    };
+
+    const handleValorChange = (e) => {
+        const raw = e.target.value.replace(/\D/g, '');
+        setFormData(prev => ({
+            ...prev,
+            valor: raw ? formatCurrency(raw) : ''
+        }));
+    };
+
+    const handleContratoValorChange = (e) => {
+        const raw = e.target.value.replace(/\D/g, '');
+        setFormContrato(prev => ({
+            ...prev,
+            valor: raw ? formatCurrency(raw) : ''
+        }));
+    };
+
     const handleAddComponente = () => {
-        if (formData.descripcionComponente && formData.valor) {
+        const valorNumerico = parseCurrencyValue(formData.valor);
+        if (formData.descripcionComponente && valorNumerico > 0) {
             const nuevoComponente = {
                 id: Date.now(),
                 descripcionComponente: formData.descripcionComponente,
-                valor: parseFloat(formData.valor)
+                valor: valorNumerico
             };
             setDetallesPresupuesto(prev => [...prev, nuevoComponente]);
             setFormData(prev => ({
@@ -1113,12 +1140,12 @@ const Parametros = ({ user, onLogout }) => {
         setEditingContrato(null);
         setFormContrato({
             n_contrato: '', objeto: '',
-             contratante: '', contratista: '', 
-             valor: '', fecha_inicio: '', 
-             fecha_fin: '', interventoria: '', 
-             avance_financiero: '', 
-             avance_fisico: '', estado: '',
-             proyecto: item.id || ''
+            contratante: '', contratista: '',
+            valor: '', fecha_inicio: '',
+            fecha_fin: '', interventoria: '',
+            avance_financiero: '',
+            avance_fisico: '', estado: '',
+            proyecto: item.id || ''
         });
         setShowContratosModal(true);
     };
@@ -1193,7 +1220,7 @@ const Parametros = ({ user, onLogout }) => {
                                     )}
                                     {type === 'tiposEventos' && <td>{item.icono}</td>}
                                     {type === 'proyectos' && <td>{item.descripcion_municipio}</td>}
-                                    {type === 'proyectos' && <td>{item.presupuesto}</td>}
+                                    {type === 'proyectos' && <td>{formatCurrency(item.presupuesto)}</td>}
                                     {type === 'proyectos' && (
                                         <td>
                                             <span className="status-badge" style={{ backgroundColor: item.color_estado, color: 'white' }}>
@@ -1243,22 +1270,25 @@ const Parametros = ({ user, onLogout }) => {
                                                 <button
                                                     onClick={() => handleAddContratoProyecto(item, type)}
                                                     className="btn-add-contrato-list"
+                                                    title="Agregar Contrato"
                                                 >
-                                                    📋
+                                                    <FontAwesomeIcon icon={faFile} /> Contrato
                                                 </button>
                                             )}
 
                                             <button
                                                 onClick={() => handleEdit(item, type)}
                                                 className="btn-edit"
+                                                title="Editar"
                                             >
-                                                ✏️
+                                                <FontAwesomeIcon icon={faEdit} /> Editar
                                             </button>
                                             <button
                                                 onClick={() => handleDelete(item.id, type)}
                                                 className="btn-delete"
+                                                title="Eliminar"
                                             >
-                                                🗑️
+                                                <FontAwesomeIcon icon={faTrash}/> Eliminar
                                             </button>
                                         </div>
                                     </td>
@@ -1542,13 +1572,13 @@ const Parametros = ({ user, onLogout }) => {
                                                 <div className="form-group">
                                                     <label htmlFor="valor">Valor *</label>
                                                     <input
-                                                        type="number"
+                                                        type="text"
                                                         id="valor"
                                                         name="valor"
                                                         value={formData.valor}
-                                                        onChange={handleInputChange}
-                                                        min="0"
-                                                        step="1000"
+                                                        onChange={handleValorChange}
+                                                        inputMode="numeric"
+                                                        placeholder="$ 0"
                                                     />
                                                 </div>
                                             </div>
@@ -1556,7 +1586,7 @@ const Parametros = ({ user, onLogout }) => {
                                                 type="button"
                                                 onClick={handleAddComponente}
                                                 className="btn-add-componente"
-                                                disabled={!formData.descripcionComponente || !formData.valor}
+                                                disabled={!formData.descripcionComponente || parseCurrencyValue(formData.valor) <= 0}
                                             >
                                                 <FontAwesomeIcon icon={faPlus} /> Agregar Componente
                                             </button>
@@ -1940,7 +1970,7 @@ const Parametros = ({ user, onLogout }) => {
                 <div className="modal-overlay">
                     <div className="modal-content contratos-modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h2>📄 Gestión de Contratos - {proyectoContratos?.nombre}</h2>
+                            <h2><FontAwesomeIcon icon={faFile} /> Gestión de Contratos - {proyectoContratos?.nombre}</h2>
                             <button onClick={() => setShowContratosModal(false)} className="btn-close">×</button>
                         </div>
 
@@ -2041,13 +2071,13 @@ const Parametros = ({ user, onLogout }) => {
                                             className={`contrato-tab ${contratoActiveTab === 'informacion' ? 'active' : ''}`}
                                             onClick={() => setContratoActiveTab('informacion')}
                                         >
-                                            📄 Información del Contrato
+                                        <FontAwesomeIcon icon={faInfo} />   Información del Contrato
                                         </button>
                                         <button
                                             className={`contrato-tab ${contratoActiveTab === 'anexos' ? 'active' : ''}`}
                                             onClick={() => setContratoActiveTab('anexos')}
                                         >
-                                            📎 Anexos ({anexos.length})
+                                            <FontAwesomeIcon icon={faFile} /> Anexos ({anexos.length})
                                         </button>
                                     </div>
 
@@ -2065,7 +2095,15 @@ const Parametros = ({ user, onLogout }) => {
                                                     </div>
                                                     <div className="form-group">
                                                         <label htmlFor="valor">Valor *</label>
-                                                        <input type="number" id="valor" name="valor" value={formContrato.valor} onChange={handleContratoChange} min="0" step="1000" />
+                                                        <input
+                                                            type="text"
+                                                            id="valor"
+                                                            name="valor"
+                                                            value={formContrato.valor}
+                                                            onChange={handleContratoValorChange}
+                                                            inputMode="numeric"
+                                                            placeholder="$ 0"
+                                                        />
                                                     </div>
                                                 </div>
                                                 <div className="form-group">
@@ -2250,7 +2288,7 @@ const Parametros = ({ user, onLogout }) => {
                                         type="button"
                                         onClick={handleSaveContrato}
                                         className="btn-save"
-                                        disabled={!formContrato.n_contrato || !formContrato.objeto || !formContrato.valor || !formContrato.estado}
+                                        disabled={!formContrato.n_contrato || !formContrato.objeto || parseCurrencyValue(formContrato.valor) <= 0 || !formContrato.estado}
                                     >
                                         <FontAwesomeIcon icon={faSave} /> {editingContrato ? 'Actualizar' : 'Guardar'} Contrato
                                     </button>

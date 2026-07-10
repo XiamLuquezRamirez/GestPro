@@ -327,6 +327,24 @@ class ProyectoController extends Controller
         $data = $request->all();
         $formContrato = $data['formContrato'] ?? $data;
         $anexos = $data['anexos'] ?? [];
+
+        $nullableDate = fn ($value) => ($value === '' || $value === null) ? null : $value;
+        $nullableInt = fn ($value) => ($value === '' || $value === null) ? null : (int) $value;
+        $nullableString = fn ($value) => ($value === '' || $value === null) ? null : $value;
+
+        $contratoPayload = [
+            'n_contrato' => $formContrato['n_contrato'],
+            'objeto' => $formContrato['objeto'],
+            'contratante' => $nullableString($formContrato['contratante'] ?? null),
+            'contratista' => $nullableString($formContrato['contratista'] ?? null),
+            'valor' => $formContrato['valor'],
+            'fecha_inicio' => $nullableDate($formContrato['fecha_inicio'] ?? null),
+            'fecha_fin' => $nullableDate($formContrato['fecha_fin'] ?? null),
+            'interventoria' => $nullableString($formContrato['interventoria'] ?? null),
+            'avance_financiero' => $nullableInt($formContrato['avance_financiero'] ?? null),
+            'avance_fisico' => $nullableInt($formContrato['avance_fisico'] ?? null),
+            'estado' => $formContrato['estado'],
+        ];
         
         DB::beginTransaction();
         try {
@@ -334,39 +352,16 @@ class ProyectoController extends Controller
             
             if (isset($formContrato['id']) && $formContrato['id']) {
                 // Actualizar contrato existente
-                DB::table('contratos')->where('id', $formContrato['id'])->update([
-                    'n_contrato' => $formContrato['n_contrato'],
-                    'objeto' => $formContrato['objeto'],
-                    'contratante' => $formContrato['contratante'],
-                    'contratista' => $formContrato['contratista'],
-                    'valor' => $formContrato['valor'],
-                    'fecha_inicio' => $formContrato['fecha_inicio'],
-                    'fecha_fin' => $formContrato['fecha_fin'],
-                    'interventoria' => $formContrato['interventoria'],
-                    'avance_financiero' => $formContrato['avance_financiero'] ?? '',
-                    'avance_fisico' => $formContrato['avance_fisico'] ?? '',
-                    'estado' => $formContrato['estado']
-                ]);
+                DB::table('contratos')->where('id', $formContrato['id'])->update($contratoPayload);
                 $contratoId = $formContrato['id'];
                 
                 // Eliminar anexos existentes del contrato
                 DB::table('anexos_contratos')->where('contrato_id', $contratoId)->delete();
             } else {
                 // Insertar nuevo contrato
-                $contratoId = DB::table('contratos')->insertGetId([
+                $contratoId = DB::table('contratos')->insertGetId(array_merge($contratoPayload, [
                     'proyecto' => $formContrato['proyecto'] ?? null,
-                    'n_contrato' => $formContrato['n_contrato'],
-                    'objeto' => $formContrato['objeto'],
-                    'contratante' => $formContrato['contratante'],
-                    'contratista' => $formContrato['contratista'],
-                    'valor' => $formContrato['valor'],
-                    'fecha_inicio' => $formContrato['fecha_inicio'],
-                    'fecha_fin' => $formContrato['fecha_fin'],
-                    'interventoria' => $formContrato['interventoria'],
-                    'avance_financiero' => $formContrato['avance_financiero'] ?? '',
-                    'avance_fisico' => $formContrato['avance_fisico'] ?? '',
-                    'estado' => $formContrato['estado']
-                ]);
+                ]));
             }
             
             // Guardar anexos
