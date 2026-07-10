@@ -405,6 +405,7 @@ const Parametros = ({ user, onLogout }) => {
                     descripcion: '', fecha_acta: '', valor_facturado: '', amortizacion_50: '',
                     valor_presente_acta: '', porcentaje_ejecutado: '', archivo: null
                 });
+                listContratos();
                 Swal.fire({ icon: 'success', title: 'Acta agregada correctamente' });
             } else {
                 Swal.fire({
@@ -425,6 +426,7 @@ const Parametros = ({ user, onLogout }) => {
             const response = await axios.post('/eliminarActaFinanciera', { id });
             if (response.data.success) {
                 setActasFinancieras(prev => prev.filter(acta => acta.id !== id));
+                listContratos();
                 Swal.fire({ icon: 'success', title: 'Acta eliminada correctamente' });
             } else {
                 Swal.fire({
@@ -463,6 +465,7 @@ const Parametros = ({ user, onLogout }) => {
                     { id: response.data.id, nombre: formActividad.nombre, peso: parseInt(formActividad.peso, 10), ultimo_avance: null, fecha_ultimo_avance: null }
                 ]);
                 setFormActividad({ nombre: '', peso: '' });
+                listContratos();
                 Swal.fire({ icon: 'success', title: 'Actividad agregada correctamente' });
             } else {
                 Swal.fire({
@@ -483,6 +486,7 @@ const Parametros = ({ user, onLogout }) => {
             const response = await axios.post('/eliminarActividad', { id });
             if (response.data.success) {
                 setActividades(prev => prev.filter(act => act.id !== id));
+                listContratos();
                 Swal.fire({ icon: 'success', title: 'Actividad eliminada correctamente' });
             } else {
                 Swal.fire({
@@ -525,6 +529,7 @@ const Parametros = ({ user, onLogout }) => {
                 }));
                 setActividadRegistrandoAvance(null);
                 setFormNuevoAvance({ fecha: '', porcentaje_ejecucion: '' });
+                listContratos();
                 Swal.fire({ icon: 'success', title: 'Avance registrado correctamente' });
             } else {
                 Swal.fire({
