@@ -249,6 +249,11 @@ const Parametros = ({ user, onLogout }) => {
         valor_presente_acta: '', porcentaje_ejecutado: '', archivo: null
     });
 
+    const [actividades, setActividades] = useState([]);
+    const [formActividad, setFormActividad] = useState({ nombre: '', peso: '' });
+    const [actividadRegistrandoAvance, setActividadRegistrandoAvance] = useState(null);
+    const [formNuevoAvance, setFormNuevoAvance] = useState({ fecha: '', porcentaje_ejecucion: '' });
+
     // Manejar cambios en el formulario de contratos
     const handleContratoChange = (e) => {
         const { name, value } = e.target;
@@ -431,6 +436,88 @@ const Parametros = ({ user, onLogout }) => {
         } catch (error) {
             console.error('Error al eliminar acta financiera:', error);
             Swal.fire({ icon: 'error', title: 'Error al eliminar el acta', text: error.response?.data?.mensaje || 'Error interno del servidor' });
+        }
+    };
+
+    // Manejar cambios en el formulario de nueva actividad
+    const handleActividadChange = (e) => {
+        const { name, value } = e.target;
+        setFormActividad(prev => ({ ...prev, [name]: value }));
+    };
+
+    // Agregar actividad ponderada
+    const handleAddActividad = async () => {
+        if (!formActividad.nombre || !formActividad.peso) {
+            Swal.fire({ icon: 'warning', title: 'El nombre y el peso son obligatorios' });
+            return;
+        }
+        try {
+            const response = await axios.post('/guardarActividad', {
+                contrato_id: editingContrato.id,
+                nombre: formActividad.nombre,
+                peso: formActividad.peso
+            });
+            if (response.data.success) {
+                setActividades(prev => [
+                    ...prev,
+                    { id: response.data.id, nombre: formActividad.nombre, peso: parseInt(formActividad.peso, 10), ultimo_avance: null, fecha_ultimo_avance: null }
+                ]);
+                setFormActividad({ nombre: '', peso: '' });
+                Swal.fire({ icon: 'success', title: 'Actividad agregada correctamente' });
+            }
+        } catch (error) {
+            console.error('Error al agregar actividad:', error);
+            Swal.fire({ icon: 'error', title: 'Error al agregar la actividad', text: error.response?.data?.mensaje || 'Error interno del servidor' });
+        }
+    };
+
+    // Eliminar actividad
+    const handleDeleteActividad = async (id) => {
+        try {
+            const response = await axios.post('/eliminarActividad', { id });
+            if (response.data.success) {
+                setActividades(prev => prev.filter(act => act.id !== id));
+                Swal.fire({ icon: 'success', title: 'Actividad eliminada correctamente' });
+            }
+        } catch (error) {
+            console.error('Error al eliminar actividad:', error);
+            Swal.fire({ icon: 'error', title: 'Error al eliminar la actividad', text: error.response?.data?.mensaje || 'Error interno del servidor' });
+        }
+    };
+
+    // Manejar cambios en el mini-formulario de "registrar avance"
+    const handleNuevoAvanceChange = (e) => {
+        const { name, value } = e.target;
+        setFormNuevoAvance(prev => ({ ...prev, [name]: value }));
+    };
+
+    // Registrar un nuevo avance (histórico, por fecha) para una actividad
+    const handleRegistrarAvance = async (actividadId) => {
+        if (!formNuevoAvance.fecha || formNuevoAvance.porcentaje_ejecucion === '') {
+            Swal.fire({ icon: 'warning', title: 'La fecha y el porcentaje son obligatorios' });
+            return;
+        }
+        try {
+            const response = await axios.post('/registrarAvanceActividad', {
+                actividad_id: actividadId,
+                fecha: formNuevoAvance.fecha,
+                porcentaje_ejecucion: formNuevoAvance.porcentaje_ejecucion
+            });
+            if (response.data.success) {
+                setActividades(prev => prev.map(act => {
+                    if (act.id !== actividadId) return act;
+                    const esMasReciente = !act.fecha_ultimo_avance || formNuevoAvance.fecha >= act.fecha_ultimo_avance;
+                    return esMasReciente
+                        ? { ...act, ultimo_avance: parseInt(formNuevoAvance.porcentaje_ejecucion, 10), fecha_ultimo_avance: formNuevoAvance.fecha }
+                        : act;
+                }));
+                setActividadRegistrandoAvance(null);
+                setFormNuevoAvance({ fecha: '', porcentaje_ejecucion: '' });
+                Swal.fire({ icon: 'success', title: 'Avance registrado correctamente' });
+            }
+        } catch (error) {
+            console.error('Error al registrar avance:', error);
+            Swal.fire({ icon: 'error', title: 'Error al registrar el avance', text: error.response?.data?.mensaje || 'Error interno del servidor' });
         }
     };
 
