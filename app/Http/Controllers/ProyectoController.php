@@ -64,6 +64,12 @@ class ProyectoController extends Controller
                     ->where('contrato_id', $contrato->id)
                     ->get();
                 $contrato->anexos = $anexos;
+
+                $contrato->avancesFinancieros = DB::table('avance_financiero')
+                    ->select('id', 'descripcion', 'fecha_acta', 'valor_facturado', 'amortizacion_50', 'valor_presente_acta', 'porcentaje_ejecutado', 'anexo')
+                    ->where('contrato_id', $contrato->id)
+                    ->orderBy('fecha_acta', 'desc')
+                    ->get();
             }
 
 
@@ -796,6 +802,92 @@ class ProyectoController extends Controller
         }
     }
 
+    public function guardarActaFinanciera(Request $request)
+    {
+        $data = $request->all();
+
+        $nullableDecimal = fn ($value) => ($value === '' || $value === null) ? null : (float) $value;
+        $nullableInt = fn ($value) => ($value === '' || $value === null) ? null : (int) $value;
+        $nullableString = fn ($value) => ($value === '' || $value === null) ? null : $value;
+
+        try {
+            $id = DB::table('avance_financiero')->insertGetId([
+                'contrato_id' => $data['contrato_id'],
+                'descripcion' => $nullableString($data['descripcion'] ?? null),
+                'fecha_acta' => $data['fecha_acta'],
+                'valor_facturado' => $nullableDecimal($data['valor_facturado'] ?? null),
+                'amortizacion_50' => $nullableDecimal($data['amortizacion_50'] ?? null),
+                'valor_presente_acta' => $nullableDecimal($data['valor_presente_acta'] ?? null),
+                'porcentaje_ejecutado' => $nullableInt($data['porcentaje_ejecutado'] ?? null),
+                'anexo' => $nullableString($data['anexo'] ?? null),
+            ]);
+
+            return response()->json(['success' => true, 'id' => $id]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'mensaje' => $e->getMessage()], 500);
+        }
+    }
+
+    public function eliminarActaFinanciera(Request $request)
+    {
+        try {
+            $actaId = $request->input('id');
+            $acta = DB::table('avance_financiero')->where('id', $actaId)->first();
+
+            if (!$acta) {
+                return response()->json(['success' => false, 'mensaje' => 'Acta no encontrada'], 404);
+            }
+
+            if ($acta->anexo) {
+                $rutaCompleta = public_path($acta->anexo);
+                if (file_exists($rutaCompleta)) {
+                    unlink($rutaCompleta);
+                }
+            }
+
+            DB::table('avance_financiero')->where('id', $actaId)->delete();
+
+            return response()->json(['success' => true, 'mensaje' => 'Acta eliminada correctamente']);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'mensaje' => 'Error al eliminar el acta: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function subirActa(Request $request)
+    {
+        try {
+            if ($request->hasFile('archivo')) {
+                $archivo = $request->file('archivo');
+
+                $request->validate([
+                    'archivo' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png|max:10240',
+                ]);
+
+                $nombreArchivo = time() . '_' . uniqid() . '.' . $archivo->getClientOriginalExtension();
+
+                $directorio = 'actas_avance';
+                $rutaCompleta = public_path($directorio);
+                if (!file_exists($rutaCompleta)) {
+                    mkdir($rutaCompleta, 0755, true);
+                }
+
+                $archivo->move($rutaCompleta, $nombreArchivo);
+                $rutaArchivo = $directorio . '/' . $nombreArchivo;
+
+                return response()->json([
+                    'success' => true,
+                    'ruta' => $rutaArchivo,
+                    'nombre_original' => $archivo->getClientOriginalName(),
+                    'mensaje' => 'Archivo subido correctamente'
+                ]);
+            }
+
+            return response()->json(['success' => false, 'mensaje' => 'No se encontró ningún archivo'], 400);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'mensaje' => 'Error al subir el archivo: ' . $e->getMessage()], 500);
+        }
+    }
+
     public function listarContratos(Request $request)
     {
         $proyecto = $request->all();
@@ -804,6 +896,11 @@ class ProyectoController extends Controller
         foreach ($contratos as $contrato) {
             $anexos = DB::table('anexos_contratos')->where('contrato_id', $contrato->id)->get();
             $contrato->anexos = $anexos;
+
+            $contrato->avancesFinancieros = DB::table('avance_financiero')
+                ->where('contrato_id', $contrato->id)
+                ->orderBy('fecha_acta', 'desc')
+                ->get();
         }
 
         return response()->json($contratos);
