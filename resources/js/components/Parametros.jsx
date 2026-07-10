@@ -2615,8 +2615,8 @@ const Parametros = ({ user, onLogout }) => {
                                                                 {actasFinancieras.map(acta => (
                                                                     <tr key={acta.id}>
                                                                         <td>{acta.fecha_acta}</td>
-                                                                        <td>$ {Number(acta.valor_facturado || 0).toLocaleString()}</td>
-                                                                        <td>$ {Number(acta.valor_presente_acta || 0).toLocaleString()}</td>
+                                                                        <td>{formatCurrency(Number(acta.valor_facturado || 0))}</td>
+                                                                        <td>{formatCurrency(Number(acta.valor_presente_acta || 0))}</td>
                                                                         <td>{acta.porcentaje_ejecutado ? `${acta.porcentaje_ejecutado}%` : '-'}</td>
                                                                         <td>
                                                                             {acta.anexo ? (
@@ -2673,7 +2673,9 @@ const Parametros = ({ user, onLogout }) => {
 
                                             <div className="anexos-list">
                                                 <h4>Actividades del Contrato ({actividades.length})</h4>
-                                                {actividades.length === 0 ? (
+                                                {(() => {
+                                                    const sumaPesos = actividades.reduce((s, a) => s + (a.peso || 0), 0);
+                                                    return actividades.length === 0 ? (
                                                     <div className="no-anexos">
                                                         <p>No hay actividades registradas</p>
                                                     </div>
@@ -2749,15 +2751,16 @@ const Parametros = ({ user, onLogout }) => {
                                                             </table>
                                                         </div>
                                                         <div className="avance-fisico-resumen">
-                                                            <span className={`avance-fisico-suma-pesos ${actividades.reduce((s, a) => s + (a.peso || 0), 0) !== 100 ? 'advertencia' : ''}`}>
-                                                                Suma de pesos: {actividades.reduce((s, a) => s + (a.peso || 0), 0)}%
+                                                            <span className={`avance-fisico-suma-pesos ${sumaPesos !== 100 ? 'advertencia' : ''}`}>
+                                                                Suma de pesos: {sumaPesos}%
                                                             </span>
                                                             <span className="avance-fisico-total">
                                                                 Avance físico total: {Math.round(actividades.reduce((s, a) => s + ((a.peso || 0) / 100) * (a.ultimo_avance || 0), 0))}%
                                                             </span>
                                                         </div>
                                                     </>
-                                                )}
+                                                    );
+                                                })()}
                                             </div>
                                         </div>
                                     )}
