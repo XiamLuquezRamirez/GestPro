@@ -934,7 +934,15 @@ class ProyectoController extends Controller
     public function eliminarActividad(Request $request)
     {
         try {
-            DB::table('actividades_contrato')->where('id', $request->input('id'))->delete();
+            $actividadId = $request->input('id');
+            $actividad = DB::table('actividades_contrato')->where('id', $actividadId)->first();
+
+            if (!$actividad) {
+                return response()->json(['success' => false, 'mensaje' => 'Actividad no encontrada'], 404);
+            }
+
+            DB::table('actividades_contrato')->where('id', $actividadId)->delete();
+
             return response()->json(['success' => true, 'mensaje' => 'Actividad eliminada correctamente']);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'mensaje' => 'Error al eliminar la actividad: ' . $e->getMessage()], 500);
