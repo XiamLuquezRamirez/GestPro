@@ -2109,6 +2109,30 @@ tr:hover {
     background: #f44336;
     color: #fff;
 }
+
+.avance-fisico-resumen {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.avance-fisico-suma-pesos {
+    color: #43a047;
+}
+
+.avance-fisico-suma-pesos.advertencia {
+    color: #e53935;
+}
+
+.avance-fisico-total {
+    color: #1976d2;
+    font-size: 1.1rem;
+}
 /* Estilos para el componente de Login */
 .login-container {
     min-height: 100vh;
