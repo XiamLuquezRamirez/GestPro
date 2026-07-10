@@ -70,6 +70,23 @@ class ProyectoController extends Controller
                     ->where('contrato_id', $contrato->id)
                     ->orderBy('fecha_acta', 'desc')
                     ->get();
+
+                $actividades = DB::table('actividades_contrato')
+                    ->select('id', 'nombre', 'peso')
+                    ->where('contrato_id', $contrato->id)
+                    ->get();
+
+                foreach ($actividades as $actividad) {
+                    $ultimoAvance = DB::table('actividad_avances')
+                        ->where('actividad_id', $actividad->id)
+                        ->orderBy('fecha', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    $actividad->ultimo_avance = $ultimoAvance->porcentaje_ejecucion ?? null;
+                    $actividad->fecha_ultimo_avance = $ultimoAvance->fecha ?? null;
+                }
+
+                $contrato->actividades = $actividades;
             }
 
 
@@ -889,6 +906,58 @@ class ProyectoController extends Controller
         }
     }
 
+    public function guardarActividad(Request $request)
+    {
+        $data = $request->all();
+
+        try {
+            if (isset($data['id']) && $data['id']) {
+                DB::table('actividades_contrato')->where('id', $data['id'])->update([
+                    'nombre' => $data['nombre'],
+                    'peso' => (int) $data['peso'],
+                ]);
+                $id = $data['id'];
+            } else {
+                $id = DB::table('actividades_contrato')->insertGetId([
+                    'contrato_id' => $data['contrato_id'],
+                    'nombre' => $data['nombre'],
+                    'peso' => (int) $data['peso'],
+                ]);
+            }
+
+            return response()->json(['success' => true, 'id' => $id]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'mensaje' => $e->getMessage()], 500);
+        }
+    }
+
+    public function eliminarActividad(Request $request)
+    {
+        try {
+            DB::table('actividades_contrato')->where('id', $request->input('id'))->delete();
+            return response()->json(['success' => true, 'mensaje' => 'Actividad eliminada correctamente']);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'mensaje' => 'Error al eliminar la actividad: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function registrarAvanceActividad(Request $request)
+    {
+        $data = $request->all();
+
+        try {
+            DB::table('actividad_avances')->insert([
+                'actividad_id' => $data['actividad_id'],
+                'fecha' => $data['fecha'],
+                'porcentaje_ejecucion' => (int) $data['porcentaje_ejecucion'],
+            ]);
+
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'mensaje' => $e->getMessage()], 500);
+        }
+    }
+
     public function listarContratos(Request $request)
     {
         $proyecto = $request->all();
@@ -902,6 +971,18 @@ class ProyectoController extends Controller
                 ->where('contrato_id', $contrato->id)
                 ->orderBy('fecha_acta', 'desc')
                 ->get();
+
+            $actividades = DB::table('actividades_contrato')->where('contrato_id', $contrato->id)->get();
+            foreach ($actividades as $actividad) {
+                $ultimoAvance = DB::table('actividad_avances')
+                    ->where('actividad_id', $actividad->id)
+                    ->orderBy('fecha', 'desc')
+                    ->orderBy('id', 'desc')
+                    ->first();
+                $actividad->ultimo_avance = $ultimoAvance->porcentaje_ejecucion ?? null;
+                $actividad->fecha_ultimo_avance = $ultimoAvance->fecha ?? null;
+            }
+            $contrato->actividades = $actividades;
         }
 
         return response()->json($contratos);
