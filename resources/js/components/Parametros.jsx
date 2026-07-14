@@ -259,6 +259,10 @@ const Parametros = ({ user, onLogout }) => {
     // Manejar cambios en el formulario de contratos
     const handleContratoChange = (e) => {
         const { name, value, type, checked } = e.target;
+        if (name === 'anticipo' && !checked) {
+            setFormContrato(prev => ({ ...prev, anticipo: false, porcentaje_anticipo: '' }));
+            return;
+        }
         setFormContrato(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     };
 
