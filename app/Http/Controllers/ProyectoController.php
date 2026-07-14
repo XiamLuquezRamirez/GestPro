@@ -53,7 +53,7 @@ class ProyectoController extends Controller
             $proyecto->totalPresupuesto = $totalPresupuesto;
 
             $contratos = DB::table('contratos')
-                ->select('id', 'n_contrato', 'objeto', 'valor', 'estado', 'contratante', 'contratista', 'fecha_inicio', 'fecha_fin', 'interventoria', 'avance_financiero', 'avance_fisico')
+                ->select('id', 'n_contrato', 'objeto', 'valor', 'estado', 'contratante', 'contratista', 'fecha_inicio', 'fecha_fin', 'interventoria', 'avance_financiero', 'avance_fisico', 'anticipo', 'porcentaje_anticipo')
                 ->where('proyecto', $proyecto->id)
                 ->get();
                 
@@ -367,6 +367,8 @@ class ProyectoController extends Controller
             'avance_financiero' => $nullableInt($formContrato['avance_financiero'] ?? null),
             'avance_fisico' => $nullableInt($formContrato['avance_fisico'] ?? null),
             'estado' => $formContrato['estado'],
+            'anticipo' => (bool) ($formContrato['anticipo'] ?? false),
+            'porcentaje_anticipo' => $nullableInt($formContrato['porcentaje_anticipo'] ?? null),
         ];
         
         DB::beginTransaction();
