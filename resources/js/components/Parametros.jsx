@@ -353,6 +353,32 @@ const Parametros = ({ user, onLogout }) => {
         }
     };
 
+    const handleChangeValorFacturado = (e) => {
+        const { value } = e.target;
+        const raw = value.replace(/\D/g, '');
+        setFormActaFinanciera(prev => ({
+            ...prev,
+            valor_facturado: raw ? formatCurrency(raw) : ''
+        }));
+    };
+
+    const handleChangeAmortizacion50 = (e) => {
+        const { value } = e.target;
+        const raw = value.replace(/\D/g, '');
+        setFormActaFinanciera(prev => ({
+            ...prev,
+            amortizacion_50: raw ? formatCurrency(raw) : ''
+        }));
+    };
+    const handleChangeValorPresenteActa = (e) => {
+        const { value } = e.target;
+        const raw = value.replace(/\D/g, '');
+        setFormActaFinanciera(prev => ({
+            ...prev,
+            valor_presente_acta: raw ? formatCurrency(raw) : ''
+        }));
+    };
+
     // Manejar cambios en el formulario de acta financiera
     const handleActaFinancieraChange = (e) => {
         const { name, value, files } = e.target;
@@ -389,7 +415,7 @@ const Parametros = ({ user, onLogout }) => {
                 contrato_id: editingContrato.id,
                 descripcion: formActaFinanciera.descripcion,
                 fecha_acta: formActaFinanciera.fecha_acta,
-                valor_facturado: formActaFinanciera.valor_facturado,
+                valor_facturado: parseCurrencyValue(formActaFinanciera.valor_facturado),
                 amortizacion_50: formActaFinanciera.amortizacion_50,
                 valor_presente_acta: formActaFinanciera.valor_presente_acta,
                 porcentaje_ejecutado: formActaFinanciera.porcentaje_ejecutado,
@@ -398,7 +424,12 @@ const Parametros = ({ user, onLogout }) => {
 
             if (response.data.success) {
                 setActasFinancieras(prev => [
-                    { ...formActaFinanciera, id: response.data.id, anexo: rutaAnexo },
+                    {
+                        ...formActaFinanciera,
+                        id: response.data.id,
+                        anexo: rutaAnexo,
+                        valor_facturado: parseCurrencyValue(formActaFinanciera.valor_facturado),
+                    },
                     ...prev
                 ]);
                 setFormActaFinanciera({
@@ -2556,17 +2587,39 @@ const Parametros = ({ user, onLogout }) => {
                                                 <div className="form-row">
                                                     <div className="form-group">
                                                         <label htmlFor="valor_facturado">Valor Facturado *</label>
-                                                        <input type="number" id="valor_facturado" name="valor_facturado" value={formActaFinanciera.valor_facturado} onChange={handleActaFinancieraChange} />
+                                                        <input
+                                                            type="text"
+                                                            id="valor_facturado"
+                                                            name="valor_facturado"
+                                                            value={formActaFinanciera.valor_facturado}
+                                                            onChange={handleChangeValorFacturado}
+                                                            inputMode="numeric"
+                                                            placeholder="$ 0"
+                                                        />
                                                     </div>
                                                     <div className="form-group">
                                                         <label htmlFor="amortizacion_50">Amortización 50%</label>
-                                                        <input type="number" id="amortizacion_50" name="amortizacion_50" value={formActaFinanciera.amortizacion_50} onChange={handleActaFinancieraChange} />
+                                                        <input type="text" 
+                                                        id="amortizacion_50" 
+                                                        name="amortizacion_50" 
+                                                        value={formActaFinanciera.amortizacion_50}  
+                                                         onChange={handleChangeAmortizacion50} 
+                                                         inputMode="numeric"
+                                                         placeholder="$ 0"
+                                                         />
                                                     </div>
                                                 </div>
                                                 <div className="form-row">
                                                     <div className="form-group">
                                                         <label htmlFor="valor_presente_acta">Valor Presente del Acta</label>
-                                                        <input type="number" id="valor_presente_acta" name="valor_presente_acta" value={formActaFinanciera.valor_presente_acta} onChange={handleActaFinancieraChange} />
+                                                        <input type="text" 
+                                                        id="valor_presente_acta" 
+                                                        name="valor_presente_acta" 
+                                                        value={formActaFinanciera.valor_presente_acta} 
+                                                        onChange={handleChangeValorPresenteActa} 
+                                                        inputMode="numeric"
+                                                        placeholder="$ 0"
+                                                        />
                                                     </div>
                                                     <div className="form-group">
                                                         <label htmlFor="porcentaje_ejecutado">% Ejecutado</label>
