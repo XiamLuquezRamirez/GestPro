@@ -362,26 +362,15 @@ const Parametros = ({ user, onLogout }) => {
     const handleChangeValorFacturado = (e) => {
         const { value } = e.target;
         const raw = value.replace(/\D/g, '');
+        const valorFacturado = raw ? parseInt(raw, 10) : 0;
+        const porcentajeAnticipo = parseInt(formContrato.porcentaje_anticipo, 10) || 0;
+        const amortizacion = formContrato.anticipo ? Math.round(valorFacturado * (porcentajeAnticipo / 100)) : 0;
+        const valorPresente = valorFacturado - amortizacion;
         setFormActaFinanciera(prev => ({
             ...prev,
-            valor_facturado: raw ? formatCurrency(raw) : ''
-        }));
-    };
-
-    const handleChangeAmortizacion50 = (e) => {
-        const { value } = e.target;
-        const raw = value.replace(/\D/g, '');
-        setFormActaFinanciera(prev => ({
-            ...prev,
-            amortizacion_50: raw ? formatCurrency(raw) : ''
-        }));
-    };
-    const handleChangeValorPresenteActa = (e) => {
-        const { value } = e.target;
-        const raw = value.replace(/\D/g, '');
-        setFormActaFinanciera(prev => ({
-            ...prev,
-            valor_presente_acta: raw ? formatCurrency(raw) : ''
+            valor_facturado: raw ? formatCurrency(raw) : '',
+            amortizacion_50: raw ? amortizacion : '',
+            valor_presente_acta: raw ? valorPresente : ''
         }));
     };
 
@@ -2638,13 +2627,14 @@ const Parametros = ({ user, onLogout }) => {
                                                         />
                                                     </div>
                                                     <div className="form-group">
-                                                        <label htmlFor="amortizacion_50">Amortización 50%</label>
-                                                        <input type="text" 
-                                                        id="amortizacion_50" 
-                                                        name="amortizacion_50" 
-                                                        value={formActaFinanciera.amortizacion_50}  
-                                                         onChange={handleChangeAmortizacion50} 
-                                                         inputMode="numeric"
+                                                        <label htmlFor="amortizacion_50">
+                                                            Amortización ({formContrato.anticipo ? `${formContrato.porcentaje_anticipo || 0}%` : '0%'})
+                                                        </label>
+                                                        <input type="text"
+                                                        id="amortizacion_50"
+                                                        name="amortizacion_50"
+                                                        value={formActaFinanciera.amortizacion_50 !== '' ? formatCurrency(formActaFinanciera.amortizacion_50) : ''}
+                                                         disabled
                                                          placeholder="$ 0"
                                                          />
                                                     </div>
@@ -2652,12 +2642,11 @@ const Parametros = ({ user, onLogout }) => {
                                                 <div className="form-row">
                                                     <div className="form-group">
                                                         <label htmlFor="valor_presente_acta">Valor Presente del Acta</label>
-                                                        <input type="text" 
-                                                        id="valor_presente_acta" 
-                                                        name="valor_presente_acta" 
-                                                        value={formActaFinanciera.valor_presente_acta} 
-                                                        onChange={handleChangeValorPresenteActa} 
-                                                        inputMode="numeric"
+                                                        <input type="text"
+                                                        id="valor_presente_acta"
+                                                        name="valor_presente_acta"
+                                                        value={formActaFinanciera.valor_presente_acta !== '' ? formatCurrency(formActaFinanciera.valor_presente_acta) : ''}
+                                                        disabled
                                                         placeholder="$ 0"
                                                         />
                                                     </div>
