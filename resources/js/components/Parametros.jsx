@@ -359,13 +359,18 @@ const Parametros = ({ user, onLogout }) => {
         }
     };
 
+    const calcularAmortizacionYValorPresente = (valorFacturado) => {
+        const porcentajeAnticipo = parseInt(formContrato.porcentaje_anticipo, 10) || 0;
+        const amortizacion = formContrato.anticipo ? Math.round(valorFacturado * (porcentajeAnticipo / 100)) : 0;
+        const valorPresente = valorFacturado - amortizacion;
+        return { amortizacion, valorPresente };
+    };
+
     const handleChangeValorFacturado = (e) => {
         const { value } = e.target;
         const raw = value.replace(/\D/g, '');
         const valorFacturado = raw ? parseInt(raw, 10) : 0;
-        const porcentajeAnticipo = parseInt(formContrato.porcentaje_anticipo, 10) || 0;
-        const amortizacion = formContrato.anticipo ? Math.round(valorFacturado * (porcentajeAnticipo / 100)) : 0;
-        const valorPresente = valorFacturado - amortizacion;
+        const { amortizacion, valorPresente } = calcularAmortizacionYValorPresente(valorFacturado);
         setFormActaFinanciera(prev => ({
             ...prev,
             valor_facturado: raw ? formatCurrency(raw) : '',
@@ -373,6 +378,17 @@ const Parametros = ({ user, onLogout }) => {
             valor_presente_acta: raw ? valorPresente : ''
         }));
     };
+
+    // Si el usuario cambia el anticipo/porcentaje del contrato después de haber escrito
+    // el valor facturado del acta, recalcula amortización/valor presente con el nuevo porcentaje.
+    useEffect(() => {
+        setFormActaFinanciera(prev => {
+            if (prev.valor_facturado === '') return prev;
+            const valorFacturado = parseCurrencyValue(prev.valor_facturado);
+            const { amortizacion, valorPresente } = calcularAmortizacionYValorPresente(valorFacturado);
+            return { ...prev, amortizacion_50: amortizacion, valor_presente_acta: valorPresente };
+        });
+    }, [formContrato.anticipo, formContrato.porcentaje_anticipo]);
 
     // Manejar cambios en el formulario de acta financiera
     const handleActaFinancieraChange = (e) => {
