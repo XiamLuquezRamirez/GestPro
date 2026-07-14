@@ -2470,6 +2470,33 @@ const Parametros = ({ user, onLogout }) => {
                                                     </div>
 
                                                 </div>
+                                                <div className="form-row">
+                                                    <div className="form-group form-group-checkbox">
+                                                        <label htmlFor="anticipo">
+                                                            <input
+                                                                type="checkbox"
+                                                                id="anticipo"
+                                                                name="anticipo"
+                                                                checked={formContrato.anticipo}
+                                                                onChange={handleContratoChange}
+                                                            />
+                                                            ¿Lleva anticipo?
+                                                        </label>
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="porcentaje_anticipo">% de Anticipo</label>
+                                                        <input
+                                                            type="number"
+                                                            id="porcentaje_anticipo"
+                                                            name="porcentaje_anticipo"
+                                                            value={formContrato.porcentaje_anticipo}
+                                                            onChange={handleContratoChange}
+                                                            min="0"
+                                                            max="100"
+                                                            disabled={!formContrato.anticipo}
+                                                        />
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     )}
