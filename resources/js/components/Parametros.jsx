@@ -240,7 +240,9 @@ const Parametros = ({ user, onLogout }) => {
         avance_financiero: '',
         avance_fisico: '',
         estado: '',
-        proyecto: ''
+        proyecto: '',
+        anticipo: false,
+        porcentaje_anticipo: ''
     });
 
     const [actasFinancieras, setActasFinancieras] = useState([]);
@@ -256,8 +258,8 @@ const Parametros = ({ user, onLogout }) => {
 
     // Manejar cambios en el formulario de contratos
     const handleContratoChange = (e) => {
-        const { name, value } = e.target;
-        setFormContrato(prev => ({ ...prev, [name]: value }));
+        const { name, value, type, checked } = e.target;
+        setFormContrato(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     };
 
     // Manejar cambios en el formulario de anexos
@@ -619,7 +621,8 @@ const Parametros = ({ user, onLogout }) => {
             fecha_fin: '', interventoria: '',
             avance_financiero: '',
             avance_fisico: '', estado: '',
-            proyecto: proyectoContratos.id || ''
+            proyecto: proyectoContratos.id || '',
+            anticipo: false, porcentaje_anticipo: ''
         });
     };
 
@@ -644,7 +647,9 @@ const Parametros = ({ user, onLogout }) => {
             avance_financiero: contrato.avance_financiero || '',
             avance_fisico: contrato.avance_fisico || '',
             estado: contrato.estado || '',
-            proyecto: contrato.proyecto || ''
+            proyecto: contrato.proyecto || '',
+            anticipo: !!contrato.anticipo,
+            porcentaje_anticipo: contrato.porcentaje_anticipo ?? ''
         });
         // Cargar anexos del contrato si existen
         if (contrato.anexos && contrato.anexos.length > 0) {
@@ -718,7 +723,8 @@ const Parametros = ({ user, onLogout }) => {
             interventoria: '',
             avance_financiero: '',
             avance_fisico: '', estado: '',
-            proyecto: proyectoContratos.id || ''
+            proyecto: proyectoContratos.id || '',
+            anticipo: false, porcentaje_anticipo: ''
         });
         setShowContratoForm(false);
     };
@@ -734,7 +740,8 @@ const Parametros = ({ user, onLogout }) => {
             avance_financiero: '',
             avance_fisico: '',
             estado: '',
-            proyecto: proyectoContratos.id || ''
+            proyecto: proyectoContratos.id || '',
+            anticipo: false, porcentaje_anticipo: ''
         });
         setAnexos([]);
         setFormAnexo({ descripcion: '', archivo: null });
@@ -759,7 +766,8 @@ const Parametros = ({ user, onLogout }) => {
             fecha_fin: '', interventoria: '',
             avance_financiero: '',
             avance_fisico: '', estado: '',
-            proyecto: proyectoContratos.id || ''
+            proyecto: proyectoContratos.id || '',
+            anticipo: false, porcentaje_anticipo: ''
         });
         setAnexos([]);
         setFormAnexo({ descripcion: '', archivo: null });
