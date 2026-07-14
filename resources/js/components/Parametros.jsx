@@ -1432,7 +1432,8 @@ const Parametros = ({ user, onLogout }) => {
             fecha_fin: '', interventoria: '',
             avance_financiero: '',
             avance_fisico: '', estado: '',
-            proyecto: item.id || ''
+            proyecto: item.id || '',
+            anticipo: false, porcentaje_anticipo: ''
         });
         setShowContratosModal(true);
     };
