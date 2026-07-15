@@ -375,21 +375,20 @@ const Parametros = ({ user, onLogout }) => {
 
     const calcularAmortizacionYValorPresente = (valorFacturado) => {
         const porcentajeAnticipo = parseInt(formContrato.porcentaje_anticipo, 10) || 0;
-        const amortizacion = formContrato.anticipo ? Math.round(valorFacturado * (porcentajeAnticipo / 100)) : 0;
-        const valorPresente = valorFacturado - amortizacion;
+        const amortizacion = formContrato.anticipo ? Math.round(valorFacturado * (porcentajeAnticipo / 100) * 100) / 100 : 0;
+        const valorPresente = Math.round((valorFacturado - amortizacion) * 100) / 100;
         return { amortizacion, valorPresente };
     };
 
     const handleChangeValorFacturado = (e) => {
-        const { value } = e.target;
-        const raw = value.replace(/\D/g, '');
-        const valorFacturado = raw ? parseInt(raw, 10) : 0;
+        const sanitized = sanitizeCurrencyInput(e.target.value);
+        const valorFacturado = parseCurrencyValue(sanitized);
         const { amortizacion, valorPresente } = calcularAmortizacionYValorPresente(valorFacturado);
         setFormActaFinanciera(prev => ({
             ...prev,
-            valor_facturado: raw ? formatCurrency(raw) : '',
-            amortizacion_50: raw ? amortizacion : '',
-            valor_presente_acta: raw ? valorPresente : ''
+            valor_facturado: sanitized ? formatCurrencyInput(sanitized) : '',
+            amortizacion_50: sanitized ? amortizacion : '',
+            valor_presente_acta: sanitized ? valorPresente : ''
         }));
     };
 
@@ -1378,30 +1377,54 @@ const Parametros = ({ user, onLogout }) => {
         return new Intl.NumberFormat('es-CO', {
             style: 'currency',
             currency: 'COP',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
         }).format(amount);
     };
 
     const parseCurrencyValue = (value) => {
         if (value === '' || value === null || value === undefined) return 0;
-        const numeric = String(value).replace(/\D/g, '');
-        return numeric ? parseInt(numeric, 10) : 0;
+        const cleaned = String(value).replace(/[^\d,]/g, '');
+        if (!cleaned) return 0;
+        const [enteros, ...decimalesPartes] = cleaned.split(',');
+        const decimales = decimalesPartes.join('');
+        const normalizado = decimales ? `${enteros}.${decimales}` : enteros;
+        const parsed = parseFloat(normalizado);
+        return isNaN(parsed) ? 0 : parsed;
+    };
+
+    // Sanitiza lo que el usuario escribe en un input de moneda: solo dígitos y una coma
+    // decimal, con máximo 2 dígitos después de la coma (formato "1487342187,33").
+    const sanitizeCurrencyInput = (value) => {
+        const stripped = value.replace(/[^\d,]/g, '');
+        const primeraComa = stripped.indexOf(',');
+        if (primeraComa === -1) return stripped;
+        const enteros = stripped.slice(0, primeraComa);
+        const decimales = stripped.slice(primeraComa + 1).replace(/,/g, '').slice(0, 2);
+        return `${enteros},${decimales}`;
+    };
+
+    // Formatea en vivo un valor ya sanitizado: agrupa miles en la parte entera y conserva
+    // la parte decimal tal cual se está escribiendo (sin redondearla mientras se tipea).
+    const formatCurrencyInput = (raw) => {
+        const [enteros, decimales] = raw.split(',');
+        const enterosAgrupados = enteros ? String(parseInt(enteros, 10)).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '0';
+        return decimales !== undefined ? `$ ${enterosAgrupados},${decimales}` : `$ ${enterosAgrupados}`;
     };
 
     const handleValorChange = (e) => {
-        const raw = e.target.value.replace(/\D/g, '');
+        const sanitized = sanitizeCurrencyInput(e.target.value);
         setFormData(prev => ({
             ...prev,
-            valor: raw ? formatCurrency(raw) : ''
+            valor: sanitized ? formatCurrencyInput(sanitized) : ''
         }));
     };
 
     const handleContratoValorChange = (e) => {
-        const raw = e.target.value.replace(/\D/g, '');
+        const sanitized = sanitizeCurrencyInput(e.target.value);
         setFormContrato(prev => ({
             ...prev,
-            valor: raw ? formatCurrency(raw) : ''
+            valor: sanitized ? formatCurrencyInput(sanitized) : ''
         }));
     };
 
@@ -1884,7 +1907,7 @@ const Parametros = ({ user, onLogout }) => {
                                                         name="valor"
                                                         value={formData.valor}
                                                         onChange={handleValorChange}
-                                                        inputMode="numeric"
+                                                        inputMode="decimal"
                                                         placeholder="$ 0"
                                                     />
                                                 </div>
@@ -2424,7 +2447,7 @@ const Parametros = ({ user, onLogout }) => {
                                                             name="valor"
                                                             value={formContrato.valor}
                                                             onChange={handleContratoValorChange}
-                                                            inputMode="numeric"
+                                                            inputMode="decimal"
                                                             placeholder="$ 0"
                                                         />
                                                     </div>
@@ -2648,7 +2671,7 @@ const Parametros = ({ user, onLogout }) => {
                                                             name="valor_facturado"
                                                             value={formActaFinanciera.valor_facturado}
                                                             onChange={handleChangeValorFacturado}
-                                                            inputMode="numeric"
+                                                            inputMode="decimal"
                                                             placeholder="$ 0"
                                                         />
                                                     </div>
