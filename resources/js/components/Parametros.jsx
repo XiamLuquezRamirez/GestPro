@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Header from './Header';
 import axios from '../axios';
-import { faPlus, faTrash, faSave, faTimes, faCalculator, faFile,faInfo,faEdit } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faTrash, faSave, faTimes, faCalculator, faFile, faInfo, faEdit } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
 import EmojiPicker from 'emoji-picker-react';
@@ -263,6 +263,20 @@ const Parametros = ({ user, onLogout }) => {
             setFormContrato(prev => ({ ...prev, anticipo: false, porcentaje_anticipo: '' }));
             return;
         }
+
+        if (name === 'porcentaje_anticipo') {
+            if (value === '') {
+                setFormContrato(prev => ({ ...prev, porcentaje_anticipo: '0' }));
+                return;
+            }
+            if (value < 0 || value > 50) {
+                Swal.fire({ icon: 'warning', title: 'El porcentaje de anticipo debe ser entre 0 y 50' });
+                return;
+            }
+            setFormContrato(prev => ({ ...prev, porcentaje_anticipo: value }));
+            return;
+        }
+
         setFormContrato(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     };
 
@@ -586,21 +600,17 @@ const Parametros = ({ user, onLogout }) => {
         }
     };
 
-    // Calcular avance financiero: suma de valor_presente_acta de todas las actas / valor del contrato
-    const handleCalcularAvanceFinanciero = () => {
-        if (actasFinancieras.length === 0) {
-            Swal.fire({ icon: 'warning', title: 'No hay actas de avance financiero registradas' });
-            return;
-        }
+    // Calcular avance financiero automáticamente: suma de valor_presente_acta de todas las actas / valor del contrato
+    useEffect(() => {
         const valorContrato = parseCurrencyValue(formContrato.valor);
-        if (!valorContrato) {
-            Swal.fire({ icon: 'warning', title: 'Ingrese el valor del contrato antes de calcular' });
+        if (actasFinancieras.length === 0 || !valorContrato) {
+            setFormContrato(prev => (prev.avance_financiero === '' ? prev : { ...prev, avance_financiero: '' }));
             return;
         }
         const totalEjecutado = actasFinancieras.reduce((sum, acta) => sum + (parseFloat(acta.valor_presente_acta) || 0), 0);
         const porcentaje = Math.round((totalEjecutado / valorContrato) * 100);
-        setFormContrato(prev => ({ ...prev, avance_financiero: porcentaje }));
-    };
+        setFormContrato(prev => (prev.avance_financiero === porcentaje ? prev : { ...prev, avance_financiero: porcentaje }));
+    }, [actasFinancieras, formContrato.valor]);
 
     // Calcular avance físico: suma ponderada de (peso x último % de ejecución) de cada actividad
     const handleCalcularAvanceFisico = () => {
@@ -1585,7 +1595,7 @@ const Parametros = ({ user, onLogout }) => {
                                                 className="btn-delete"
                                                 title="Eliminar"
                                             >
-                                                <FontAwesomeIcon icon={faTrash}/> Eliminar
+                                                <FontAwesomeIcon icon={faTrash} /> Eliminar
                                             </button>
                                         </div>
                                     </td>
@@ -1914,7 +1924,7 @@ const Parametros = ({ user, onLogout }) => {
                                                                             onClick={() => handleDeleteComponente(componente.id)}
                                                                             className="btn-delete-componente"
                                                                         >
-                                                                            🗑️
+                                                                            <FontAwesomeIcon icon={faTrash} />
                                                                         </button>
                                                                     </td>
                                                                 </tr>
@@ -2329,7 +2339,7 @@ const Parametros = ({ user, onLogout }) => {
                                                                             className="btn-edit-contrato"
                                                                             title="Editar contrato"
                                                                         >
-                                                                            ✏️
+                                                                            <FontAwesomeIcon icon={faEdit} />
                                                                         </button>
                                                                         <button
                                                                             type="button"
@@ -2368,7 +2378,7 @@ const Parametros = ({ user, onLogout }) => {
                                             className={`contrato-tab ${contratoActiveTab === 'informacion' ? 'active' : ''}`}
                                             onClick={() => setContratoActiveTab('informacion')}
                                         >
-                                        <FontAwesomeIcon icon={faInfo} />   Información del Contrato
+                                            <FontAwesomeIcon icon={faInfo} />   Información del Contrato
                                         </button>
                                         <button
                                             className={`contrato-tab ${contratoActiveTab === 'anexos' ? 'active' : ''}`}
@@ -2466,10 +2476,7 @@ const Parametros = ({ user, onLogout }) => {
                                                     </div>
                                                     <div className="form-group">
                                                         <label htmlFor="avance_financiero">Avance Financiero</label>
-                                                        <div className="avance-financiero-container">
-                                                            <input type="text" disabled id="avance_financiero" name="avance_financiero" value={formContrato.avance_financiero} onChange={handleContratoChange} />
-                                                            <button type="button" className="btn-calcular-avance" title='Calcular Avance Financiero' onClick={handleCalcularAvanceFinanciero}><FontAwesomeIcon icon={faCalculator} /></button>
-                                                        </div>
+                                                        <input type="text" disabled id="avance_financiero" name="avance_financiero" value={formContrato.avance_financiero} onChange={handleContratoChange} />
                                                     </div>
                                                     <div className="form-group">
                                                         <label htmlFor="avance_fisico">Avance Físico</label>
@@ -2481,8 +2488,9 @@ const Parametros = ({ user, onLogout }) => {
 
                                                 </div>
                                                 <div className="form-row">
-                                                    <div className="form-group form-group-checkbox">
-                                                        <label htmlFor="anticipo">
+                                                    <div className="form-group anticipo-group">
+
+                                                        <label htmlFor="anticipo" className="checkbox-label">
                                                             <input
                                                                 type="checkbox"
                                                                 id="anticipo"
@@ -2490,21 +2498,23 @@ const Parametros = ({ user, onLogout }) => {
                                                                 checked={formContrato.anticipo}
                                                                 onChange={handleContratoChange}
                                                             />
-                                                            ¿Lleva anticipo?
+                                                            <span>¿Lleva anticipo?</span>
                                                         </label>
-                                                    </div>
-                                                    <div className="form-group">
-                                                        <label htmlFor="porcentaje_anticipo">% de Anticipo</label>
-                                                        <input
-                                                            type="number"
-                                                            id="porcentaje_anticipo"
-                                                            name="porcentaje_anticipo"
-                                                            value={formContrato.porcentaje_anticipo}
-                                                            onChange={handleContratoChange}
-                                                            min="0"
-                                                            max="100"
-                                                            disabled={!formContrato.anticipo}
-                                                        />
+
+                                                        <div className="anticipo-porcentaje">
+                                                            <label htmlFor="porcentaje_anticipo">% de Anticipo</label>
+                                                            <input
+                                                                type="number"
+                                                                id="porcentaje_anticipo"
+                                                                name="porcentaje_anticipo"
+                                                                value={formContrato.porcentaje_anticipo}
+                                                                onChange={handleContratoChange}
+                                                                min="0"
+                                                                max="100"
+                                                                disabled={!formContrato.anticipo}
+                                                            />
+                                                        </div>
+
                                                     </div>
                                                 </div>
                                             </div>
@@ -2647,23 +2657,23 @@ const Parametros = ({ user, onLogout }) => {
                                                             Amortización ({formContrato.anticipo ? `${formContrato.porcentaje_anticipo || 0}%` : '0%'})
                                                         </label>
                                                         <input type="text"
-                                                        id="amortizacion_50"
-                                                        name="amortizacion_50"
-                                                        value={formActaFinanciera.amortizacion_50 !== '' ? formatCurrency(formActaFinanciera.amortizacion_50) : ''}
-                                                         disabled
-                                                         placeholder="$ 0"
-                                                         />
+                                                            id="amortizacion_50"
+                                                            name="amortizacion_50"
+                                                            value={formActaFinanciera.amortizacion_50 !== '' ? formatCurrency(formActaFinanciera.amortizacion_50) : ''}
+                                                            disabled
+                                                            placeholder="$ 0"
+                                                        />
                                                     </div>
                                                 </div>
                                                 <div className="form-row">
                                                     <div className="form-group">
                                                         <label htmlFor="valor_presente_acta">Valor Presente del Acta</label>
                                                         <input type="text"
-                                                        id="valor_presente_acta"
-                                                        name="valor_presente_acta"
-                                                        value={formActaFinanciera.valor_presente_acta !== '' ? formatCurrency(formActaFinanciera.valor_presente_acta) : ''}
-                                                        disabled
-                                                        placeholder="$ 0"
+                                                            id="valor_presente_acta"
+                                                            name="valor_presente_acta"
+                                                            value={formActaFinanciera.valor_presente_acta !== '' ? formatCurrency(formActaFinanciera.valor_presente_acta) : ''}
+                                                            disabled
+                                                            placeholder="$ 0"
                                                         />
                                                     </div>
                                                     <div className="form-group">
@@ -2779,89 +2789,89 @@ const Parametros = ({ user, onLogout }) => {
                                                 {(() => {
                                                     const sumaPesos = actividades.reduce((s, a) => s + (a.peso || 0), 0);
                                                     return actividades.length === 0 ? (
-                                                    <div className="no-anexos">
-                                                        <p>No hay actividades registradas</p>
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        <div className="anexos-table">
-                                                            <table>
-                                                                <thead>
-                                                                    <tr>
-                                                                        <th>Actividad</th>
-                                                                        <th>Peso</th>
-                                                                        <th>% Ejecución</th>
-                                                                        <th>Última actualización</th>
-                                                                        <th>Acciones</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {actividades.map(actividad => (
-                                                                        <React.Fragment key={actividad.id}>
-                                                                            <tr>
-                                                                                <td>{actividad.nombre}</td>
-                                                                                <td>{actividad.peso}%</td>
-                                                                                <td>{actividad.ultimo_avance !== null && actividad.ultimo_avance !== undefined ? `${actividad.ultimo_avance}%` : 'Sin registrar'}</td>
-                                                                                <td>{actividad.fecha_ultimo_avance || '-'}</td>
-                                                                                <td>
-                                                                                    <div className="anexo-actions">
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() => {
-                                                                                                setActividadRegistrandoAvance(actividadRegistrandoAvance === actividad.id ? null : actividad.id);
-                                                                                                setFormNuevoAvance({ fecha: '', porcentaje_ejecucion: '' });
-                                                                                            }}
-                                                                                            className="btn-view-anexo"
-                                                                                            title="Registrar avance"
-                                                                                        >
-                                                                                            <FontAwesomeIcon icon={faCalculator} />
-                                                                                        </button>
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() => handleDeleteActividad(actividad.id)}
-                                                                                            className="btn-delete-anexo"
-                                                                                            title="Eliminar actividad"
-                                                                                        >
-                                                                                            <FontAwesomeIcon icon={faTrash} />
-                                                                                        </button>
-                                                                                    </div>
-                                                                                </td>
-                                                                            </tr>
-                                                                            {actividadRegistrandoAvance === actividad.id && (
+                                                        <div className="no-anexos">
+                                                            <p>No hay actividades registradas</p>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div className="anexos-table">
+                                                                <table>
+                                                                    <thead>
+                                                                        <tr>
+                                                                            <th>Actividad</th>
+                                                                            <th>Peso</th>
+                                                                            <th>% Ejecución</th>
+                                                                            <th>Última actualización</th>
+                                                                            <th>Acciones</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {actividades.map(actividad => (
+                                                                            <React.Fragment key={actividad.id}>
                                                                                 <tr>
-                                                                                    <td colSpan="5">
-                                                                                        <div className="form-row">
-                                                                                            <div className="form-group">
-                                                                                                <label htmlFor="fecha_nuevo_avance">Fecha</label>
-                                                                                                <input type="date" id="fecha_nuevo_avance" name="fecha" value={formNuevoAvance.fecha} onChange={handleNuevoAvanceChange} />
-                                                                                            </div>
-                                                                                            <div className="form-group">
-                                                                                                <label htmlFor="porcentaje_nuevo_avance">% Ejecución</label>
-                                                                                                <input type="number" id="porcentaje_nuevo_avance" name="porcentaje_ejecucion" value={formNuevoAvance.porcentaje_ejecucion} onChange={handleNuevoAvanceChange} min="0" max="100" />
-                                                                                            </div>
-                                                                                            <div className="form-group">
-                                                                                                <button type="button" onClick={() => handleRegistrarAvance(actividad.id)} className="btn-add-anexo">
-                                                                                                    <FontAwesomeIcon icon={faSave} /> Guardar
-                                                                                                </button>
-                                                                                            </div>
+                                                                                    <td>{actividad.nombre}</td>
+                                                                                    <td>{actividad.peso}%</td>
+                                                                                    <td>{actividad.ultimo_avance !== null && actividad.ultimo_avance !== undefined ? `${actividad.ultimo_avance}%` : 'Sin registrar'}</td>
+                                                                                    <td>{actividad.fecha_ultimo_avance || '-'}</td>
+                                                                                    <td>
+                                                                                        <div className="anexo-actions">
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={() => {
+                                                                                                    setActividadRegistrandoAvance(actividadRegistrandoAvance === actividad.id ? null : actividad.id);
+                                                                                                    setFormNuevoAvance({ fecha: '', porcentaje_ejecucion: '' });
+                                                                                                }}
+                                                                                                className="btn-view-anexo"
+                                                                                                title="Registrar avance"
+                                                                                            >
+                                                                                                <FontAwesomeIcon icon={faCalculator} />
+                                                                                            </button>
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={() => handleDeleteActividad(actividad.id)}
+                                                                                                className="btn-delete-anexo"
+                                                                                                title="Eliminar actividad"
+                                                                                            >
+                                                                                                <FontAwesomeIcon icon={faTrash} />
+                                                                                            </button>
                                                                                         </div>
                                                                                     </td>
                                                                                 </tr>
-                                                                            )}
-                                                                        </React.Fragment>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
-                                                        <div className="avance-fisico-resumen">
-                                                            <span className={`avance-fisico-suma-pesos ${sumaPesos !== 100 ? 'advertencia' : ''}`}>
-                                                                Suma de pesos: {sumaPesos}%
-                                                            </span>
-                                                            <span className="avance-fisico-total">
-                                                                Avance físico total: {Math.round(actividades.reduce((s, a) => s + ((a.peso || 0) / 100) * (a.ultimo_avance || 0), 0))}%
-                                                            </span>
-                                                        </div>
-                                                    </>
+                                                                                {actividadRegistrandoAvance === actividad.id && (
+                                                                                    <tr>
+                                                                                        <td colSpan="5">
+                                                                                            <div className="form-row">
+                                                                                                <div className="form-group">
+                                                                                                    <label htmlFor="fecha_nuevo_avance">Fecha</label>
+                                                                                                    <input type="date" id="fecha_nuevo_avance" name="fecha" value={formNuevoAvance.fecha} onChange={handleNuevoAvanceChange} />
+                                                                                                </div>
+                                                                                                <div className="form-group">
+                                                                                                    <label htmlFor="porcentaje_nuevo_avance">% Ejecución</label>
+                                                                                                    <input type="number" id="porcentaje_nuevo_avance" name="porcentaje_ejecucion" value={formNuevoAvance.porcentaje_ejecucion} onChange={handleNuevoAvanceChange} min="0" max="100" />
+                                                                                                </div>
+                                                                                                <div className="form-group">
+                                                                                                    <button type="button" onClick={() => handleRegistrarAvance(actividad.id)} className="btn-add-anexo">
+                                                                                                        <FontAwesomeIcon icon={faSave} /> Guardar
+                                                                                                    </button>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                )}
+                                                                            </React.Fragment>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                            <div className="avance-fisico-resumen">
+                                                                <span className={`avance-fisico-suma-pesos ${sumaPesos !== 100 ? 'advertencia' : ''}`}>
+                                                                    Suma de pesos: {sumaPesos}%
+                                                                </span>
+                                                                <span className="avance-fisico-total">
+                                                                    Avance físico total: {Math.round(actividades.reduce((s, a) => s + ((a.peso || 0) / 100) * (a.ultimo_avance || 0), 0))}%
+                                                                </span>
+                                                            </div>
+                                                        </>
                                                     );
                                                 })()}
                                             </div>
