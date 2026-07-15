@@ -377,31 +377,34 @@ const Parametros = ({ user, onLogout }) => {
         const porcentajeAnticipo = parseInt(formContrato.porcentaje_anticipo, 10) || 0;
         const amortizacion = formContrato.anticipo ? Math.round(valorFacturado * (porcentajeAnticipo / 100) * 100) / 100 : 0;
         const valorPresente = Math.round((valorFacturado - amortizacion) * 100) / 100;
-        return { amortizacion, valorPresente };
+        const valorContrato = parseCurrencyValue(formContrato.valor);
+        const porcentajeEjecutado = valorContrato ? Math.round((valorPresente / valorContrato) * 100) : 0;
+        return { amortizacion, valorPresente, porcentajeEjecutado };
     };
 
     const handleChangeValorFacturado = (e) => {
         const sanitized = sanitizeCurrencyInput(e.target.value);
         const valorFacturado = parseCurrencyValue(sanitized);
-        const { amortizacion, valorPresente } = calcularAmortizacionYValorPresente(valorFacturado);
+        const { amortizacion, valorPresente, porcentajeEjecutado } = calcularAmortizacionYValorPresente(valorFacturado);
         setFormActaFinanciera(prev => ({
             ...prev,
             valor_facturado: sanitized ? formatCurrencyInput(sanitized) : '',
             amortizacion_50: sanitized ? amortizacion : '',
-            valor_presente_acta: sanitized ? valorPresente : ''
+            valor_presente_acta: sanitized ? valorPresente : '',
+            porcentaje_ejecutado: sanitized ? porcentajeEjecutado : ''
         }));
     };
 
-    // Si el usuario cambia el anticipo/porcentaje del contrato después de haber escrito
-    // el valor facturado del acta, recalcula amortización/valor presente con el nuevo porcentaje.
+    // Si el usuario cambia el anticipo/porcentaje/valor del contrato después de haber escrito
+    // el valor facturado del acta, recalcula amortización/valor presente/% ejecutado.
     useEffect(() => {
         setFormActaFinanciera(prev => {
             if (prev.valor_facturado === '') return prev;
             const valorFacturado = parseCurrencyValue(prev.valor_facturado);
-            const { amortizacion, valorPresente } = calcularAmortizacionYValorPresente(valorFacturado);
-            return { ...prev, amortizacion_50: amortizacion, valor_presente_acta: valorPresente };
+            const { amortizacion, valorPresente, porcentajeEjecutado } = calcularAmortizacionYValorPresente(valorFacturado);
+            return { ...prev, amortizacion_50: amortizacion, valor_presente_acta: valorPresente, porcentaje_ejecutado: porcentajeEjecutado };
         });
-    }, [formContrato.anticipo, formContrato.porcentaje_anticipo]);
+    }, [formContrato.anticipo, formContrato.porcentaje_anticipo, formContrato.valor]);
 
     // Manejar cambios en el formulario de acta financiera
     const handleActaFinancieraChange = (e) => {
@@ -2701,7 +2704,7 @@ const Parametros = ({ user, onLogout }) => {
                                                     </div>
                                                     <div className="form-group">
                                                         <label htmlFor="porcentaje_ejecutado">% Ejecutado</label>
-                                                        <input type="number" id="porcentaje_ejecutado" name="porcentaje_ejecutado" value={formActaFinanciera.porcentaje_ejecutado} onChange={handleActaFinancieraChange} min="0" max="100" />
+                                                        <input type="text" id="porcentaje_ejecutado" name="porcentaje_ejecutado" value={formActaFinanciera.porcentaje_ejecutado !== '' ? `${formActaFinanciera.porcentaje_ejecutado}%` : ''} disabled placeholder="0%" />
                                                     </div>
                                                 </div>
                                                 <div className="form-row">
