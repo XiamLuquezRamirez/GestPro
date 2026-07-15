@@ -240,7 +240,9 @@ const Parametros = ({ user, onLogout }) => {
         avance_financiero: '',
         avance_fisico: '',
         estado: '',
-        proyecto: ''
+        proyecto: '',
+        anticipo: false,
+        porcentaje_anticipo: ''
     });
 
     const [actasFinancieras, setActasFinancieras] = useState([]);
@@ -256,8 +258,12 @@ const Parametros = ({ user, onLogout }) => {
 
     // Manejar cambios en el formulario de contratos
     const handleContratoChange = (e) => {
-        const { name, value } = e.target;
-        setFormContrato(prev => ({ ...prev, [name]: value }));
+        const { name, value, type, checked } = e.target;
+        if (name === 'anticipo' && !checked) {
+            setFormContrato(prev => ({ ...prev, anticipo: false, porcentaje_anticipo: '' }));
+            return;
+        }
+        setFormContrato(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     };
 
     // Manejar cambios en el formulario de anexos
@@ -353,31 +359,36 @@ const Parametros = ({ user, onLogout }) => {
         }
     };
 
+    const calcularAmortizacionYValorPresente = (valorFacturado) => {
+        const porcentajeAnticipo = parseInt(formContrato.porcentaje_anticipo, 10) || 0;
+        const amortizacion = formContrato.anticipo ? Math.round(valorFacturado * (porcentajeAnticipo / 100)) : 0;
+        const valorPresente = valorFacturado - amortizacion;
+        return { amortizacion, valorPresente };
+    };
+
     const handleChangeValorFacturado = (e) => {
         const { value } = e.target;
         const raw = value.replace(/\D/g, '');
+        const valorFacturado = raw ? parseInt(raw, 10) : 0;
+        const { amortizacion, valorPresente } = calcularAmortizacionYValorPresente(valorFacturado);
         setFormActaFinanciera(prev => ({
             ...prev,
-            valor_facturado: raw ? formatCurrency(raw) : ''
+            valor_facturado: raw ? formatCurrency(raw) : '',
+            amortizacion_50: raw ? amortizacion : '',
+            valor_presente_acta: raw ? valorPresente : ''
         }));
     };
 
-    const handleChangeAmortizacion50 = (e) => {
-        const { value } = e.target;
-        const raw = value.replace(/\D/g, '');
-        setFormActaFinanciera(prev => ({
-            ...prev,
-            amortizacion_50: raw ? formatCurrency(raw) : ''
-        }));
-    };
-    const handleChangeValorPresenteActa = (e) => {
-        const { value } = e.target;
-        const raw = value.replace(/\D/g, '');
-        setFormActaFinanciera(prev => ({
-            ...prev,
-            valor_presente_acta: raw ? formatCurrency(raw) : ''
-        }));
-    };
+    // Si el usuario cambia el anticipo/porcentaje del contrato después de haber escrito
+    // el valor facturado del acta, recalcula amortización/valor presente con el nuevo porcentaje.
+    useEffect(() => {
+        setFormActaFinanciera(prev => {
+            if (prev.valor_facturado === '') return prev;
+            const valorFacturado = parseCurrencyValue(prev.valor_facturado);
+            const { amortizacion, valorPresente } = calcularAmortizacionYValorPresente(valorFacturado);
+            return { ...prev, amortizacion_50: amortizacion, valor_presente_acta: valorPresente };
+        });
+    }, [formContrato.anticipo, formContrato.porcentaje_anticipo]);
 
     // Manejar cambios en el formulario de acta financiera
     const handleActaFinancieraChange = (e) => {
@@ -619,7 +630,8 @@ const Parametros = ({ user, onLogout }) => {
             fecha_fin: '', interventoria: '',
             avance_financiero: '',
             avance_fisico: '', estado: '',
-            proyecto: proyectoContratos.id || ''
+            proyecto: proyectoContratos.id || '',
+            anticipo: false, porcentaje_anticipo: ''
         });
     };
 
@@ -644,7 +656,9 @@ const Parametros = ({ user, onLogout }) => {
             avance_financiero: contrato.avance_financiero || '',
             avance_fisico: contrato.avance_fisico || '',
             estado: contrato.estado || '',
-            proyecto: contrato.proyecto || ''
+            proyecto: contrato.proyecto || '',
+            anticipo: !!contrato.anticipo,
+            porcentaje_anticipo: contrato.porcentaje_anticipo ?? ''
         });
         // Cargar anexos del contrato si existen
         if (contrato.anexos && contrato.anexos.length > 0) {
@@ -718,7 +732,8 @@ const Parametros = ({ user, onLogout }) => {
             interventoria: '',
             avance_financiero: '',
             avance_fisico: '', estado: '',
-            proyecto: proyectoContratos.id || ''
+            proyecto: proyectoContratos.id || '',
+            anticipo: false, porcentaje_anticipo: ''
         });
         setShowContratoForm(false);
     };
@@ -734,7 +749,8 @@ const Parametros = ({ user, onLogout }) => {
             avance_financiero: '',
             avance_fisico: '',
             estado: '',
-            proyecto: proyectoContratos.id || ''
+            proyecto: proyectoContratos.id || '',
+            anticipo: false, porcentaje_anticipo: ''
         });
         setAnexos([]);
         setFormAnexo({ descripcion: '', archivo: null });
@@ -759,7 +775,8 @@ const Parametros = ({ user, onLogout }) => {
             fecha_fin: '', interventoria: '',
             avance_financiero: '',
             avance_fisico: '', estado: '',
-            proyecto: proyectoContratos.id || ''
+            proyecto: proyectoContratos.id || '',
+            anticipo: false, porcentaje_anticipo: ''
         });
         setAnexos([]);
         setFormAnexo({ descripcion: '', archivo: null });
@@ -1424,7 +1441,8 @@ const Parametros = ({ user, onLogout }) => {
             fecha_fin: '', interventoria: '',
             avance_financiero: '',
             avance_fisico: '', estado: '',
-            proyecto: item.id || ''
+            proyecto: item.id || '',
+            anticipo: false, porcentaje_anticipo: ''
         });
         setShowContratosModal(true);
     };
@@ -2462,6 +2480,33 @@ const Parametros = ({ user, onLogout }) => {
                                                     </div>
 
                                                 </div>
+                                                <div className="form-row">
+                                                    <div className="form-group form-group-checkbox">
+                                                        <label htmlFor="anticipo">
+                                                            <input
+                                                                type="checkbox"
+                                                                id="anticipo"
+                                                                name="anticipo"
+                                                                checked={formContrato.anticipo}
+                                                                onChange={handleContratoChange}
+                                                            />
+                                                            ¿Lleva anticipo?
+                                                        </label>
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="porcentaje_anticipo">% de Anticipo</label>
+                                                        <input
+                                                            type="number"
+                                                            id="porcentaje_anticipo"
+                                                            name="porcentaje_anticipo"
+                                                            value={formContrato.porcentaje_anticipo}
+                                                            onChange={handleContratoChange}
+                                                            min="0"
+                                                            max="100"
+                                                            disabled={!formContrato.anticipo}
+                                                        />
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     )}
@@ -2598,13 +2643,14 @@ const Parametros = ({ user, onLogout }) => {
                                                         />
                                                     </div>
                                                     <div className="form-group">
-                                                        <label htmlFor="amortizacion_50">Amortización 50%</label>
-                                                        <input type="text" 
-                                                        id="amortizacion_50" 
-                                                        name="amortizacion_50" 
-                                                        value={formActaFinanciera.amortizacion_50}  
-                                                         onChange={handleChangeAmortizacion50} 
-                                                         inputMode="numeric"
+                                                        <label htmlFor="amortizacion_50">
+                                                            Amortización ({formContrato.anticipo ? `${formContrato.porcentaje_anticipo || 0}%` : '0%'})
+                                                        </label>
+                                                        <input type="text"
+                                                        id="amortizacion_50"
+                                                        name="amortizacion_50"
+                                                        value={formActaFinanciera.amortizacion_50 !== '' ? formatCurrency(formActaFinanciera.amortizacion_50) : ''}
+                                                         disabled
                                                          placeholder="$ 0"
                                                          />
                                                     </div>
@@ -2612,12 +2658,11 @@ const Parametros = ({ user, onLogout }) => {
                                                 <div className="form-row">
                                                     <div className="form-group">
                                                         <label htmlFor="valor_presente_acta">Valor Presente del Acta</label>
-                                                        <input type="text" 
-                                                        id="valor_presente_acta" 
-                                                        name="valor_presente_acta" 
-                                                        value={formActaFinanciera.valor_presente_acta} 
-                                                        onChange={handleChangeValorPresenteActa} 
-                                                        inputMode="numeric"
+                                                        <input type="text"
+                                                        id="valor_presente_acta"
+                                                        name="valor_presente_acta"
+                                                        value={formActaFinanciera.valor_presente_acta !== '' ? formatCurrency(formActaFinanciera.valor_presente_acta) : ''}
+                                                        disabled
                                                         placeholder="$ 0"
                                                         />
                                                     </div>

@@ -29,11 +29,13 @@ class ContratosTest extends TestCase
             'n_contrato' => 'C-001',
             'valor' => 25000000,
             'anticipo' => true,
+            'porcentaje_anticipo' => 30,
         ]);
 
         $fresco = $contrato->fresh();
         $this->assertSame('25000000.00', $fresco->valor);
         $this->assertTrue($fresco->anticipo);
+        $this->assertSame(30, $fresco->porcentaje_anticipo);
     }
 
     public function test_anexo_contrato_belongs_to_contrato_and_cascades_on_delete(): void

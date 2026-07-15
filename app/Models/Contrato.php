@@ -13,7 +13,7 @@ class Contrato extends Model
     protected $fillable = [
         'proyecto', 'n_contrato', 'objeto', 'contratante', 'contratista', 'valor',
         'fecha_inicio', 'fecha_fin', 'interventoria', 'avance_fisico', 'avance_financiero',
-        'estado', 'anticipo', 'proceso_licitacion',
+        'estado', 'anticipo', 'porcentaje_anticipo', 'proceso_licitacion',
     ];
 
     protected $casts = [
