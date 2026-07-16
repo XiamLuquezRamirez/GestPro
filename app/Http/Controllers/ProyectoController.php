@@ -1097,6 +1097,12 @@ class ProyectoController extends Controller
                 ->orderBy('fecha_acta', 'desc')
                 ->get();
 
+            $contrato->modificaciones = DB::table('modificaciones_contrato')
+                ->where('contrato_id', $contrato->id)
+                ->orderBy('fecha_modificacion', 'asc')
+                ->orderBy('id', 'asc')
+                ->get();
+
             $actividades = DB::table('actividades_contrato')->where('contrato_id', $contrato->id)->get();
             foreach ($actividades as $actividad) {
                 $ultimoAvance = DB::table('actividad_avances')

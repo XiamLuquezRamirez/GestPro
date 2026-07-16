@@ -230,4 +230,33 @@ class ModificacionesContratoTest extends TestCase
         $this->assertEquals('100000000.00', $fresco->valor);
         $this->assertStringStartsWith('2026-12-31', (string) $fresco->fecha_fin);
     }
+
+    public function test_listar_contratos_incluye_modificaciones(): void
+    {
+        $headers = $this->headersAdmin();
+        $contrato = $this->crearContrato();
+        DB::table('contratos')->where('id', $contrato->id)->update([
+            'valor_inicial' => 100000000,
+            'fecha_fin_inicial' => '2026-12-31',
+        ]);
+
+        DB::table('modificaciones_contrato')->insert([
+            'contrato_id' => $contrato->id,
+            'numero_otrosi' => 'Otrosí No. 1',
+            'tipo' => 'adicion',
+            'valor_adicion' => 10000000,
+            'dias_prorroga' => null,
+            'fecha_modificacion' => '2026-03-01',
+            'justificacion' => 'Ajuste',
+        ]);
+
+        $proyectoId = DB::table('contratos')->where('id', $contrato->id)->value('proyecto');
+        $resp = $this->withHeaders($headers)->getJson('/GestPro/listarContratos?proyecto=' . $proyectoId);
+        $resp->assertOk();
+
+        $contratoJson = collect($resp->json())->firstWhere('id', $contrato->id);
+        $this->assertNotNull($contratoJson);
+        $this->assertCount(1, $contratoJson['modificaciones']);
+        $this->assertSame('Otrosí No. 1', $contratoJson['modificaciones'][0]['numero_otrosi']);
+    }
 }
