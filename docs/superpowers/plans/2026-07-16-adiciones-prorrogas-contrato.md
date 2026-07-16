@@ -160,11 +160,18 @@ Agregar a `ModificacionesContratoTest`:
         \Illuminate\Support\Facades\DB::statement('UPDATE contratos SET valor_inicial = valor WHERE valor_inicial IS NULL');
         \Illuminate\Support\Facades\DB::statement('UPDATE contratos SET fecha_fin_inicial = fecha_fin WHERE fecha_fin_inicial IS NULL');
 
-        $fresco = \Illuminate\Support\Facades\DB::table('contratos')->where('id', $contrato->id)->first();
+        // Leer a través del modelo Eloquent para aplicar el cast decimal:2
+        // (el query builder crudo no castea; en SQLite un decimal se lee como int).
+        $fresco = $contrato->fresh();
         $this->assertSame('100000000.00', $fresco->valor_inicial);
-        $this->assertStringStartsWith('2026-12-31', (string) $fresco->fecha_fin_inicial);
+        $this->assertSame('2026-12-31', $fresco->fecha_fin_inicial->toDateString());
     }
 ```
+
+**Nota:** este test lee `valor_inicial`/`fecha_fin_inicial` a través del modelo, así que
+los casts `valor_inicial => decimal:2` y `fecha_fin_inicial => date` deben agregarse a
+`Contrato` **en esta tarea** (Step 3b abajo). El resto del cambio al modelo (fillable y
+relación `modificaciones()`) permanece en Task 3.
 
 - [ ] **Step 2: Ejecutar los tests para verificar que fallan**
 
@@ -207,15 +214,27 @@ return new class extends Migration
 };
 ```
 
+- [ ] **Step 3b: Agregar los casts a `Contrato`**
+
+En `app/Models/Contrato.php`, en el array `$casts`, agregar solo estas dos claves
+(dejar intactas `valor`, `fecha_inicio`, `fecha_fin`, `anticipo`):
+
+```php
+        'valor_inicial' => 'decimal:2',
+        'fecha_fin_inicial' => 'date',
+```
+
+El `fillable` y la relación `modificaciones()` NO se tocan aquí — van en Task 3.
+
 - [ ] **Step 4: Ejecutar los tests para verificar que pasan**
 
 Run: `php artisan test --filter=ModificacionesContratoTest`
-Expected: PASS ambos tests nuevos.
+Expected: PASS los tres tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add database/migrations/2026_07_16_100001_add_valores_iniciales_to_contratos_table.php tests/Feature/Schema/ModificacionesContratoTest.php
+git add database/migrations/2026_07_16_100001_add_valores_iniciales_to_contratos_table.php tests/Feature/Schema/ModificacionesContratoTest.php app/Models/Contrato.php
 git commit -m "feat: add valor_inicial and fecha_fin_inicial to contratos with backfill"
 ```
 
@@ -296,9 +315,13 @@ class ModificacionContrato extends Model
 }
 ```
 
-- [ ] **Step 4: Agregar fillable, casts y relación en `Contrato`**
+- [ ] **Step 4: Agregar fillable y relación en `Contrato`**
 
-En `app/Models/Contrato.php`, agregar `'valor_inicial'` y `'fecha_fin_inicial'` al array `$fillable` (después de `'valor'` y antes de `'interventoria'` respectivamente, o al final del array — el orden no afecta). El `$fillable` resultante:
+Los casts `valor_inicial`/`fecha_fin_inicial` ya se agregaron en Task 2 (Step 3b). Aquí
+solo falta el `fillable` y la relación.
+
+En `app/Models/Contrato.php`, agregar `'valor_inicial'` y `'fecha_fin_inicial'` al array
+`$fillable` (el orden no afecta). El `$fillable` resultante:
 
 ```php
     protected $fillable = [
@@ -306,19 +329,6 @@ En `app/Models/Contrato.php`, agregar `'valor_inicial'` y `'fecha_fin_inicial'` 
         'valor_inicial', 'fecha_inicio', 'fecha_fin', 'fecha_fin_inicial',
         'interventoria', 'avance_fisico', 'avance_financiero',
         'estado', 'anticipo', 'porcentaje_anticipo', 'proceso_licitacion',
-    ];
-```
-
-Agregar al array `$casts` las dos claves nuevas:
-
-```php
-    protected $casts = [
-        'valor' => 'decimal:2',
-        'valor_inicial' => 'decimal:2',
-        'fecha_inicio' => 'date',
-        'fecha_fin' => 'date',
-        'fecha_fin_inicial' => 'date',
-        'anticipo' => 'boolean',
     ];
 ```
 
