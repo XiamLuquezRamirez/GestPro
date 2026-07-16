@@ -259,4 +259,83 @@ class ModificacionesContratoTest extends TestCase
         $this->assertCount(1, $contratoJson['modificaciones']);
         $this->assertSame('Otrosí No. 1', $contratoJson['modificaciones'][0]['numero_otrosi']);
     }
+
+    public function test_recalculo_acumula_multiples_modificaciones(): void
+    {
+        $headers = $this->headersAdmin();
+        $contrato = $this->crearContrato();
+        DB::table('contratos')->where('id', $contrato->id)->update([
+            'valor_inicial' => 100000000,
+            'fecha_fin_inicial' => '2026-12-31',
+        ]);
+
+        // Primer otrosí: adición 30M (30%, bajo el límite).
+        $this->withHeaders($headers)->postJson('/GestPro/guardarModificacionContrato', [
+            'contrato_id' => $contrato->id,
+            'tipo' => 'adicion',
+            'valor_adicion' => 30000000,
+            'dias_prorroga' => null,
+            'fecha_modificacion' => '2026-03-01',
+        ])->assertOk();
+
+        // Segundo otrosí: adición 30M + prórroga 40 días. Acumulado 60M = 60% > 50%.
+        $resp = $this->withHeaders($headers)->postJson('/GestPro/guardarModificacionContrato', [
+            'contrato_id' => $contrato->id,
+            'tipo' => 'adicion_prorroga',
+            'valor_adicion' => 30000000,
+            'dias_prorroga' => 40,
+            'fecha_modificacion' => '2026-04-01',
+        ]);
+        $resp->assertOk();
+
+        // Valor vigente = 100M + 30M + 30M = 160M; fecha = 2026-12-31 + 40 días = 2027-02-09.
+        $fresco = DB::table('contratos')->where('id', $contrato->id)->first();
+        $this->assertEquals('160000000.00', $fresco->valor);
+        $this->assertStringStartsWith('2027-02-09', (string) $fresco->fecha_fin);
+        $this->assertEquals(60.0, round($resp->json('resumen.porcentaje_adicionado'), 2));
+        $this->assertTrue($resp->json('resumen.supera_limite'));
+    }
+
+    public function test_eliminar_una_de_varias_recalcula_el_resto(): void
+    {
+        $headers = $this->headersAdmin();
+        $contrato = $this->crearContrato();
+        DB::table('contratos')->where('id', $contrato->id)->update([
+            'valor_inicial' => 100000000,
+            'fecha_fin_inicial' => '2026-12-31',
+        ]);
+
+        DB::table('modificaciones_contrato')->insert([
+            ['contrato_id' => $contrato->id, 'tipo' => 'adicion', 'valor_adicion' => 20000000, 'dias_prorroga' => null, 'fecha_modificacion' => '2026-03-01', 'numero_otrosi' => 'OT-1', 'justificacion' => null],
+            ['contrato_id' => $contrato->id, 'tipo' => 'adicion', 'valor_adicion' => 30000000, 'dias_prorroga' => null, 'fecha_modificacion' => '2026-04-01', 'numero_otrosi' => 'OT-2', 'justificacion' => null],
+        ]);
+        // Estado inicial coherente antes de eliminar (valor vigente = 150M).
+        DB::table('contratos')->where('id', $contrato->id)->update(['valor' => 150000000]);
+
+        $ot1 = DB::table('modificaciones_contrato')->where('numero_otrosi', 'OT-1')->value('id');
+        $this->withHeaders($headers)->postJson('/GestPro/eliminarModificacionContrato', ['id' => $ot1])->assertOk();
+
+        // Queda solo OT-2 (30M): valor vigente = 100M + 30M = 130M.
+        $this->assertDatabaseCount('modificaciones_contrato', 1);
+        $fresco = DB::table('contratos')->where('id', $contrato->id)->first();
+        $this->assertEquals('130000000.00', $fresco->valor);
+    }
+
+    public function test_eliminar_contrato_cascade_elimina_modificaciones(): void
+    {
+        $contrato = $this->crearContrato();
+        DB::table('modificaciones_contrato')->insert([
+            'contrato_id' => $contrato->id,
+            'tipo' => 'adicion',
+            'valor_adicion' => 10000000,
+            'dias_prorroga' => null,
+            'fecha_modificacion' => '2026-03-01',
+            'numero_otrosi' => 'OT-1',
+            'justificacion' => null,
+        ]);
+
+        $contrato->delete();
+
+        $this->assertDatabaseCount('modificaciones_contrato', 0);
+    }
 }

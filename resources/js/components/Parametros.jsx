@@ -850,7 +850,8 @@ const Parametros = ({ user, onLogout }) => {
     const handleModificacionChange = (e) => {
         const { name, value } = e.target;
         if (name === 'valor_adicion') {
-            const sanitized = value.replace(/[^\d]/g, '');
+            // Preservar la coma decimal (centavos), igual que los demás inputs de moneda.
+            const sanitized = sanitizeCurrencyInput(value);
             setFormModificacion(prev => ({ ...prev, valor_adicion: sanitized ? formatCurrencyInput(sanitized) : '' }));
             return;
         }
