@@ -18,8 +18,10 @@ class Contrato extends Model
 
     protected $casts = [
         'valor' => 'decimal:2',
+        'valor_inicial' => 'decimal:2',
         'fecha_inicio' => 'date',
         'fecha_fin' => 'date',
+        'fecha_fin_inicial' => 'date',
         'anticipo' => 'boolean',
     ];
 
