@@ -200,4 +200,34 @@ class ModificacionesContratoTest extends TestCase
         // 2026-12-31 + 90 días = 2027-03-31
         $this->assertStringStartsWith('2027-03-31', (string) $fresco->fecha_fin);
     }
+
+    public function test_eliminar_modificacion_revierte_recalculo(): void
+    {
+        $headers = $this->headersAdmin();
+        $contrato = $this->crearContrato();
+        DB::table('contratos')->where('id', $contrato->id)->update([
+            'valor_inicial' => 100000000,
+            'fecha_fin_inicial' => '2026-12-31',
+        ]);
+
+        $this->withHeaders($headers)->postJson('/GestPro/guardarModificacionContrato', [
+            'contrato_id' => $contrato->id,
+            'numero_otrosi' => 'Otrosí No. 1',
+            'tipo' => 'adicion_prorroga',
+            'valor_adicion' => 30000000,
+            'dias_prorroga' => 60,
+            'fecha_modificacion' => '2026-03-01',
+            'justificacion' => 'Mayor obra',
+        ])->assertOk();
+
+        $modId = DB::table('modificaciones_contrato')->where('contrato_id', $contrato->id)->value('id');
+
+        $resp = $this->withHeaders($headers)->postJson('/GestPro/eliminarModificacionContrato', ['id' => $modId]);
+        $resp->assertOk();
+
+        $this->assertDatabaseCount('modificaciones_contrato', 0);
+        $fresco = DB::table('contratos')->where('id', $contrato->id)->first();
+        $this->assertEquals('100000000.00', $fresco->valor);
+        $this->assertStringStartsWith('2026-12-31', (string) $fresco->fecha_fin);
+    }
 }

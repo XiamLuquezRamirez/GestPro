@@ -1010,6 +1010,38 @@ class ProyectoController extends Controller
     }
 
     /**
+     * Elimina una modificación (otrosí) y recalcula el contrato afectado.
+     */
+    public function eliminarModificacionContrato(Request $request)
+    {
+        $id = $request->input('id');
+
+        DB::beginTransaction();
+        try {
+            $mod = DB::table('modificaciones_contrato')->where('id', $id)->first();
+            if (! $mod) {
+                DB::rollBack();
+                return response()->json(['error' => 'Modificación no encontrada'], 404);
+            }
+
+            $contratoId = $mod->contrato_id;
+            DB::table('modificaciones_contrato')->where('id', $id)->delete();
+
+            $resumen = $this->recalcularContrato($contratoId);
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'success' => 'Modificación eliminada correctamente',
+            'resumen' => $resumen,
+        ]);
+    }
+
+    /**
      * Recalcula valor y fecha_fin vigentes del contrato desde valor_inicial /
      * fecha_fin_inicial + suma del historial de modificaciones. Devuelve el
      * resumen (valores vigentes, % adicionado y bandera de límite 50%).
