@@ -383,9 +383,11 @@ class ProyectoController extends Controller
                 // Eliminar anexos existentes del contrato
                 DB::table('anexos_contratos')->where('contrato_id', $contratoId)->delete();
             } else {
-                // Insertar nuevo contrato
+                // Insertar nuevo contrato: fijar la base inmutable para adiciones/prórrogas.
                 $contratoId = DB::table('contratos')->insertGetId(array_merge($contratoPayload, [
                     'proyecto' => $formContrato['proyecto'] ?? null,
+                    'valor_inicial' => $contratoPayload['valor'],
+                    'fecha_fin_inicial' => $contratoPayload['fecha_fin'],
                 ]));
             }
             
@@ -838,7 +840,7 @@ class ProyectoController extends Controller
                 'valor_facturado' => $nullableDecimal($data['valor_facturado'] ?? null),
                 'amortizacion_50' => $nullableDecimal($data['amortizacion_50'] ?? null),
                 'valor_presente_acta' => $nullableDecimal($data['valor_presente_acta'] ?? null),
-                'porcentaje_ejecutado' => $nullableInt($data['porcentaje_ejecutado'] ?? null),
+                'porcentaje_ejecutado' => $nullableDecimal($data['porcentaje_ejecutado'] ?? null),
                 'anexo' => $nullableString($data['anexo'] ?? null),
             ]);
 

@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Schema;
 
+use App\Enums\Rol;
 use App\Models\Contrato;
 use App\Models\ModificacionContrato;
 use App\Models\Municipio;
 use App\Models\Proyecto;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
@@ -81,5 +83,33 @@ class ModificacionesContratoTest extends TestCase
         $this->assertSame('30000000.00', $fresco->valor_adicion);
         $this->assertSame(60, $fresco->dias_prorroga);
         $this->assertCount(1, $contrato->fresh()->modificaciones);
+    }
+
+    public function test_guardar_contrato_nuevo_fija_valores_iniciales(): void
+    {
+        $this->seed(\Database\Seeders\DepartamentosSeeder::class);
+        $municipio = Municipio::create(['codigo' => '05001', 'nombre' => 'MEDELLÍN', 'activo' => true, 'departamento' => '05']);
+        $proyecto = Proyecto::create(['municipio' => $municipio->codigo, 'nombre' => 'Proyecto de prueba']);
+
+        $admin = User::factory()->create(['rol' => Rol::Administrador]);
+        $token = auth('api')->login($admin);
+
+        $resp = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/GestPro/guardarContrato', [
+                'formContrato' => [
+                    'n_contrato' => 'C-100',
+                    'objeto' => 'Construcción',
+                    'valor' => 200000000,
+                    'fecha_fin' => '2027-06-30',
+                    'estado' => 'En ejecución',
+                    'proyecto' => $proyecto->id,
+                ],
+                'anexos' => [],
+            ]);
+
+        $resp->assertOk();
+        $contrato = \Illuminate\Support\Facades\DB::table('contratos')->where('n_contrato', 'C-100')->first();
+        $this->assertEquals('200000000.00', $contrato->valor_inicial);
+        $this->assertStringStartsWith('2027-06-30', (string) $contrato->fecha_fin_inicial);
     }
 }
