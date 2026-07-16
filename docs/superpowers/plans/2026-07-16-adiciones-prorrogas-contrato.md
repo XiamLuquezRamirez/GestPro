@@ -377,7 +377,7 @@ Agregar a `ModificacionesContratoTest` (añadir `use Illuminate\Support\Facades\
         $usuario = \App\Models\User::factory()->create(['rol' => 'Administrador']);
         $this->actingAs($usuario);
 
-        $resp = $this->postJson('/api/guardarContrato', [
+        $resp = $this->withHeaders($headers)->postJson('/GestPro/guardarContrato', [
             'formContrato' => [
                 'n_contrato' => 'C-100',
                 'objeto' => 'Construcción',
@@ -459,22 +459,25 @@ fecha_fin_vigente = fecha_fin_inicial + SUMA(dias_prorroga) días
 Agregar a `ModificacionesContratoTest`:
 
 ```php
-    private function actuarComoAdmin(): void
+    // Auth JWT: devuelve los headers Authorization con un token de Administrador.
+    // (Este proyecto usa auth('api')->login, no actingAs — ver AutorizacionTest.)
+    private function headersAdmin(): array
     {
-        $usuario = \App\Models\User::factory()->create(['rol' => 'Administrador']);
-        $this->actingAs($usuario);
+        $admin = \App\Models\User::factory()->create(['rol' => \App\Enums\Rol::Administrador]);
+        $token = auth('api')->login($admin);
+        return ['Authorization' => "Bearer {$token}"];
     }
 
     public function test_guardar_modificacion_recalcula_valor_y_fecha(): void
     {
-        $this->actuarComoAdmin();
+        $headers = $this->headersAdmin();
         $contrato = $this->crearContrato(); // valor_inicial vía helper: fijamos abajo
         DB::table('contratos')->where('id', $contrato->id)->update([
             'valor_inicial' => 100000000,
             'fecha_fin_inicial' => '2026-12-31',
         ]);
 
-        $resp = $this->postJson('/api/guardarModificacionContrato', [
+        $resp = $this->withHeaders($headers)->postJson('/GestPro/guardarModificacionContrato', [
             'contrato_id' => $contrato->id,
             'numero_otrosi' => 'Otrosí No. 1',
             'tipo' => 'adicion_prorroga',
@@ -486,7 +489,7 @@ Agregar a `ModificacionesContratoTest`:
 
         $resp->assertOk();
         $fresco = DB::table('contratos')->where('id', $contrato->id)->first();
-        $this->assertSame('130000000.00', $fresco->valor);
+        $this->assertEquals('130000000.00', $fresco->valor);
         // 2026-12-31 + 60 días = 2027-03-01
         $this->assertStringStartsWith('2027-03-01', (string) $fresco->fecha_fin);
         $this->assertSame(30.0, round($resp->json('resumen.porcentaje_adicionado'), 2));
@@ -495,14 +498,14 @@ Agregar a `ModificacionesContratoTest`:
 
     public function test_adicion_supera_50_por_ciento_advierte_pero_persiste(): void
     {
-        $this->actuarComoAdmin();
+        $headers = $this->headersAdmin();
         $contrato = $this->crearContrato();
         DB::table('contratos')->where('id', $contrato->id)->update([
             'valor_inicial' => 100000000,
             'fecha_fin_inicial' => '2026-12-31',
         ]);
 
-        $resp = $this->postJson('/api/guardarModificacionContrato', [
+        $resp = $this->withHeaders($headers)->postJson('/GestPro/guardarModificacionContrato', [
             'contrato_id' => $contrato->id,
             'numero_otrosi' => 'Otrosí No. 1',
             'tipo' => 'adicion',
@@ -516,19 +519,19 @@ Agregar a `ModificacionesContratoTest`:
         $this->assertTrue($resp->json('resumen.supera_limite'));
         $this->assertDatabaseCount('modificaciones_contrato', 1); // persistió igual
         $fresco = DB::table('contratos')->where('id', $contrato->id)->first();
-        $this->assertSame('160000000.00', $fresco->valor);
+        $this->assertEquals('160000000.00', $fresco->valor);
     }
 
     public function test_solo_prorroga_no_cambia_valor(): void
     {
-        $this->actuarComoAdmin();
+        $headers = $this->headersAdmin();
         $contrato = $this->crearContrato();
         DB::table('contratos')->where('id', $contrato->id)->update([
             'valor_inicial' => 100000000,
             'fecha_fin_inicial' => '2026-12-31',
         ]);
 
-        $this->postJson('/api/guardarModificacionContrato', [
+        $this->withHeaders($headers)->postJson('/GestPro/guardarModificacionContrato', [
             'contrato_id' => $contrato->id,
             'numero_otrosi' => 'Otrosí No. 1',
             'tipo' => 'prorroga',
@@ -539,7 +542,7 @@ Agregar a `ModificacionesContratoTest`:
         ])->assertOk();
 
         $fresco = DB::table('contratos')->where('id', $contrato->id)->first();
-        $this->assertSame('100000000.00', $fresco->valor);
+        $this->assertEquals('100000000.00', $fresco->valor);
         // 2026-12-31 + 90 días = 2027-03-31
         $this->assertStringStartsWith('2027-03-31', (string) $fresco->fecha_fin);
     }
@@ -672,14 +675,14 @@ Agregar a `ModificacionesContratoTest`:
 ```php
     public function test_eliminar_modificacion_revierte_recalculo(): void
     {
-        $this->actuarComoAdmin();
+        $headers = $this->headersAdmin();
         $contrato = $this->crearContrato();
         DB::table('contratos')->where('id', $contrato->id)->update([
             'valor_inicial' => 100000000,
             'fecha_fin_inicial' => '2026-12-31',
         ]);
 
-        $this->postJson('/api/guardarModificacionContrato', [
+        $this->withHeaders($headers)->postJson('/GestPro/guardarModificacionContrato', [
             'contrato_id' => $contrato->id,
             'numero_otrosi' => 'Otrosí No. 1',
             'tipo' => 'adicion_prorroga',
@@ -691,12 +694,12 @@ Agregar a `ModificacionesContratoTest`:
 
         $modId = DB::table('modificaciones_contrato')->where('contrato_id', $contrato->id)->value('id');
 
-        $resp = $this->postJson('/api/eliminarModificacionContrato', ['id' => $modId]);
+        $resp = $this->withHeaders($headers)->postJson('/GestPro/eliminarModificacionContrato', ['id' => $modId]);
         $resp->assertOk();
 
         $this->assertDatabaseCount('modificaciones_contrato', 0);
         $fresco = DB::table('contratos')->where('id', $contrato->id)->first();
-        $this->assertSame('100000000.00', $fresco->valor);
+        $this->assertEquals('100000000.00', $fresco->valor);
         $this->assertStringStartsWith('2026-12-31', (string) $fresco->fecha_fin);
     }
 ```
@@ -779,7 +782,7 @@ Agregar a `ModificacionesContratoTest`:
 ```php
     public function test_listar_contratos_incluye_modificaciones(): void
     {
-        $this->actuarComoAdmin();
+        $headers = $this->headersAdmin();
         $contrato = $this->crearContrato();
         DB::table('contratos')->where('id', $contrato->id)->update([
             'valor_inicial' => 100000000,
@@ -797,7 +800,8 @@ Agregar a `ModificacionesContratoTest`:
         ]);
 
         $proyectoId = DB::table('contratos')->where('id', $contrato->id)->value('proyecto');
-        $resp = $this->postJson('/api/listarContratos', ['proyecto' => $proyectoId]);
+        // listarContratos es GET y está bajo auth:api (cualquier rol autenticado).
+        $resp = $this->withHeaders($headers)->getJson('/GestPro/listarContratos?proyecto=' . $proyectoId);
         $resp->assertOk();
 
         $contratoJson = collect($resp->json())->firstWhere('id', $contrato->id);
