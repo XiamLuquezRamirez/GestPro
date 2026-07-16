@@ -256,6 +256,13 @@ const Parametros = ({ user, onLogout }) => {
     const [actividadRegistrandoAvance, setActividadRegistrandoAvance] = useState(null);
     const [formNuevoAvance, setFormNuevoAvance] = useState({ fecha: '', porcentaje_ejecucion: '' });
 
+    const [modificaciones, setModificaciones] = useState([]);
+    const [formModificacion, setFormModificacion] = useState({
+        numero_otrosi: '', tipo: 'adicion', valor_adicion: '',
+        dias_prorroga: '', fecha_modificacion: '', justificacion: '',
+    });
+    const [resumenModificacion, setResumenModificacion] = useState(null);
+
     // Manejar cambios en el formulario de contratos
     const handleContratoChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -377,8 +384,8 @@ const Parametros = ({ user, onLogout }) => {
         const porcentajeAnticipo = parseInt(formContrato.porcentaje_anticipo, 10) || 0;
         const amortizacion = formContrato.anticipo ? Math.round(valorFacturado * (porcentajeAnticipo / 100) * 100) / 100 : 0;
         const valorPresente = Math.round((valorFacturado - amortizacion) * 100) / 100;
-        const valorContrato = parseCurrencyValue(formContrato.valor);
-        const porcentajeEjecutado = valorContrato ? Math.round((valorPresente / valorContrato) * 100) : 0;
+        const valorVigente = parseCurrencyValue(formContrato.valor);
+        const porcentajeEjecutado = valorVigente ? Math.round((valorFacturado / valorVigente) * 100 * 100) / 100 : 0;
         return { amortizacion, valorPresente, porcentajeEjecutado };
     };
 
@@ -602,15 +609,15 @@ const Parametros = ({ user, onLogout }) => {
         }
     };
 
-    // Calcular avance financiero automáticamente: suma de valor_presente_acta de todas las actas / valor del contrato
+    // Calcular avance financiero automáticamente: suma de valor_facturado de todas las actas / valor vigente del contrato
     useEffect(() => {
-        const valorContrato = parseCurrencyValue(formContrato.valor);
-        if (actasFinancieras.length === 0 || !valorContrato) {
+        const valorVigente = parseCurrencyValue(formContrato.valor);
+        if (actasFinancieras.length === 0 || !valorVigente) {
             setFormContrato(prev => (prev.avance_financiero === '' ? prev : { ...prev, avance_financiero: '' }));
             return;
         }
-        const totalEjecutado = actasFinancieras.reduce((sum, acta) => sum + (parseFloat(acta.valor_presente_acta) || 0), 0);
-        const porcentaje = Math.round((totalEjecutado / valorContrato) * 100);
+        const totalFacturado = actasFinancieras.reduce((sum, acta) => sum + (parseFloat(acta.valor_facturado) || 0), 0);
+        const porcentaje = Math.round((totalFacturado / valorVigente) * 100 * 100) / 100;
         setFormContrato(prev => (prev.avance_financiero === porcentaje ? prev : { ...prev, avance_financiero: porcentaje }));
     }, [actasFinancieras, formContrato.valor]);
 
@@ -687,6 +694,8 @@ const Parametros = ({ user, onLogout }) => {
         }
         setActasFinancieras(contrato.avancesFinancieros || []);
         setActividades(contrato.actividades || []);
+        setModificaciones(contrato.modificaciones || []);
+        setResumenModificacion(null);
         setShowContratoForm(true);
     };
 
@@ -775,6 +784,9 @@ const Parametros = ({ user, onLogout }) => {
         setFormActividad({ nombre: '', peso: '' });
         setActividadRegistrandoAvance(null);
         setFormNuevoAvance({ fecha: '', porcentaje_ejecucion: '' });
+        setModificaciones([]);
+        setFormModificacion({ numero_otrosi: '', tipo: 'adicion', valor_adicion: '', dias_prorroga: '', fecha_modificacion: '', justificacion: '' });
+        setResumenModificacion(null);
         setContratoActiveTab('informacion');
     };
 
@@ -801,6 +813,9 @@ const Parametros = ({ user, onLogout }) => {
         setFormActividad({ nombre: '', peso: '' });
         setActividadRegistrandoAvance(null);
         setFormNuevoAvance({ fecha: '', porcentaje_ejecucion: '' });
+        setModificaciones([]);
+        setFormModificacion({ numero_otrosi: '', tipo: 'adicion', valor_adicion: '', dias_prorroga: '', fecha_modificacion: '', justificacion: '' });
+        setResumenModificacion(null);
         setContratoActiveTab('informacion');
         setShowContratoForm(true);
     };
@@ -812,7 +827,83 @@ const Parametros = ({ user, onLogout }) => {
             }
         });
         setContratos(response.data);
+        return response.data;
     }
+
+    // Refrescar los datos del contrato actualmente abierto en el modal
+    const refrescarContratoAbierto = async () => {
+        const lista = await listContratos();
+        if (formContrato.id && Array.isArray(lista)) {
+            const actual = lista.find(c => c.id === formContrato.id);
+            if (actual) {
+                setModificaciones(actual.modificaciones || []);
+                setFormContrato(prev => ({
+                    ...prev,
+                    valor: actual.valor ? formatCurrency(Number(actual.valor)) : '',
+                    fecha_fin: actual.fecha_fin || '',
+                }));
+            }
+        }
+    };
+
+    // Manejar cambios en el formulario de modificación (otrosí)
+    const handleModificacionChange = (e) => {
+        const { name, value } = e.target;
+        if (name === 'valor_adicion') {
+            const sanitized = value.replace(/[^\d]/g, '');
+            setFormModificacion(prev => ({ ...prev, valor_adicion: sanitized ? formatCurrencyInput(sanitized) : '' }));
+            return;
+        }
+        setFormModificacion(prev => ({ ...prev, [name]: value }));
+    };
+
+    // Guardar una modificación (otrosí) y recalcular el contrato
+    const guardarModificacion = async () => {
+        if (!formContrato.id) {
+            Swal.fire({ icon: 'warning', title: 'Guarda primero el contrato antes de registrar modificaciones.' });
+            return;
+        }
+        if (!formModificacion.fecha_modificacion) {
+            Swal.fire({ icon: 'warning', title: 'La fecha de la modificación es obligatoria.' });
+            return;
+        }
+        try {
+            const resp = await axios.post('/guardarModificacionContrato', {
+                contrato_id: formContrato.id,
+                numero_otrosi: formModificacion.numero_otrosi,
+                tipo: formModificacion.tipo,
+                valor_adicion: formModificacion.tipo === 'prorroga' ? null : parseCurrencyValue(formModificacion.valor_adicion) || null,
+                dias_prorroga: formModificacion.tipo === 'adicion' ? null : (formModificacion.dias_prorroga || null),
+                fecha_modificacion: formModificacion.fecha_modificacion,
+                justificacion: formModificacion.justificacion,
+            });
+            setResumenModificacion(resp.data.resumen);
+            if (resp.data.resumen?.supera_limite) {
+                Swal.fire({ icon: 'warning', title: 'Adición supera el 50% legal', text: 'Se registró de todas formas.' });
+            }
+            await refrescarContratoAbierto();
+            setFormModificacion({ numero_otrosi: '', tipo: 'adicion', valor_adicion: '', dias_prorroga: '', fecha_modificacion: '', justificacion: '' });
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error al guardar la modificación', text: e.response?.data?.error || e.message });
+        }
+    };
+
+    // Eliminar una modificación (otrosí) y recalcular el contrato
+    const eliminarModificacion = async (id) => {
+        const result = await Swal.fire({
+            icon: 'warning', title: '¿Eliminar esta modificación?',
+            text: 'Se recalculará el valor y la fecha fin del contrato.',
+            showCancelButton: true, confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar',
+        });
+        if (!result.isConfirmed) return;
+        try {
+            const resp = await axios.post('/eliminarModificacionContrato', { id });
+            setResumenModificacion(resp.data.resumen);
+            await refrescarContratoAbierto();
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error al eliminar la modificación', text: e.response?.data?.error || e.message });
+        }
+    };
 
     const tabs = [
         { id: 'proyectos', label: 'Gestionar Proyectos', icon: '📋' },
@@ -2428,6 +2519,14 @@ const Parametros = ({ user, onLogout }) => {
                                                 <FontAwesomeIcon icon={faCalculator} /> Avance Físico ({actividades.length})
                                             </button>
                                         )}
+                                        {editingContrato && (
+                                            <button
+                                                className={`contrato-tab ${contratoActiveTab === 'modificaciones' ? 'active' : ''}`}
+                                                onClick={() => setContratoActiveTab('modificaciones')}
+                                            >
+                                                <FontAwesomeIcon icon={faFile} /> Modificaciones ({modificaciones.length})
+                                            </button>
+                                        )}
                                     </div>
 
                                     {/* Contenido de la pestaña de información */}
@@ -2900,6 +2999,151 @@ const Parametros = ({ user, onLogout }) => {
                                                         </>
                                                     );
                                                 })()}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Contenido de la pestaña de modificaciones (otrosíes) */}
+                                    {contratoActiveTab === 'modificaciones' && (
+                                        <div className="contratos-modal-section">
+                                            <p className="contratos-info">
+                                                Registre las adiciones y prórrogas (otrosíes) del contrato. El valor y la fecha fin vigentes se recalculan automáticamente desde la base inicial más el historial de modificaciones.
+                                            </p>
+
+                                            {resumenModificacion && (
+                                                <div className="anexo-form">
+                                                    <h4>Resumen recalculado</h4>
+                                                    <div className="form-row">
+                                                        <div className="form-group">
+                                                            <label>Valor inicial</label>
+                                                            <span>{formatCurrency(Number(resumenModificacion.valor_inicial || 0))}</span>
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label>Valor vigente</label>
+                                                            <span>{formatCurrency(Number(resumenModificacion.valor_vigente || 0))}</span>
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label>Fecha fin inicial</label>
+                                                            <span>{resumenModificacion.fecha_fin_inicial || '-'}</span>
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label>Fecha fin vigente</label>
+                                                            <span>{resumenModificacion.fecha_fin_vigente || '-'}</span>
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label>% Adicionado</label>
+                                                            <span className={resumenModificacion.supera_limite ? 'texto-alerta' : ''}>
+                                                                {resumenModificacion.porcentaje_adicionado}%
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {resumenModificacion.supera_limite && (
+                                                        <p className="texto-alerta" style={{ color: '#d32f2f', fontWeight: 'bold' }}>
+                                                            ⚠ La suma de adiciones supera el 50% legal del valor inicial.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            <div className="anexo-form">
+                                                <h4>Registrar Nueva Modificación</h4>
+                                                <div className="form-row">
+                                                    <div className="form-group">
+                                                        <label htmlFor="numero_otrosi">N° Otrosí</label>
+                                                        <input type="text" id="numero_otrosi" name="numero_otrosi" value={formModificacion.numero_otrosi} onChange={handleModificacionChange} placeholder="Ej: Otrosí No. 1" />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="tipo_modificacion">Tipo *</label>
+                                                        <select id="tipo_modificacion" name="tipo" value={formModificacion.tipo} onChange={handleModificacionChange}>
+                                                            <option value="adicion">Adición</option>
+                                                            <option value="prorroga">Prórroga</option>
+                                                            <option value="adicion_prorroga">Adición y Prórroga</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label htmlFor="fecha_modificacion">Fecha *</label>
+                                                        <input type="date" id="fecha_modificacion" name="fecha_modificacion" value={formModificacion.fecha_modificacion} onChange={handleModificacionChange} />
+                                                    </div>
+                                                </div>
+                                                <div className="form-row">
+                                                    {formModificacion.tipo !== 'prorroga' && (
+                                                        <div className="form-group">
+                                                            <label htmlFor="valor_adicion">Valor de la adición</label>
+                                                            <input type="text" id="valor_adicion" name="valor_adicion" value={formModificacion.valor_adicion} onChange={handleModificacionChange} placeholder="$ 0,00" />
+                                                        </div>
+                                                    )}
+                                                    {formModificacion.tipo !== 'adicion' && (
+                                                        <div className="form-group">
+                                                            <label htmlFor="dias_prorroga">Días de prórroga</label>
+                                                            <input type="number" id="dias_prorroga" name="dias_prorroga" value={formModificacion.dias_prorroga} onChange={handleModificacionChange} min="0" />
+                                                        </div>
+                                                    )}
+                                                    <div className="form-group">
+                                                        <label htmlFor="justificacion_modificacion">Justificación</label>
+                                                        <input type="text" id="justificacion_modificacion" name="justificacion" value={formModificacion.justificacion} onChange={handleModificacionChange} placeholder="Motivo de la modificación" />
+                                                    </div>
+                                                </div>
+                                                <div className="form-row">
+                                                    <div className="form-group">
+                                                        <button
+                                                            type="button"
+                                                            onClick={guardarModificacion}
+                                                            className="btn-add-anexo"
+                                                            disabled={!formContrato.id || !formModificacion.fecha_modificacion}
+                                                        >
+                                                            <FontAwesomeIcon icon={faSave} /> Registrar Modificación
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="anexos-list">
+                                                <h4>Historial de Modificaciones ({modificaciones.length})</h4>
+                                                {modificaciones.length === 0 ? (
+                                                    <div className="no-anexos">
+                                                        <p>No hay modificaciones registradas</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="anexos-table">
+                                                        <table>
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>N° Otrosí</th>
+                                                                    <th>Tipo</th>
+                                                                    <th>Valor adición</th>
+                                                                    <th>Días prórroga</th>
+                                                                    <th>Fecha</th>
+                                                                    <th>Justificación</th>
+                                                                    <th>Acciones</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {modificaciones.map(mod => (
+                                                                    <tr key={mod.id}>
+                                                                        <td>{mod.numero_otrosi || '-'}</td>
+                                                                        <td>{mod.tipo === 'adicion' ? 'Adición' : mod.tipo === 'prorroga' ? 'Prórroga' : 'Adición y Prórroga'}</td>
+                                                                        <td>{mod.valor_adicion ? formatCurrency(Number(mod.valor_adicion)) : '-'}</td>
+                                                                        <td>{mod.dias_prorroga || '-'}</td>
+                                                                        <td>{mod.fecha_modificacion || '-'}</td>
+                                                                        <td>{mod.justificacion || '-'}</td>
+                                                                        <td>
+                                                                            <div className="anexo-actions">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => eliminarModificacion(mod.id)}
+                                                                                    className="btn-delete-anexo"
+                                                                                    title="Eliminar modificación"
+                                                                                >
+                                                                                    <FontAwesomeIcon icon={faTrash} />
+                                                                                </button>
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     )}
