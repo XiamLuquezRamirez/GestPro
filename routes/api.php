@@ -61,6 +61,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/guardarActividad', [ProyectoController::class, 'guardarActividad']);
         Route::post('/eliminarActividad', [ProyectoController::class, 'eliminarActividad']);
         Route::post('/registrarAvanceActividad', [ProyectoController::class, 'registrarAvanceActividad']);
+        Route::post('/guardarModificacionContrato', [ProyectoController::class, 'guardarModificacionContrato']);
     });
 
     // Gestión de catálogos: solo Administrador

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -968,6 +969,86 @@ class ProyectoController extends Controller
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'mensaje' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Registra una modificación (otrosí) y recalcula el valor y la fecha fin
+     * vigentes del contrato desde su base inmutable + historial completo.
+     */
+    public function guardarModificacionContrato(Request $request)
+    {
+        $data = $request->all();
+        $contratoId = $data['contrato_id'];
+
+        $nullableDecimal = fn ($v) => ($v === '' || $v === null) ? null : $v;
+        $nullableInt = fn ($v) => ($v === '' || $v === null) ? null : (int) $v;
+
+        DB::beginTransaction();
+        try {
+            DB::table('modificaciones_contrato')->insert([
+                'contrato_id' => $contratoId,
+                'numero_otrosi' => $data['numero_otrosi'] ?? null,
+                'tipo' => $data['tipo'],
+                'valor_adicion' => $nullableDecimal($data['valor_adicion'] ?? null),
+                'dias_prorroga' => $nullableInt($data['dias_prorroga'] ?? null),
+                'fecha_modificacion' => $data['fecha_modificacion'],
+                'justificacion' => $data['justificacion'] ?? null,
+            ]);
+
+            $resumen = $this->recalcularContrato($contratoId);
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'success' => 'Modificación registrada correctamente',
+            'resumen' => $resumen,
+        ]);
+    }
+
+    /**
+     * Recalcula valor y fecha_fin vigentes del contrato desde valor_inicial /
+     * fecha_fin_inicial + suma del historial de modificaciones. Devuelve el
+     * resumen (valores vigentes, % adicionado y bandera de límite 50%).
+     */
+    private function recalcularContrato($contratoId): array
+    {
+        $contrato = DB::table('contratos')->where('id', $contratoId)->first();
+
+        $valorInicial = (float) ($contrato->valor_inicial ?? $contrato->valor ?? 0);
+        $fechaFinInicial = $contrato->fecha_fin_inicial ?? $contrato->fecha_fin;
+
+        $sumaAdiciones = (float) DB::table('modificaciones_contrato')
+            ->where('contrato_id', $contratoId)
+            ->sum('valor_adicion');
+
+        $sumaDias = (int) DB::table('modificaciones_contrato')
+            ->where('contrato_id', $contratoId)
+            ->sum('dias_prorroga');
+
+        $valorVigente = $valorInicial + $sumaAdiciones;
+        $fechaFinVigente = $fechaFinInicial
+            ? Carbon::parse($fechaFinInicial)->addDays($sumaDias)->toDateString()
+            : null;
+
+        DB::table('contratos')->where('id', $contratoId)->update([
+            'valor' => $valorVigente,
+            'fecha_fin' => $fechaFinVigente,
+        ]);
+
+        $porcentaje = $valorInicial > 0 ? ($sumaAdiciones / $valorInicial) * 100 : 0.0;
+
+        return [
+            'valor_inicial' => $valorInicial,
+            'valor_vigente' => $valorVigente,
+            'fecha_fin_inicial' => $fechaFinInicial,
+            'fecha_fin_vigente' => $fechaFinVigente,
+            'porcentaje_adicionado' => round($porcentaje, 2),
+            'supera_limite' => $porcentaje > 50,
+        ];
     }
 
     public function listarContratos(Request $request)

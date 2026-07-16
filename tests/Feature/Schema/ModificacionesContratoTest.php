@@ -9,6 +9,7 @@ use App\Models\Municipio;
 use App\Models\Proyecto;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -111,5 +112,92 @@ class ModificacionesContratoTest extends TestCase
         $contrato = \Illuminate\Support\Facades\DB::table('contratos')->where('n_contrato', 'C-100')->first();
         $this->assertEquals('200000000.00', $contrato->valor_inicial);
         $this->assertStringStartsWith('2027-06-30', (string) $contrato->fecha_fin_inicial);
+    }
+
+    // Auth JWT: devuelve los headers Authorization con un token de Administrador.
+    private function headersAdmin(): array
+    {
+        $admin = User::factory()->create(['rol' => Rol::Administrador]);
+        $token = auth('api')->login($admin);
+        return ['Authorization' => "Bearer {$token}"];
+    }
+
+    public function test_guardar_modificacion_recalcula_valor_y_fecha(): void
+    {
+        $headers = $this->headersAdmin();
+        $contrato = $this->crearContrato();
+        DB::table('contratos')->where('id', $contrato->id)->update([
+            'valor_inicial' => 100000000,
+            'fecha_fin_inicial' => '2026-12-31',
+        ]);
+
+        $resp = $this->withHeaders($headers)->postJson('/GestPro/guardarModificacionContrato', [
+            'contrato_id' => $contrato->id,
+            'numero_otrosi' => 'Otrosí No. 1',
+            'tipo' => 'adicion_prorroga',
+            'valor_adicion' => 30000000,
+            'dias_prorroga' => 60,
+            'fecha_modificacion' => '2026-03-01',
+            'justificacion' => 'Mayor obra',
+        ]);
+
+        $resp->assertOk();
+        $fresco = DB::table('contratos')->where('id', $contrato->id)->first();
+        $this->assertEquals('130000000.00', $fresco->valor);
+        // 2026-12-31 + 60 días = 2027-03-01
+        $this->assertStringStartsWith('2027-03-01', (string) $fresco->fecha_fin);
+        $this->assertSame(30.0, round($resp->json('resumen.porcentaje_adicionado'), 2));
+        $this->assertFalse($resp->json('resumen.supera_limite'));
+    }
+
+    public function test_adicion_supera_50_por_ciento_advierte_pero_persiste(): void
+    {
+        $headers = $this->headersAdmin();
+        $contrato = $this->crearContrato();
+        DB::table('contratos')->where('id', $contrato->id)->update([
+            'valor_inicial' => 100000000,
+            'fecha_fin_inicial' => '2026-12-31',
+        ]);
+
+        $resp = $this->withHeaders($headers)->postJson('/GestPro/guardarModificacionContrato', [
+            'contrato_id' => $contrato->id,
+            'numero_otrosi' => 'Otrosí No. 1',
+            'tipo' => 'adicion',
+            'valor_adicion' => 60000000,
+            'dias_prorroga' => null,
+            'fecha_modificacion' => '2026-03-01',
+            'justificacion' => 'Excepción legal',
+        ]);
+
+        $resp->assertOk();
+        $this->assertTrue($resp->json('resumen.supera_limite'));
+        $this->assertDatabaseCount('modificaciones_contrato', 1);
+        $fresco = DB::table('contratos')->where('id', $contrato->id)->first();
+        $this->assertEquals('160000000.00', $fresco->valor);
+    }
+
+    public function test_solo_prorroga_no_cambia_valor(): void
+    {
+        $headers = $this->headersAdmin();
+        $contrato = $this->crearContrato();
+        DB::table('contratos')->where('id', $contrato->id)->update([
+            'valor_inicial' => 100000000,
+            'fecha_fin_inicial' => '2026-12-31',
+        ]);
+
+        $this->withHeaders($headers)->postJson('/GestPro/guardarModificacionContrato', [
+            'contrato_id' => $contrato->id,
+            'numero_otrosi' => 'Otrosí No. 1',
+            'tipo' => 'prorroga',
+            'valor_adicion' => null,
+            'dias_prorroga' => 90,
+            'fecha_modificacion' => '2026-03-01',
+            'justificacion' => 'Retraso lluvias',
+        ])->assertOk();
+
+        $fresco = DB::table('contratos')->where('id', $contrato->id)->first();
+        $this->assertEquals('100000000.00', $fresco->valor);
+        // 2026-12-31 + 90 días = 2027-03-31
+        $this->assertStringStartsWith('2027-03-31', (string) $fresco->fecha_fin);
     }
 }
