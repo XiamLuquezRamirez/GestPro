@@ -3,6 +3,7 @@
 namespace Tests\Feature\Schema;
 
 use App\Models\Contrato;
+use App\Models\ModificacionContrato;
 use App\Models\Municipio;
 use App\Models\Proyecto;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -59,5 +60,26 @@ class ModificacionesContratoTest extends TestCase
         $fresco = $contrato->fresh();
         $this->assertSame('100000000.00', $fresco->valor_inicial);
         $this->assertSame('2026-12-31', $fresco->fecha_fin_inicial->toDateString());
+    }
+
+    public function test_modificacion_belongs_to_contrato_y_castea_decimales(): void
+    {
+        $contrato = $this->crearContrato();
+
+        $mod = ModificacionContrato::create([
+            'contrato_id' => $contrato->id,
+            'numero_otrosi' => 'Otrosí No. 1',
+            'tipo' => 'adicion_prorroga',
+            'valor_adicion' => 30000000,
+            'dias_prorroga' => 60,
+            'fecha_modificacion' => '2026-03-01',
+            'justificacion' => 'Mayor cantidad de obra',
+        ]);
+
+        $fresco = $mod->fresh();
+        $this->assertTrue($fresco->contrato->is($contrato));
+        $this->assertSame('30000000.00', $fresco->valor_adicion);
+        $this->assertSame(60, $fresco->dias_prorroga);
+        $this->assertCount(1, $contrato->fresh()->modificaciones);
     }
 }

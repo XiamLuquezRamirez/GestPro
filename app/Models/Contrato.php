@@ -14,6 +14,7 @@ class Contrato extends Model
         'proyecto', 'n_contrato', 'objeto', 'contratante', 'contratista', 'valor',
         'fecha_inicio', 'fecha_fin', 'interventoria', 'avance_fisico', 'avance_financiero',
         'estado', 'anticipo', 'porcentaje_anticipo', 'proceso_licitacion',
+        'valor_inicial', 'fecha_fin_inicial',
     ];
 
     protected $casts = [
@@ -56,5 +57,10 @@ class Contrato extends Model
     public function actividades(): HasMany
     {
         return $this->hasMany(ActividadContrato::class, 'contrato_id');
+    }
+
+    public function modificaciones(): HasMany
+    {
+        return $this->hasMany(ModificacionContrato::class, 'contrato_id');
     }
 }
