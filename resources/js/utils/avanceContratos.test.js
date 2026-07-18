@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcularDesfase, severidadDesfase, aplanarContratos } from './avanceContratos';
+import { calcularDesfase, severidadDesfase, aplanarContratos, construirSerieTemporal } from './avanceContratos';
 
 describe('calcularDesfase', () => {
     it('resta financiero menos físico', () => {
@@ -80,5 +80,69 @@ describe('aplanarContratos', () => {
     it('devuelve arreglo vacío si no hay proyectos', () => {
         expect(aplanarContratos([])).toEqual([]);
         expect(aplanarContratos(null)).toEqual([]);
+    });
+});
+
+describe('construirSerieTemporal', () => {
+    const contrato = {
+        valor: '1000000000.00',
+        actividades: [
+            {
+                id: 1, nombre: 'Excavación', peso: 60,
+                avances: [
+                    { fecha: '2026-01-31', porcentaje_ejecucion: 50 },
+                    { fecha: '2026-03-31', porcentaje_ejecucion: 100 },
+                ],
+            },
+            {
+                id: 2, nombre: 'Estructura', peso: 40,
+                avances: [
+                    { fecha: '2026-03-31', porcentaje_ejecucion: 25 },
+                ],
+            },
+        ],
+        avancesFinancieros: [
+            { fecha_acta: '2026-02-28', valor_facturado: '200000000.00' },
+            { fecha_acta: '2026-03-31', valor_facturado: '300000000.00' },
+        ],
+    };
+
+    it('genera un punto por cada fecha de corte, ordenadas', () => {
+        const serie = construirSerieTemporal(contrato);
+        expect(serie.map(p => p.fecha)).toEqual(['2026-01-31', '2026-02-28', '2026-03-31']);
+    });
+
+    it('calcula el físico ponderado usando el último avance hasta cada fecha', () => {
+        const serie = construirSerieTemporal(contrato);
+        // 31-ene: Excavación 50% × peso 60 = 30; Estructura sin avances = 0
+        expect(serie[0].fisico).toBe(30);
+        // 28-feb: sin avances nuevos, se mantiene 30
+        expect(serie[1].fisico).toBe(30);
+        // 31-mar: Excavación 100% × 60 = 60; Estructura 25% × 40 = 10 → 70
+        expect(serie[2].fisico).toBe(70);
+    });
+
+    it('acumula el financiero sobre valor_facturado, no lo reemplaza', () => {
+        const serie = construirSerieTemporal(contrato);
+        // 31-ene: sin actas todavía
+        expect(serie[0].financiero).toBe(0);
+        // 28-feb: 200M / 1000M = 20%
+        expect(serie[1].financiero).toBe(20);
+        // 31-mar: (200M + 300M) / 1000M = 50% (no 30%)
+        expect(serie[2].financiero).toBe(50);
+    });
+
+    it('incluye la brecha en cada punto', () => {
+        const serie = construirSerieTemporal(contrato);
+        expect(serie[2].brecha).toBe(-20); // 50 financiero − 70 físico
+    });
+
+    it('devuelve arreglo vacío si el contrato no tiene valor vigente', () => {
+        expect(construirSerieTemporal({ ...contrato, valor: 0 })).toEqual([]);
+        expect(construirSerieTemporal({ ...contrato, valor: null })).toEqual([]);
+    });
+
+    it('devuelve arreglo vacío si no hay ninguna fecha de corte', () => {
+        expect(construirSerieTemporal({ valor: '1000000000.00', actividades: [], avancesFinancieros: [] })).toEqual([]);
     });
 });
