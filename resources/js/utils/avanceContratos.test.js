@@ -77,6 +77,24 @@ describe('aplanarContratos', () => {
         expect(fila.sinDatos).toBe(true);
     });
 
+    it('marca como sinDatos un contrato con solo uno de los dos avances', () => {
+        // Un contrato con físico pero sin financiero no es comparable: graficarlo
+        // en financiero=0 lo pinta como "sano" cuando en realidad no se sabe.
+        // Parametros.jsx escribe avance_financiero: '' cuando no hay actas.
+        const parciales = [{
+            id: 3,
+            nombre: 'Proyecto Parcial',
+            contratos: [
+                { id: 20, n_contrato: 'C-020', valor: '500000000.00', avance_fisico: 80, avance_financiero: '', actividades: [], avancesFinancieros: [] },
+                { id: 21, n_contrato: 'C-021', valor: '500000000.00', avance_fisico: null, avance_financiero: 45, actividades: [], avancesFinancieros: [] },
+            ],
+        }];
+
+        const filas = aplanarContratos(parciales);
+        expect(filas.find(c => c.id === 20).sinDatos).toBe(true);
+        expect(filas.find(c => c.id === 21).sinDatos).toBe(true);
+    });
+
     it('devuelve arreglo vacío si no hay proyectos', () => {
         expect(aplanarContratos([])).toEqual([]);
         expect(aplanarContratos(null)).toEqual([]);

@@ -27,11 +27,13 @@ export const severidadDesfase = (desfase) => {
     return 'critico';
 };
 
-// Un contrato "sin datos" no tiene ni avance físico ni financiero registrados:
-// graficarlo en (0,0) distorsiona la lectura del scatter.
+const vacio = (valor) => valor === null || valor === undefined || valor === '';
+
+// Un contrato es "sin datos" si le falta CUALQUIERA de los dos avances: el
+// desfase solo tiene sentido comparando ambos. Con uno solo, graficar el otro
+// en 0 lo haría pasar por "sano" cuando en realidad no se puede saber.
 const sinDatosDeAvance = (contrato) =>
-    (contrato?.avance_fisico === null || contrato?.avance_fisico === undefined || contrato?.avance_fisico === '') &&
-    (contrato?.avance_financiero === null || contrato?.avance_financiero === undefined || contrato?.avance_financiero === '');
+    vacio(contrato?.avance_fisico) || vacio(contrato?.avance_financiero);
 
 // Convierte la estructura anidada proyectos[].contratos[] en una lista plana de
 // filas listas para graficar y tabular.

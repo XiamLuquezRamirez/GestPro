@@ -32,7 +32,10 @@ const TooltipScatter = ({ active, payload }) => {
 
 const ContratosPanel = ({ proyectos }) => {
     const [soloCriticos, setSoloCriticos] = useState(false);
-    const [contratoSeleccionado, setContratoSeleccionado] = useState(null);
+    // Se guarda el id, no el objeto: así la selección sigue apuntando al dato
+    // vigente cuando `proyectos` se refresca, y no se contamina con la geometría
+    // que Recharts adjunta al payload del clic.
+    const [idSeleccionado, setIdSeleccionado] = useState(null);
 
     const contratos = useMemo(() => aplanarContratos(proyectos), [proyectos]);
 
@@ -52,6 +55,10 @@ const ContratosPanel = ({ proyectos }) => {
 
     const filasTabla = [...(soloCriticos ? criticos : conDatos)].sort((a, b) => b.desfase - a.desfase);
 
+    // Se deriva de la lista vigente para no quedar con datos obsoletos.
+    const contratoSeleccionado = idSeleccionado
+        ? contratos.find(c => c.id === idSeleccionado) || null
+        : null;
     const serie = contratoSeleccionado ? construirSerieTemporal(contratoSeleccionado) : [];
 
     if (contratos.length === 0) {
@@ -102,7 +109,7 @@ const ContratosPanel = ({ proyectos }) => {
                                     name={ETIQUETA_SEVERIDAD[severidad]}
                                     data={datos}
                                     fill={COLOR_SEVERIDAD[severidad]}
-                                    onClick={(punto) => setContratoSeleccionado(punto)}
+                                    onClick={(punto) => setIdSeleccionado((punto?.payload ?? punto)?.id ?? null)}
                                     cursor="pointer"
                                 />
                             ))}
@@ -140,10 +147,10 @@ const ContratosPanel = ({ proyectos }) => {
                     <tbody>
                         {filasTabla.map(c => (
                             <tr key={c.id}
-                                onClick={() => setContratoSeleccionado(c)}
+                                onClick={() => setIdSeleccionado(c.id)}
                                 style={{
                                     borderBottom: '1px solid #f3f4f6', cursor: 'pointer',
-                                    background: contratoSeleccionado?.id === c.id ? '#eff6ff' : (c.severidad === 'critico' ? '#fef2f2' : 'transparent'),
+                                    background: idSeleccionado === c.id ? '#eff6ff' : (c.severidad === 'critico' ? '#fef2f2' : 'transparent'),
                                 }}>
                                 <td style={{ padding: '7px 4px', fontWeight: 600 }}>{c.n_contrato}</td>
                                 <td style={{ padding: '7px 4px', color: '#6b7280' }}>{c.nombreProyecto}</td>
@@ -180,7 +187,7 @@ const ContratosPanel = ({ proyectos }) => {
                             Evolución de {contratoSeleccionado.n_contrato}
                             <span style={{ color: '#6b7280', fontWeight: 400 }}> — {contratoSeleccionado.nombreProyecto}</span>
                         </h3>
-                        <button type="button" onClick={() => setContratoSeleccionado(null)}
+                        <button type="button" onClick={() => setIdSeleccionado(null)}
                             style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18, color: '#6b7280' }}>×</button>
                     </div>
                     {serie.length < 2 ? (
