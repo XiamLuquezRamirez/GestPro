@@ -9,6 +9,7 @@ import MapaUbicaciones from './MapaUbicaciones';
 import DistribucionMunicipios from './DistribucionMunicipios';
 import ResumenFase from './ResumenFase';
 import ProximosEventos from './ProximosEventos';
+import ContratosPanel from './ContratosPanel';
 
 const Dashboard = ({ user, onLogout }) => {
     const [activeTab, setActiveTab] = useState(''); // Inicialmente vacío
@@ -113,6 +114,12 @@ const Dashboard = ({ user, onLogout }) => {
                             >
                                 Estadísticas y Filtros
                             </button>
+                            <button
+                                className={`tab-button ${activeTab === 'contratos' ? 'active' : ''}`}
+                                onClick={() => handleTabChange('contratos')}
+                            >
+                                Contratos
+                            </button>
                         </div>
 
                         <div className="tab-content">
@@ -146,6 +153,7 @@ const Dashboard = ({ user, onLogout }) => {
                                 </div>
                             )}
                             {activeTab === 'estadisticas' && <Estadisticas proyectos={proyectos} />}
+                            {activeTab === 'contratos' && <ContratosPanel proyectos={proyectos} />}
                         </div>
                     </div>
                 </section>
