@@ -10,6 +10,7 @@ import DistribucionMunicipios from './DistribucionMunicipios';
 import ResumenFase from './ResumenFase';
 import ProximosEventos from './ProximosEventos';
 import ContratosPanel from './ContratosPanel';
+import { construirSerieTemporal, severidadDesfase, COLOR_SEVERIDAD } from '../utils/avanceContratos';
 
 const Dashboard = ({ user, onLogout }) => {
     const [activeTab, setActiveTab] = useState(''); // Inicialmente vacío
@@ -265,7 +266,31 @@ const Dashboard = ({ user, onLogout }) => {
                             <p><span className="icono">📅</span><strong>Fecha de Inicio:</strong> {modalContrato.fecha_inicio || modalContrato.fecha}</p>
                             <p><span className="icono">📅</span><strong>Fecha de Fin:</strong> {modalContrato.fecha_fin}</p>
                             <p><span className="icono">🕵️‍♂️</span><strong>Interventoría:</strong> {modalContrato.interventoria || modalContrato.interventor}</p>
-                            <p><span className="icono">📈</span><strong>Avance:</strong> {modalContrato.avance ? `${modalContrato.avance}%` : ''}</p>
+                            {(() => {
+                                // Avances derivados del historial (actas + avances de actividad),
+                                // igual que la pestaña Contratos: las columnas avance_fisico /
+                                // avance_financiero son un snapshot que puede estar desactualizado.
+                                const serie = construirSerieTemporal(modalContrato);
+                                if (serie.length === 0) {
+                                    return (
+                                        <p><span className="icono">📈</span><strong>Avance:</strong> <em>Sin datos de avance registrados</em></p>
+                                    );
+                                }
+                                const ultimo = serie[serie.length - 1];
+                                const severidad = severidadDesfase(ultimo.brecha);
+                                return (
+                                    <>
+                                        <p><span className="icono">🏗️</span><strong>Avance Físico:</strong> {ultimo.fisico}%</p>
+                                        <p><span className="icono">💰</span><strong>Avance Financiero:</strong> {ultimo.financiero}%</p>
+                                        <p>
+                                            <span className="icono">📈</span><strong>Desfase:</strong>{' '}
+                                            <span style={{ color: COLOR_SEVERIDAD[severidad], fontWeight: 700 }}>
+                                                {ultimo.brecha > 0 ? '+' : ''}{ultimo.brecha}
+                                            </span>
+                                        </p>
+                                    </>
+                                );
+                            })()}
                             <p><span className="icono">🔄</span><strong>Estado:</strong> {modalContrato.estado}</p>
                         </div>
                     </div>
