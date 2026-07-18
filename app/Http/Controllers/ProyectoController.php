@@ -85,6 +85,12 @@ class ProyectoController extends Controller
                         ->first();
                     $actividad->ultimo_avance = $ultimoAvance->porcentaje_ejecucion ?? null;
                     $actividad->fecha_ultimo_avance = $ultimoAvance->fecha ?? null;
+                    $actividad->avances = DB::table('actividad_avances')
+                        ->select('id', 'fecha', 'porcentaje_ejecucion')
+                        ->where('actividad_id', $actividad->id)
+                        ->orderBy('fecha', 'asc')
+                        ->orderBy('id', 'asc')
+                        ->get();
                 }
 
                 $contrato->actividades = $actividades;
@@ -1112,6 +1118,12 @@ class ProyectoController extends Controller
                     ->first();
                 $actividad->ultimo_avance = $ultimoAvance->porcentaje_ejecucion ?? null;
                 $actividad->fecha_ultimo_avance = $ultimoAvance->fecha ?? null;
+                $actividad->avances = DB::table('actividad_avances')
+                    ->select('id', 'fecha', 'porcentaje_ejecucion')
+                    ->where('actividad_id', $actividad->id)
+                    ->orderBy('fecha', 'asc')
+                    ->orderBy('id', 'asc')
+                    ->get();
             }
             $contrato->actividades = $actividades;
         }
