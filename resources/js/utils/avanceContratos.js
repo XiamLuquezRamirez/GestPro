@@ -27,39 +27,6 @@ export const severidadDesfase = (desfase) => {
     return 'critico';
 };
 
-const vacio = (valor) => valor === null || valor === undefined || valor === '';
-
-// Un contrato es "sin datos" si le falta CUALQUIERA de los dos avances: el
-// desfase solo tiene sentido comparando ambos. Con uno solo, graficar el otro
-// en 0 lo haría pasar por "sano" cuando en realidad no se puede saber.
-const sinDatosDeAvance = (contrato) =>
-    vacio(contrato?.avance_fisico) || vacio(contrato?.avance_financiero);
-
-// Convierte la estructura anidada proyectos[].contratos[] en una lista plana de
-// filas listas para graficar y tabular.
-export const aplanarContratos = (proyectos) => {
-    if (!Array.isArray(proyectos)) return [];
-
-    return proyectos.flatMap((proyecto) =>
-        (proyecto.contratos || []).map((contrato) => {
-            const sinDatos = sinDatosDeAvance(contrato);
-            const desfase = calcularDesfase(contrato);
-
-            return {
-                ...contrato,
-                nombreProyecto: proyecto.nombre,
-                proyectoId: proyecto.id,
-                avanceFisico: numero(contrato.avance_fisico),
-                avanceFinanciero: numero(contrato.avance_financiero),
-                valorNumerico: numero(contrato.valor),
-                desfase,
-                severidad: severidadDesfase(desfase),
-                sinDatos,
-            };
-        })
-    );
-};
-
 // Normaliza una fecha (que puede venir como '2026-01-31' o ISO completo) a 'YYYY-MM-DD'.
 const soloFecha = (valor) => (valor ? String(valor).slice(0, 10) : null);
 
@@ -108,3 +75,44 @@ export const construirSerieTemporal = (contrato) => {
         };
     });
 };
+
+// Convierte la estructura anidada proyectos[].contratos[] en una lista plana de
+// filas listas para graficar y tabular.
+//
+// Los avances se derivan del HISTORIAL (último punto de la serie temporal), no de
+// las columnas avance_fisico/avance_financiero del contrato. Esas columnas son un
+// snapshot entero que solo se refresca cuando alguien guarda el formulario en
+// Parámetros, así que pueden estar desactualizadas respecto a las actas y avances
+// ya registrados. Derivar del historial garantiza que el scatter y la gráfica de
+// evolución muestren exactamente los mismos números.
+export const aplanarContratos = (proyectos) => {
+    if (!Array.isArray(proyectos)) return [];
+
+    return proyectos.flatMap((proyecto) =>
+        (proyecto.contratos || []).map((contrato) => {
+            const serie = construirSerieTemporal(contrato);
+            // Sin historial (o sin valor vigente) no hay nada que comparar: el
+            // contrato queda fuera del scatter y se lista aparte.
+            const sinDatos = serie.length === 0;
+            const ultimo = sinDatos ? null : serie[serie.length - 1];
+
+            const avanceFisico = ultimo ? ultimo.fisico : 0;
+            const avanceFinanciero = ultimo ? ultimo.financiero : 0;
+            const desfase = ultimo ? ultimo.brecha : 0;
+
+            return {
+                ...contrato,
+                nombreProyecto: proyecto.nombre,
+                proyectoId: proyecto.id,
+                avanceFisico,
+                avanceFinanciero,
+                valorNumerico: numero(contrato.valor),
+                desfase,
+                severidad: severidadDesfase(desfase),
+                sinDatos,
+                serie,
+            };
+        })
+    );
+};
+

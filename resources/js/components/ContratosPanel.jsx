@@ -4,7 +4,7 @@ import {
     CartesianGrid, Tooltip, Legend, ReferenceLine,
     LineChart, Line,
 } from 'recharts';
-import { aplanarContratos, construirSerieTemporal, COLOR_SEVERIDAD } from '../utils/avanceContratos';
+import { aplanarContratos, COLOR_SEVERIDAD } from '../utils/avanceContratos';
 
 const formatearMoneda = (valor) => '$' + Math.round((valor || 0) / 1_000_000).toLocaleString('es-CO') + ' M';
 
@@ -59,7 +59,9 @@ const ContratosPanel = ({ proyectos }) => {
     const contratoSeleccionado = idSeleccionado
         ? contratos.find(c => c.id === idSeleccionado) || null
         : null;
-    const serie = contratoSeleccionado ? construirSerieTemporal(contratoSeleccionado) : [];
+    // La serie ya viene calculada por aplanarContratos: el scatter y esta gráfica
+    // salen de la misma fuente, así que sus números siempre coinciden.
+    const serie = contratoSeleccionado?.serie ?? [];
 
     if (contratos.length === 0) {
         return <div className="contratos-panel"><p>No hay contratos registrados.</p></div>;

@@ -43,15 +43,25 @@ describe('aplanarContratos', () => {
             id: 1,
             nombre: 'Acueducto Rural',
             contratos: [
-                { id: 10, n_contrato: 'C-001', valor: '890000000.00', avance_fisico: 65, avance_financiero: 90, actividades: [], avancesFinancieros: [] },
-                { id: 11, n_contrato: 'C-002', valor: '1240000000.00', avance_fisico: null, avance_financiero: null, actividades: [], avancesFinancieros: [] },
+                // Historial que rinde 65% físico y 90% financiero (desfase +25).
+                {
+                    id: 10, n_contrato: 'C-001', valor: '1000000000.00',
+                    actividades: [{ id: 1, peso: 100, avances: [{ fecha: '2026-03-31', porcentaje_ejecucion: 65 }] }],
+                    avancesFinancieros: [{ fecha_acta: '2026-03-31', valor_facturado: '900000000.00' }],
+                },
+                // Sin historial: no comparable.
+                { id: 11, n_contrato: 'C-002', valor: '1240000000.00', actividades: [], avancesFinancieros: [] },
             ],
         },
         {
             id: 2,
             nombre: 'Parque Central',
             contratos: [
-                { id: 12, n_contrato: 'C-005', valor: '620000000.00', avance_fisico: 42, avance_financiero: 58, actividades: [], avancesFinancieros: [] },
+                {
+                    id: 12, n_contrato: 'C-005', valor: '620000000.00',
+                    actividades: [{ id: 2, peso: 100, avances: [{ fecha: '2026-03-31', porcentaje_ejecucion: 42 }] }],
+                    avancesFinancieros: [{ fecha_acta: '2026-03-31', valor_facturado: '310000000.00' }],
+                },
             ],
         },
     ];
@@ -77,27 +87,94 @@ describe('aplanarContratos', () => {
         expect(fila.sinDatos).toBe(true);
     });
 
-    it('marca como sinDatos un contrato con solo uno de los dos avances', () => {
-        // Un contrato con físico pero sin financiero no es comparable: graficarlo
-        // en financiero=0 lo pinta como "sano" cuando en realidad no se sabe.
-        // Parametros.jsx escribe avance_financiero: '' cuando no hay actas.
-        const parciales = [{
+    it('grafica un contrato con historial de un solo lado, sin inventar el otro', () => {
+        // Con actividades pero sin actas, el financiero es genuinamente 0%: se
+        // facturó nada de lo ejecutado. Eso es información real (desfase negativo),
+        // no ausencia de datos, así que sí entra al scatter.
+        const soloFisico = [{
             id: 3,
-            nombre: 'Proyecto Parcial',
-            contratos: [
-                { id: 20, n_contrato: 'C-020', valor: '500000000.00', avance_fisico: 80, avance_financiero: '', actividades: [], avancesFinancieros: [] },
-                { id: 21, n_contrato: 'C-021', valor: '500000000.00', avance_fisico: null, avance_financiero: 45, actividades: [], avancesFinancieros: [] },
-            ],
+            nombre: 'Proyecto Solo Físico',
+            contratos: [{
+                id: 20, n_contrato: 'C-020', valor: '500000000.00',
+                actividades: [{ id: 1, peso: 100, avances: [{ fecha: '2026-03-31', porcentaje_ejecucion: 80 }] }],
+                avancesFinancieros: [],
+            }],
         }];
 
-        const filas = aplanarContratos(parciales);
-        expect(filas.find(c => c.id === 20).sinDatos).toBe(true);
-        expect(filas.find(c => c.id === 21).sinDatos).toBe(true);
+        const fila = aplanarContratos(soloFisico)[0];
+        expect(fila.sinDatos).toBe(false);
+        expect(fila.avanceFisico).toBe(80);
+        expect(fila.avanceFinanciero).toBe(0);
+        expect(fila.desfase).toBe(-80);
+        expect(fila.severidad).toBe('sano');
     });
 
     it('devuelve arreglo vacío si no hay proyectos', () => {
         expect(aplanarContratos([])).toEqual([]);
         expect(aplanarContratos(null)).toEqual([]);
+    });
+
+    it('deriva los avances del historial, no de los campos guardados', () => {
+        // Los campos avance_fisico/avance_financiero del contrato son un snapshot
+        // entero que solo se refresca al guardar el formulario. El historial es la
+        // fuente de verdad: scatter y gráfica de evolución deben coincidir.
+        const desactualizados = [{
+            id: 4,
+            nombre: 'Proyecto Desactualizado',
+            contratos: [{
+                id: 30,
+                n_contrato: 'C-030',
+                valor: '1000000000.00',
+                avance_fisico: 10,        // snapshot viejo
+                avance_financiero: 15,    // snapshot viejo
+                actividades: [
+                    { id: 1, peso: 60, avances: [{ fecha: '2026-03-31', porcentaje_ejecucion: 50 }] },
+                    { id: 2, peso: 40, avances: [{ fecha: '2026-03-31', porcentaje_ejecucion: 25 }] },
+                ],
+                avancesFinancieros: [
+                    { fecha_acta: '2026-02-28', valor_facturado: '200000000.00' },
+                    { fecha_acta: '2026-03-31', valor_facturado: '300000000.00' },
+                ],
+            }],
+        }];
+
+        const fila = aplanarContratos(desactualizados)[0];
+        // Físico real: 50%×60 + 25%×40 = 40 (no el 10 guardado)
+        expect(fila.avanceFisico).toBe(40);
+        // Financiero real: (200M+300M)/1000M = 50 (no el 15 guardado)
+        expect(fila.avanceFinanciero).toBe(50);
+        expect(fila.desfase).toBe(10);
+        expect(fila.severidad).toBe('sano');
+        expect(fila.sinDatos).toBe(false);
+    });
+
+    it('marca sinDatos cuando el historial está vacío, ignorando los campos guardados', () => {
+        const soloSnapshot = [{
+            id: 5,
+            nombre: 'Proyecto Sin Historial',
+            contratos: [{
+                id: 31, n_contrato: 'C-031', valor: '500000000.00',
+                avance_fisico: 40, avance_financiero: 55,
+                actividades: [], avancesFinancieros: [],
+            }],
+        }];
+
+        expect(aplanarContratos(soloSnapshot)[0].sinDatos).toBe(true);
+    });
+
+    it('un contrato sin valor vigente no es comparable', () => {
+        const sinValor = [{
+            id: 6,
+            nombre: 'Proyecto Sin Valor',
+            contratos: [{
+                id: 32, n_contrato: 'C-032', valor: null,
+                avance_fisico: 30, avance_financiero: 40,
+                actividades: [{ id: 1, peso: 100, avances: [{ fecha: '2026-03-31', porcentaje_ejecucion: 30 }] }],
+                avancesFinancieros: [{ fecha_acta: '2026-03-31', valor_facturado: '100000000.00' }],
+            }],
+        }];
+
+        expect(aplanarContratos(sinValor)[0].sinDatos).toBe(true);
     });
 });
 
