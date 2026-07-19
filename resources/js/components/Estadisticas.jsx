@@ -3,6 +3,7 @@ import {
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
     PieChart, Pie, Cell,
 } from 'recharts';
+import { calcularCadenaPresupuestal } from '../utils/cadenaPresupuestal';
 
 const formatearPresupuesto = (valor) => '$' + Math.round((valor || 0) / 1_000_000).toLocaleString('es-CO') + ' M';
 
@@ -32,6 +33,12 @@ const Estadisticas = ({ proyectos }) => {
         if (filtro.fechaHasta && (!p.fecha_inicio || p.fecha_inicio > filtro.fechaHasta)) return false;
         return true;
     });
+
+    const cadena = calcularCadenaPresupuestal(proyectosFiltrados);
+    // La barra más larga define la escala visual; las otras dos se leen en proporción.
+    const maxCadena = Math.max(cadena.planeado, cadena.contratado, cadena.ejecutado);
+    const anchoBarra = (valor) => (maxCadena > 0 ? `${(valor / maxCadena) * 100}%` : '0%');
+    const hayFiltroActivo = Boolean(filtro.municipio || filtro.fase || filtro.estado || filtro.fechaDesde || filtro.fechaHasta);
 
     const colorPorMunicipio = {};
     municipiosUnicos.forEach((m, i) => {
@@ -98,6 +105,7 @@ const Estadisticas = ({ proyectos }) => {
         avancePromedio: Math.round(item.sumaAvance / item.cantidad),
     }));
 
+   
     const dataPorMes = Object.values(
         proyectosFiltrados
             .filter(p => p.fecha_inicio)
@@ -157,6 +165,75 @@ const Estadisticas = ({ proyectos }) => {
                 <button type="button" className="filtros-limpiar-btn" onClick={limpiarFiltros}>
                     Limpiar filtros
                 </button>
+            </div>
+
+            <div className="cadena-presupuestal-card" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 15, margin: '0 0 14px' }}>
+                    💰 Cadena presupuestal
+                    {hayFiltroActivo && (
+                        <span style={{ fontWeight: 400, color: '#6b7280', fontSize: 12 }}>
+                            {' '}— {proyectosFiltrados.length} proyecto(s) según los filtros
+                        </span>
+                    )}
+                </h3>
+
+                {proyectosFiltrados.length === 0 ? (
+                    <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
+                        Sin proyectos que coincidan con los filtros.
+                    </p>
+                ) : (
+                    <>
+                        <div style={{ marginBottom: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                                <span style={{ color: '#374151', fontWeight: 600 }}>📋 Planeado</span>
+                                <span style={{ fontWeight: 700 }}>{formatearPresupuesto(cadena.planeado)}</span>
+                            </div>
+                            <div style={{ background: '#e5e7eb', borderRadius: 4, height: 22 }}>
+                                <div style={{ background: '#64748b', width: anchoBarra(cadena.planeado), height: '100%', borderRadius: 4 }} />
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                                <span style={{ color: '#374151', fontWeight: 600 }}>📝 Contratado</span>
+                                <span style={{ fontWeight: 700, color: '#2563eb' }}>
+                                    {formatearPresupuesto(cadena.contratado)}
+                                    {cadena.pctContratado !== null && (
+                                        <span style={{ color: '#6b7280', fontSize: 11, fontWeight: 400 }}>
+                                            {' '}({cadena.pctContratado}% de lo planeado)
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                            <div style={{ background: '#e5e7eb', borderRadius: 4, height: 22 }}>
+                                <div style={{ background: '#2563eb', width: anchoBarra(cadena.contratado), height: '100%', borderRadius: 4 }} />
+                            </div>
+                        </div>
+
+                        <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                                <span style={{ color: '#374151', fontWeight: 600 }}>💵 Ejecutado (facturado)</span>
+                                <span style={{ fontWeight: 700, color: '#16a34a' }}>
+                                    {formatearPresupuesto(cadena.ejecutado)}
+                                    {cadena.pctEjecutado !== null && (
+                                        <span style={{ color: '#6b7280', fontSize: 11, fontWeight: 400 }}>
+                                            {' '}({cadena.pctEjecutado}% de lo contratado)
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                            <div style={{ background: '#e5e7eb', borderRadius: 4, height: 22 }}>
+                                <div style={{ background: '#16a34a', width: anchoBarra(cadena.ejecutado), height: '100%', borderRadius: 4 }} />
+                            </div>
+                        </div>
+
+                        {cadena.excedente > 0 && (
+                            <div style={{ background: '#fffbeb', borderLeft: '3px solid #f59e0b', padding: '9px 11px', marginTop: 14, fontSize: 12, color: '#78350f' }}>
+                                ⚠️ Lo contratado supera lo planeado en <strong>{formatearPresupuesto(cadena.excedente)}</strong>.
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
 
             <div className="graficas-grid">
