@@ -43,10 +43,12 @@ const ContratosPanel = ({ proyectos }) => {
     const sinDatos = contratos.filter(c => c.sinDatos);
 
     const totalValor = contratos.reduce((s, c) => s + c.valorNumerico, 0);
+    
     const promedioFisico = conDatos.length
         ? Math.round(conDatos.reduce((s, c) => s + c.avanceFisico, 0) / conDatos.length)
         : 0;
-    const criticos = conDatos.filter(c => c.severidad === 'critico');
+
+        const criticos = conDatos.filter(c => c.severidad === 'critico');
 
     const porSeveridad = ['sano', 'atencion', 'critico'].map(sev => ({
         severidad: sev,
@@ -94,17 +96,20 @@ const ContratosPanel = ({ proyectos }) => {
                 {conDatos.length === 0 ? (
                     <p style={{ fontSize: 13, color: '#6b7280' }}>Ningún contrato tiene avances registrados todavía.</p>
                 ) : (
-                    <ResponsiveContainer width="100%" height={340}>
-                        <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+                    <ResponsiveContainer width="100%" height={400}>
+                        {/* bottom deja sitio para la etiqueta del eje X y, debajo, la leyenda */}
+                        <ScatterChart margin={{ top: 10, right: 20, bottom: 45, left: 10 }}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis type="number" dataKey="avanceFisico" name="Físico" domain={[0, 100]}
-                                label={{ value: 'Avance Físico %', position: 'insideBottom', offset: -10, fontSize: 12 }} />
+                                label={{ value: 'Avance Físico %', position: 'insideBottom', offset: -18, fontSize: 12 }} />
                             <YAxis type="number" dataKey="avanceFinanciero" name="Financiero" domain={[0, 100]}
                                 label={{ value: 'Avance Financiero %', angle: -90, position: 'insideLeft', fontSize: 12 }} />
                             <ZAxis range={[90, 90]} />
                             <ReferenceLine segment={[{ x: 0, y: 0 }, { x: 100, y: 100 }]} stroke="#94a3b8" strokeDasharray="5 5" />
                             <Tooltip content={<TooltipScatter />} />
-                            <Legend />
+                            {/* bottom: 0 ancla la leyenda al pie del contenedor, por debajo
+                                de la etiqueta del eje X (que vive dentro del área del gráfico) */}
+                            <Legend verticalAlign="bottom" wrapperStyle={{ bottom: 0 }} />
                             {porSeveridad.map(({ severidad, datos }) => (
                                 <Scatter
                                     key={severidad}
@@ -113,6 +118,7 @@ const ContratosPanel = ({ proyectos }) => {
                                     fill={COLOR_SEVERIDAD[severidad]}
                                     onClick={(punto) => setIdSeleccionado((punto?.payload ?? punto)?.id ?? null)}
                                     cursor="pointer"
+                                
                                 />
                             ))}
                         </ScatterChart>
