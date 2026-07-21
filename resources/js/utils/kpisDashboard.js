@@ -7,6 +7,7 @@
 // provienen del seeder de demostración.
 
 import { calcularCadenaPresupuestal } from './cadenaPresupuestal';
+import { aplanarContratos } from './avanceContratos';
 
 const SIN_FASE = 'Sin fase';
 
@@ -52,6 +53,13 @@ export const calcularKpis = (proyectos) => {
     // reutilizarla evita que el KPI y el bloque cuenten historias distintas.
     const { pctEjecutado } = calcularCadenaPresupuestal(lista);
 
+    // Contratos donde lo facturado supera en más de 25 puntos a lo ejecutado
+    // físicamente. aplanarContratos ya deriva la severidad del historial y marca
+    // como sinDatos los que no son medibles, así que esos no se cuentan.
+    const desfaseCritico = aplanarContratos(lista)
+        .filter(c => !c.sinDatos && c.severidad === 'critico')
+        .length;
+
     const conteoFases = lista.reduce((acc, p) => {
         const fase = p?.descripcion_fase || SIN_FASE;
         acc[fase] = (acc[fase] || 0) + 1;
@@ -68,6 +76,7 @@ export const calcularKpis = (proyectos) => {
         enRiesgo,
         pctEjecucion: pctEjecutado,
         contratados,
+        desfaseCritico,
         porFase,
     };
 };

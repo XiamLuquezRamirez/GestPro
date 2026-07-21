@@ -168,3 +168,49 @@ describe('calcularAvanceGrupo', () => {
         expect(calcularAvanceGrupo(grupo).pct).toBe(33);
     });
 });
+
+describe('calcularKpis — contratos con desfase crítico', () => {
+    // Un contrato es crítico cuando lo facturado supera en más de 25 puntos
+    // a lo ejecutado físicamente (severidad 'critico' en aplanarContratos).
+    const proyectoCon = (id, contratos) => ({ id, descripcion_fase: 'Ejecución', contratos });
+
+    it('cuenta los contratos con desfase crítico', () => {
+        const proyectos = [
+            proyectoCon(1, [{
+                id: 10, valor: '1000000000.00',
+                // financiero 80%, físico 30% -> desfase +50 (crítico)
+                actividades: [{ id: 1, peso: 100, avances: [{ fecha: '2026-03-01', porcentaje_ejecucion: 30 }] }],
+                avancesFinancieros: [{ fecha_acta: '2026-03-01', valor_facturado: '800000000.00' }],
+            }]),
+            proyectoCon(2, [{
+                id: 11, valor: '1000000000.00',
+                // financiero 55%, físico 50% -> desfase +5 (sano)
+                actividades: [{ id: 2, peso: 100, avances: [{ fecha: '2026-03-01', porcentaje_ejecucion: 50 }] }],
+                avancesFinancieros: [{ fecha_acta: '2026-03-01', valor_facturado: '550000000.00' }],
+            }]),
+        ];
+        expect(calcularKpis(proyectos).desfaseCritico).toBe(1);
+    });
+
+    it('no cuenta contratos sin datos de avance', () => {
+        const proyectos = [proyectoCon(3, [{
+            id: 12, valor: '1000000000.00', actividades: [], avancesFinancieros: [],
+        }])];
+        expect(calcularKpis(proyectos).desfaseCritico).toBe(0);
+    });
+
+    it('no cuenta contratos en zona de atención (11-25)', () => {
+        const proyectos = [proyectoCon(4, [{
+            id: 13, valor: '1000000000.00',
+            // financiero 70%, físico 50% -> desfase +20 (atención, no crítico)
+            actividades: [{ id: 3, peso: 100, avances: [{ fecha: '2026-03-01', porcentaje_ejecucion: 50 }] }],
+            avancesFinancieros: [{ fecha_acta: '2026-03-01', valor_facturado: '700000000.00' }],
+        }])];
+        expect(calcularKpis(proyectos).desfaseCritico).toBe(0);
+    });
+
+    it('es 0 cuando no hay proyectos', () => {
+        expect(calcularKpis([]).desfaseCritico).toBe(0);
+        expect(calcularKpis(null).desfaseCritico).toBe(0);
+    });
+});

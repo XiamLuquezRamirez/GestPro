@@ -106,7 +106,7 @@ const Dashboard = ({ user, onLogout }) => {
                                     className={`tab-button ${activeTab === fase.nombre ? 'active' : ''}`}
                                     onClick={() => handleTabChange(fase.nombre)}
                                 >
-                                    {fase.nombre}
+                                    {fase.nombre} ({getProyectosPorNombreFase(fase.nombre).length})
                                 </button>
                             ))}
                             <button

@@ -1,17 +1,6 @@
 import React from 'react';
 import { calcularKpis } from '../utils/kpisDashboard';
 
-// Abreviaturas para la tarjeta de distribución por fase, donde no cabe el
-// nombre completo. Las fases que no estén aquí usan sus primeras 4 letras.
-const ABREVIATURA_FASE = {
-    'Formulación': 'Form',
-    'Licitación': 'Lic',
-    'Ejecución': 'Ejec',
-    'Sin fase': 'S/F',
-};
-
-const abreviar = (fase) => ABREVIATURA_FASE[fase] || fase.slice(0, 4);
-
 const KpiStrip = ({ proyectos }) => {
     const kpis = calcularKpis(proyectos);
 
@@ -70,21 +59,13 @@ const KpiStrip = ({ proyectos }) => {
             </div>
 
             <div
-                className="kpi-tile"
-                title={kpis.porFase.map(f => `${f.fase}: ${f.cantidad}`).join(' · ')}
+                className={`kpi-tile${kpis.desfaseCritico > 0 ? ' kpi-tile-riesgo' : ''}`}
+                title="Contratos donde lo facturado supera en más de 25 puntos al avance físico"
             >
-                <span className="kpi-icono">🔄</span>
+                <span className="kpi-icono">🚨</span>
                 <div>
-                    <div className="kpi-valor">
-                        {kpis.porFase.length === 0
-                            ? '—'
-                            : kpis.porFase.map(f => f.cantidad).join(' · ')}
-                    </div>
-                    <div className="kpi-etiqueta">
-                        {kpis.porFase.length === 0
-                            ? 'Por fase'
-                            : kpis.porFase.map(f => abreviar(f.fase)).join(' · ')}
-                    </div>
+                    <div className="kpi-valor">{kpis.desfaseCritico}</div>
+                    <div className="kpi-etiqueta">Desfase crítico</div>
                 </div>
             </div>
         </div>
