@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcularKpis } from './kpisDashboard';
+import { calcularKpis, calcularAvanceGrupo } from './kpisDashboard';
 
 describe('calcularKpis', () => {
     const proyectos = [
@@ -107,5 +107,64 @@ describe('calcularKpis', () => {
         const r = calcularKpis(sinActas);
         expect(r.pctEjecucion).toBe(0);
         expect(r.contratados).toBe(1);
+    });
+});
+
+describe('calcularAvanceGrupo', () => {
+    it('devuelve el porcentaje de ejecución y marca que hay contratos', () => {
+        const grupo = [{
+            id: 1,
+            contratos: [{
+                id: 10, valor: '1000000000.00',
+                avancesFinancieros: [{ valor_facturado: '250000000.00' }],
+            }],
+        }];
+        const r = calcularAvanceGrupo(grupo);
+        expect(r.pct).toBe(25);
+        expect(r.tieneContratos).toBe(true);
+    });
+
+    it('un grupo sin ningún contrato devuelve pct null', () => {
+        const grupo = [
+            { id: 2, contratos: [] },
+            { id: 3, contratos: [] },
+        ];
+        const r = calcularAvanceGrupo(grupo);
+        expect(r.pct).toBeNull();
+        expect(r.tieneContratos).toBe(false);
+    });
+
+    it('con contratos pero sin actas devuelve 0%, no null (el 0 es real)', () => {
+        const grupo = [{
+            id: 4,
+            contratos: [{ id: 40, valor: '500000000.00', avancesFinancieros: [] }],
+        }];
+        const r = calcularAvanceGrupo(grupo);
+        expect(r.pct).toBe(0);
+        expect(r.tieneContratos).toBe(true);
+    });
+
+    it('un grupo vacío devuelve pct null y sin contratos', () => {
+        const r = calcularAvanceGrupo([]);
+        expect(r.pct).toBeNull();
+        expect(r.tieneContratos).toBe(false);
+    });
+
+    it('tolera entradas nulas y proyectos mal formados', () => {
+        expect(calcularAvanceGrupo(null).pct).toBeNull();
+        expect(calcularAvanceGrupo(undefined).tieneContratos).toBe(false);
+        expect(calcularAvanceGrupo([{ id: 5, contratos: null }]).tieneContratos).toBe(false);
+    });
+
+    it('redondea el porcentaje a entero', () => {
+        const grupo = [{
+            id: 6,
+            contratos: [{
+                id: 60, valor: '300000000.00',
+                avancesFinancieros: [{ valor_facturado: '100000000.00' }],
+            }],
+        }];
+        // 100/300 = 33.33 -> 33
+        expect(calcularAvanceGrupo(grupo).pct).toBe(33);
     });
 });

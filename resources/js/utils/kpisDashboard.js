@@ -11,6 +11,26 @@ import { calcularCadenaPresupuestal } from './cadenaPresupuestal';
 const SIN_FASE = 'Sin fase';
 
 /**
+ * Ejecución financiera de un grupo de proyectos (una fase, un municipio, etc.).
+ *
+ * Distingue dos situaciones que no deben confundirse:
+ *  - Sin contratos  → pct null. No hay base para medir; la interfaz muestra "—".
+ *  - Con contratos y sin actas → pct 0. El 0% es real: se contrató y no se ha
+ *    facturado nada todavía.
+ */
+export const calcularAvanceGrupo = (proyectos) => {
+    const lista = Array.isArray(proyectos) ? proyectos : [];
+    const tieneContratos = lista.some(p => (p?.contratos?.length || 0) > 0);
+
+    if (!tieneContratos) {
+        return { pct: null, tieneContratos: false };
+    }
+
+    const { pctEjecutado } = calcularCadenaPresupuestal(lista);
+    return { pct: pctEjecutado ?? 0, tieneContratos: true };
+};
+
+/**
  * Calcula los seis KPIs de la tira superior del dashboard.
  *
  * - total:          cantidad de proyectos

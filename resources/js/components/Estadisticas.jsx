@@ -4,6 +4,7 @@ import {
     PieChart, Pie, Cell,
 } from 'recharts';
 import { calcularCadenaPresupuestal } from '../utils/cadenaPresupuestal';
+import { calcularAvanceGrupo } from '../utils/kpisDashboard';
 
 const formatearPresupuesto = (valor) => '$' + Math.round((valor || 0) / 1_000_000).toLocaleString('es-CO') + ' M';
 
@@ -89,21 +90,30 @@ const Estadisticas = ({ proyectos }) => {
         }, {})
     ).sort((a, b) => b.presupuesto - a.presupuesto);
 
-    const dataAvancePorFase = Object.values(
-        proyectosFiltrados.reduce((acc, p) => {
-            const fase = p.descripcion_fase || 'Sin fase';
-            if (!acc[fase]) {
-                acc[fase] = { fase, sumaAvance: 0, cantidad: 0, color: p.color_fase || '#9e9e9e' };
-            }
-            acc[fase].sumaAvance += parseInt(p.progreso, 10) || 0;
-            acc[fase].cantidad++;
-            return acc;
-        }, {})
-    ).map(item => ({
-        fase: item.fase,
-        color: item.color,
-        avancePromedio: Math.round(item.sumaAvance / item.cantidad),
+    // Ejecución financiera por fase. Las fases sin contratos no se grafican:
+    // una barra en 0 se leería como "no avanza" cuando en realidad todavía no
+    // hay nada que medir (Formulación y Licitación son previas a la contratación).
+    const proyectosPorFase = proyectosFiltrados.reduce((acc, p) => {
+        const fase = p.descripcion_fase || 'Sin fase';
+        if (!acc[fase]) {
+            acc[fase] = { fase, color: p.color_fase || '#9e9e9e', proyectos: [] };
+        }
+        acc[fase].proyectos.push(p);
+        return acc;
+    }, {});
+
+    const fasesConAvance = Object.values(proyectosPorFase).map(item => ({
+        ...item,
+        avance: calcularAvanceGrupo(item.proyectos),
     }));
+
+    const dataAvancePorFase = fasesConAvance
+        .filter(item => item.avance.tieneContratos)
+        .map(item => ({ fase: item.fase, color: item.color, ejecucion: item.avance.pct }));
+
+    const fasesSinContratos = fasesConAvance
+        .filter(item => !item.avance.tieneContratos)
+        .map(item => item.fase);
 
    
     const dataPorMes = Object.values(
@@ -331,23 +341,30 @@ const Estadisticas = ({ proyectos }) => {
                 </div>
 
                 <div className="grafica-card">
-                    <h3>Avance promedio por Fase</h3>
+                    <h3>Ejecución financiera por Fase</h3>
                     {dataAvancePorFase.length === 0 ? (
-                        <p className="estadisticas-sin-datos">Sin datos para el filtro actual.</p>
+                        <p className="estadisticas-sin-datos">
+                            Ninguna fase tiene contratos registrados para el filtro actual.
+                        </p>
                     ) : (
                         <ResponsiveContainer width="100%" height={220}>
                             <BarChart data={dataAvancePorFase}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                 <XAxis dataKey="fase" />
                                 <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                                <Tooltip formatter={(value) => [`${value}%`, 'Avance promedio']} />
-                                <Bar dataKey="avancePromedio" radius={[4, 4, 0, 0]}>
+                                <Tooltip formatter={(value) => [`${value}%`, 'Ejecución financiera']} />
+                                <Bar dataKey="ejecucion" radius={[4, 4, 0, 0]}>
                                     {dataAvancePorFase.map(entry => (
                                         <Cell key={entry.fase} fill={entry.color} />
                                     ))}
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
+                    )}
+                    {fasesSinContratos.length > 0 && (
+                        <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+                            Sin contratos registrados: {fasesSinContratos.join(', ')}
+                        </p>
                     )}
                 </div>
 
@@ -382,7 +399,7 @@ const Estadisticas = ({ proyectos }) => {
                                 <th>Fase</th>
                                 <th>Estado</th>
                                 <th>Presupuesto</th>
-                                <th>Avance</th>
+                                <th>Ejecución</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -397,7 +414,14 @@ const Estadisticas = ({ proyectos }) => {
                                         </span>
                                     </td>
                                     <td>{formatearPresupuesto(parseFloat(p.presupuesto))}</td>
-                                    <td>{parseInt(p.progreso, 10) || 0}%</td>
+                                    <td>
+                                        {(() => {
+                                            const a = calcularAvanceGrupo([p]);
+                                            return a.tieneContratos
+                                                ? `${a.pct}%`
+                                                : <span style={{ color: '#9ca3af' }}>—</span>;
+                                        })()}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>

@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { calcularAvanceGrupo } from '../utils/kpisDashboard';
 
 const formatearPresupuesto = (valor) => '$' + Math.round(valor / 1_000_000).toLocaleString('es-CO') + ' M';
 
@@ -16,12 +17,11 @@ const DistribucionMunicipios = ({ proyectos, onMunicipioClick, municipioSeleccio
         return Object.entries(porMunicipio).map(([municipio, proyectosDelMunicipio]) => {
             const total = proyectosDelMunicipio.length;
             const presupuestoTotal = proyectosDelMunicipio.reduce((sum, p) => sum + (parseFloat(p.presupuesto) || 0), 0);
-            const avancePromedio = total > 0
-                ? Math.round(proyectosDelMunicipio.reduce((sum, p) => sum + (parseInt(p.progreso, 10) || 0), 0) / total)
-                : 0;
+            // Ejecución financiera real; null cuando el municipio no tiene contratos.
+            const avance = calcularAvanceGrupo(proyectosDelMunicipio);
             const enRiesgo = proyectosDelMunicipio.filter(p => p.descripcion_estado === 'Con retraso').length;
 
-            return { municipio, total, presupuestoTotal, avancePromedio, enRiesgo };
+            return { municipio, total, presupuestoTotal, avance, enRiesgo };
         });
     }, [proyectos]);
 
@@ -80,7 +80,7 @@ const DistribucionMunicipios = ({ proyectos, onMunicipioClick, municipioSeleccio
                             <th>Municipio</th>
                             <th>Proyectos</th>
                             <th>Presupuesto</th>
-                            <th>Avance promedio</th>
+                            <th>Ejecución financiera</th>
                             <th>Estado general</th>
                         </tr>
                     </thead>
@@ -97,12 +97,16 @@ const DistribucionMunicipios = ({ proyectos, onMunicipioClick, municipioSeleccio
                                     <td>{fila.total}</td>
                                     <td>{formatearPresupuesto(fila.presupuestoTotal)}</td>
                                     <td>
-                                        <div className="tabla-avance-celda">
-                                            <div className="tabla-avance-bar">
-                                                <div className="tabla-avance-fill" style={{ width: `${fila.avancePromedio}%` }}></div>
+                                        {fila.avance.tieneContratos ? (
+                                            <div className="tabla-avance-celda">
+                                                <div className="tabla-avance-bar">
+                                                    <div className="tabla-avance-fill" style={{ width: `${fila.avance.pct}%` }}></div>
+                                                </div>
+                                                <span className="tabla-avance-valor">{fila.avance.pct}%</span>
                                             </div>
-                                            <span className="tabla-avance-valor">{fila.avancePromedio}%</span>
-                                        </div>
+                                        ) : (
+                                            <span style={{ color: '#9ca3af', fontSize: 12 }}>— Sin contratos</span>
+                                        )}
                                     </td>
                                     <td>
                                         <span
