@@ -1,60 +1,90 @@
 import React from 'react';
+import { calcularKpis } from '../utils/kpisDashboard';
 
-const formatearPresupuesto = (valor) => '$' + Math.round(valor / 1_000_000).toLocaleString('es-CO') + ' M';
+// Abreviaturas para la tarjeta de distribución por fase, donde no cabe el
+// nombre completo. Las fases que no estén aquí usan sus primeras 4 letras.
+const ABREVIATURA_FASE = {
+    'Formulación': 'Form',
+    'Licitación': 'Lic',
+    'Ejecución': 'Ejec',
+    'Sin fase': 'S/F',
+};
+
+const abreviar = (fase) => ABREVIATURA_FASE[fase] || fase.slice(0, 4);
 
 const KpiStrip = ({ proyectos }) => {
-    const total = proyectos.length;
+    const kpis = calcularKpis(proyectos);
 
-    const presupuestoTotal = proyectos.reduce((sum, p) => sum + (parseFloat(p.presupuesto) || 0), 0);
-    const totalContratos = proyectos.reduce((sum, p) => sum + (p.contratos ? p.contratos.length : 0), 0);
-    const enRiesgo = proyectos.filter(p => p.descripcion_estado === 'Con retraso').length;
-    const avancePromedio = total > 0
-        ? Math.round(proyectos.reduce((sum, p) => sum + (parseInt(p.progreso, 10) || 0), 0) / total)
+    const pctContratados = kpis.total > 0
+        ? Math.round((kpis.contratados / kpis.total) * 100)
         : 0;
-    const finalizados = 0;
 
     return (
         <div className="kpi-strip">
             <div className="kpi-tile">
                 <span className="kpi-icono">📊</span>
                 <div>
-                    <div className="kpi-valor">{total}</div>
+                    <div className="kpi-valor">{kpis.total}</div>
                     <div className="kpi-etiqueta">Total proyectos</div>
                 </div>
             </div>
-            <div className="kpi-tile">
-                <span className="kpi-icono">💰</span>
-                <div>
-                    <div className="kpi-valor">{formatearPresupuesto(presupuestoTotal)}</div>
-                    <div className="kpi-etiqueta">Presupuesto total</div>
-                </div>
-            </div>
+
             <div className="kpi-tile">
                 <span className="kpi-icono">📄</span>
                 <div>
-                    <div className="kpi-valor">{totalContratos}</div>
+                    <div className="kpi-valor">{kpis.totalContratos}</div>
                     <div className="kpi-etiqueta">Total de contratos</div>
                 </div>
             </div>
+
             <div className="kpi-tile kpi-tile-riesgo">
                 <span className="kpi-icono">⚠️</span>
                 <div>
-                    <div className="kpi-valor">{enRiesgo}</div>
+                    <div className="kpi-valor">{kpis.enRiesgo}</div>
                     <div className="kpi-etiqueta">En riesgo</div>
                 </div>
             </div>
-            <div className="kpi-tile">
-                <span className="kpi-icono">📈</span>
+
+            <div
+                className="kpi-tile"
+                title="Facturado en actas sobre el valor total contratado"
+            >
+                <span className="kpi-icono">💵</span>
                 <div>
-                    <div className="kpi-valor">{avancePromedio}%</div>
-                    <div className="kpi-etiqueta">Avance promedio</div>
+                    <div className="kpi-valor">
+                        {kpis.pctEjecucion === null ? '—' : `${kpis.pctEjecucion}%`}
+                    </div>
+                    <div className="kpi-etiqueta">Ejecución financiera</div>
                 </div>
             </div>
-            <div className="kpi-tile" title="Aún no existe un estado de tipo Finalizado en el catálogo">
-                <span className="kpi-icono">✅</span>
+
+            <div
+                className="kpi-tile"
+                title={`${pctContratados}% de los proyectos ya tienen contrato`}
+            >
+                <span className="kpi-icono">🤝</span>
                 <div>
-                    <div className="kpi-valor">{finalizados}</div>
-                    <div className="kpi-etiqueta">Finalizados</div>
+                    <div className="kpi-valor">{kpis.contratados} / {kpis.total}</div>
+                    <div className="kpi-etiqueta">Contratados</div>
+                </div>
+            </div>
+
+            <div
+                className="kpi-tile"
+                title={kpis.porFase.map(f => `${f.fase}: ${f.cantidad}`).join(' · ')}
+            >
+                <span className="kpi-icono">🔄</span>
+                <div>
+                    <div className="kpi-valor">
+                        {kpis.porFase.length === 0
+                            ? '—'
+                            : kpis.porFase.map(f => f.cantidad).join(' · ')}
+                    </div>
+                    <div className="kpi-etiqueta">
+                        {kpis.porFase.length === 0
+                            ? 'Por fase'
+                            : kpis.porFase.map(f => abreviar(f.fase)).join(' · ')}
+                    </div>
                 </div>
             </div>
         </div>
