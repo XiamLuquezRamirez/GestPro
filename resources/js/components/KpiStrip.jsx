@@ -65,7 +65,7 @@ const KpiStrip = ({ proyectos }) => {
                 <span className="kpi-icono">🚨</span>
                 <div>
                     <div className="kpi-valor">{kpis.desfaseCritico}</div>
-                    <div className="kpi-etiqueta">Desfase crítico</div>
+                    <div className="kpi-etiqueta">Contratos con desfase crítico</div>
                 </div>
             </div>
         </div>

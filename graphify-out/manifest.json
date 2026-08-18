@@ -1,0 +1,877 @@
+{
+  "C:\\xampp\\htdocs\\GestPro\\artisan": {
+    "mtime": 1747007756.0,
+    "ast_hash": "e66bb13691f6184c762c196427d8e685",
+    "semantic_hash": "e66bb13691f6184c762c196427d8e685"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\babel.config.js": {
+    "mtime": 1752812891.2470245,
+    "ast_hash": "35e23a6197bec4152aedadd8d1e05761",
+    "semantic_hash": "35e23a6197bec4152aedadd8d1e05761"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\composer.json": {
+    "mtime": 1753712159.0191991,
+    "ast_hash": "c4620d3f8e5956927e6501f56399e8f7",
+    "semantic_hash": "c4620d3f8e5956927e6501f56399e8f7"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\diagnostic.php": {
+    "mtime": 1753735925.2917871,
+    "ast_hash": "f004a0ae6cb952c28918dcb9f82d4c3e",
+    "semantic_hash": "f004a0ae6cb952c28918dcb9f82d4c3e"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\package.json": {
+    "mtime": 1783549051.7630322,
+    "ast_hash": "d147d0b5ee688a09388691e01e8f1528",
+    "semantic_hash": "d147d0b5ee688a09388691e01e8f1528"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\setup.php": {
+    "mtime": 1753470885.0625849,
+    "ast_hash": "fa171e119919f4ec86fc8bbcc8091c1c",
+    "semantic_hash": "fa171e119919f4ec86fc8bbcc8091c1c"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\webpack.mix.js": {
+    "mtime": 1783372957.605902,
+    "ast_hash": "c2d124ce3e9f2fd3df6c368b0bb9f3bb",
+    "semantic_hash": "c2d124ce3e9f2fd3df6c368b0bb9f3bb"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\.claude\\settings.local.json": {
+    "mtime": 1784159608.8861845,
+    "ast_hash": "4d3110be4099923baba45335d920b640",
+    "semantic_hash": "4d3110be4099923baba45335d920b640"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Enums\\Rol.php": {
+    "mtime": 1783427930.1738596,
+    "ast_hash": "e79e6b1346b490a3cae187379d9c8555",
+    "semantic_hash": "e79e6b1346b490a3cae187379d9c8555"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Http\\Controllers\\AuthController.php": {
+    "mtime": 1783372957.533298,
+    "ast_hash": "70eac1c6b01cdde2d5aa6c5e12d81215",
+    "semantic_hash": "70eac1c6b01cdde2d5aa6c5e12d81215"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Http\\Controllers\\Controller.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "25a307335c0719bc9a91b3f7babd186d",
+    "semantic_hash": "25a307335c0719bc9a91b3f7babd186d"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Http\\Controllers\\ProyectoController.php": {
+    "mtime": 1784159540.849687,
+    "ast_hash": "cc07707f488ab0119f4d195eea6639c4",
+    "semantic_hash": "cc07707f488ab0119f4d195eea6639c4"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Http\\Middleware\\CorsMiddleware.php": {
+    "mtime": 1753735925.2917871,
+    "ast_hash": "66dcf568a9a06205cbc066206255c189",
+    "semantic_hash": "66dcf568a9a06205cbc066206255c189"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Http\\Middleware\\VerifyCsrfToken.php": {
+    "mtime": 1783372957.5352955,
+    "ast_hash": "61012852de0ade33340f5e5448f67b43",
+    "semantic_hash": "61012852de0ade33340f5e5448f67b43"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\ActividadAvance.php": {
+    "mtime": 1783703301.913886,
+    "ast_hash": "bb5ca70ad280eab27ac83eb1721ade58",
+    "semantic_hash": "bb5ca70ad280eab27ac83eb1721ade58"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\ActividadContrato.php": {
+    "mtime": 1783703301.9148884,
+    "ast_hash": "4e46f0a0596bfc129fd77188d2718060",
+    "semantic_hash": "4e46f0a0596bfc129fd77188d2718060"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\AnexoContrato.php": {
+    "mtime": 1783427930.1758595,
+    "ast_hash": "3042852ff306a3afead7e295ab51e34d",
+    "semantic_hash": "3042852ff306a3afead7e295ab51e34d"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\AvanceFinanciero.php": {
+    "mtime": 1784159586.329509,
+    "ast_hash": "100dfb0deac73d370f17a2960f66648a",
+    "semantic_hash": "100dfb0deac73d370f17a2960f66648a"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\AvanceFisico.php": {
+    "mtime": 1783427930.1778593,
+    "ast_hash": "0769eeb76a231a307142bb5cef86b253",
+    "semantic_hash": "0769eeb76a231a307142bb5cef86b253"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\CheckFormulacion.php": {
+    "mtime": 1783427930.17886,
+    "ast_hash": "b2f64bfa1c5ae45187dec7a931dc5ef4",
+    "semantic_hash": "b2f64bfa1c5ae45187dec7a931dc5ef4"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\Contrato.php": {
+    "mtime": 1784074600.98553,
+    "ast_hash": "ab1ad7e95baeec2e0ee43ed4158da2f9",
+    "semantic_hash": "ab1ad7e95baeec2e0ee43ed4158da2f9"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\Departamento.php": {
+    "mtime": 1783427930.1808605,
+    "ast_hash": "c2a9016d151ce29e2daca22638195964",
+    "semantic_hash": "c2a9016d151ce29e2daca22638195964"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\Entidad.php": {
+    "mtime": 1783427930.1818597,
+    "ast_hash": "a05b03c4ac7f7e5bfdfe1cd2aa6c129f",
+    "semantic_hash": "a05b03c4ac7f7e5bfdfe1cd2aa6c129f"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\Estado.php": {
+    "mtime": 1783427930.1828623,
+    "ast_hash": "a95053a2686dbba76b0a377153b1714d",
+    "semantic_hash": "a95053a2686dbba76b0a377153b1714d"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\Evento.php": {
+    "mtime": 1783427930.1828623,
+    "ast_hash": "7830b624da22c6f744a9f4ee9424c77f",
+    "semantic_hash": "7830b624da22c6f744a9f4ee9424c77f"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\EventoLicitacion.php": {
+    "mtime": 1783427930.184314,
+    "ast_hash": "ec96cf9d0f36b76d4ba1cc34e7d1033a",
+    "semantic_hash": "ec96cf9d0f36b76d4ba1cc34e7d1033a"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\Fase.php": {
+    "mtime": 1783427930.1853273,
+    "ast_hash": "856b8caa450d25ad3e7cb18479bf8dee",
+    "semantic_hash": "856b8caa450d25ad3e7cb18479bf8dee"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\Modalidad.php": {
+    "mtime": 1783427930.1863277,
+    "ast_hash": "a1b5ef58ad2afbb50ba3396edf03c666",
+    "semantic_hash": "a1b5ef58ad2afbb50ba3396edf03c666"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\Municipio.php": {
+    "mtime": 1783438741.7445507,
+    "ast_hash": "d5e9e6b06d9b9e6563d6de758543b8c9",
+    "semantic_hash": "d5e9e6b06d9b9e6563d6de758543b8c9"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\PresupuestoProyecto.php": {
+    "mtime": 1783427930.1878314,
+    "ast_hash": "21efd59b5f8b8ce3ff465bc025aab035",
+    "semantic_hash": "21efd59b5f8b8ce3ff465bc025aab035"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\Prioridad.php": {
+    "mtime": 1783427930.1891396,
+    "ast_hash": "c2907decdcdbdcefab38e050031057b3",
+    "semantic_hash": "c2907decdcdbdcefab38e050031057b3"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\ProcesoLicitacion.php": {
+    "mtime": 1783427930.1902251,
+    "ast_hash": "33bcc6f8533327eaf6153dfa297ae149",
+    "semantic_hash": "33bcc6f8533327eaf6153dfa297ae149"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\Proyecto.php": {
+    "mtime": 1783527815.0330448,
+    "ast_hash": "307463d21cef320cfdd8880e67050097",
+    "semantic_hash": "307463d21cef320cfdd8880e67050097"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\ProyectoUbicacion.php": {
+    "mtime": 1783527815.0330448,
+    "ast_hash": "b11f87c8716fb9a1f07301d5cb515625",
+    "semantic_hash": "b11f87c8716fb9a1f07301d5cb515625"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\Responsable.php": {
+    "mtime": 1783427930.1922858,
+    "ast_hash": "532f83212e71649fae4bf5143bb3f2be",
+    "semantic_hash": "532f83212e71649fae4bf5143bb3f2be"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\Sector.php": {
+    "mtime": 1783427930.1922858,
+    "ast_hash": "116edcd006ff27518f306508b0f4afc7",
+    "semantic_hash": "116edcd006ff27518f306508b0f4afc7"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\TipoEvento.php": {
+    "mtime": 1783427930.1935253,
+    "ast_hash": "780e48b9f054a47611748fee92a8aab4",
+    "semantic_hash": "780e48b9f054a47611748fee92a8aab4"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\TipoProceso.php": {
+    "mtime": 1783427930.1946216,
+    "ast_hash": "12ecdcb9ed29c31d1d5516a0d98d07d1",
+    "semantic_hash": "12ecdcb9ed29c31d1d5516a0d98d07d1"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Models\\User.php": {
+    "mtime": 1783427930.1958642,
+    "ast_hash": "317d6d4ea8b3c6b973f22fbb90ad22d9",
+    "semantic_hash": "317d6d4ea8b3c6b973f22fbb90ad22d9"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Providers\\AppServiceProvider.php": {
+    "mtime": 1783427930.197173,
+    "ast_hash": "3a7ffa8ec88815b43bf234da1345943b",
+    "semantic_hash": "3a7ffa8ec88815b43bf234da1345943b"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\app\\Providers\\RouteServiceProvider.php": {
+    "mtime": 1753737785.8466158,
+    "ast_hash": "11d25f941cd5286bb3a6bd04051c76c4",
+    "semantic_hash": "11d25f941cd5286bb3a6bd04051c76c4"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\bootstrap\\app.php": {
+    "mtime": 1783372957.5362914,
+    "ast_hash": "d5a86b166acf09865270a6cd589f4d69",
+    "semantic_hash": "d5a86b166acf09865270a6cd589f4d69"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\bootstrap\\providers.php": {
+    "mtime": 1753737590.7563045,
+    "ast_hash": "85be98533909feed9f25ce5d6c89e6bd",
+    "semantic_hash": "85be98533909feed9f25ce5d6c89e6bd"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\bootstrap\\cache\\packages.php": {
+    "mtime": 1753712156.6066315,
+    "ast_hash": "b4156eeebf79539d9044ebdf90dbefa2",
+    "semantic_hash": "b4156eeebf79539d9044ebdf90dbefa2"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\bootstrap\\cache\\services.php": {
+    "mtime": 1753742462.1863816,
+    "ast_hash": "d7994c715fb4f1b765b983829f906fd9",
+    "semantic_hash": "d7994c715fb4f1b765b983829f906fd9"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\app.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "6329d6ab7faa180c6aa39577fd180bb5",
+    "semantic_hash": "6329d6ab7faa180c6aa39577fd180bb5"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\auth.php": {
+    "mtime": 1753714713.55788,
+    "ast_hash": "9d23698d9c4e22fee5068c1bf325794e",
+    "semantic_hash": "9d23698d9c4e22fee5068c1bf325794e"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\cache.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "488b21f09c887ceb3306242d0500736f",
+    "semantic_hash": "488b21f09c887ceb3306242d0500736f"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\cors.php": {
+    "mtime": 1753731807.3077848,
+    "ast_hash": "435182e2f2ac64aa1063d03b7ab3be8d",
+    "semantic_hash": "435182e2f2ac64aa1063d03b7ab3be8d"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\database.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "dd04fde7b022ddeb46c86b6650d5d07c",
+    "semantic_hash": "dd04fde7b022ddeb46c86b6650d5d07c"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\filesystems.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "717e65d7bb8f32a4f298ea769891734a",
+    "semantic_hash": "717e65d7bb8f32a4f298ea769891734a"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\jwt.php": {
+    "mtime": 1753712184.6402435,
+    "ast_hash": "e96ff149d5222fb35f110832cb9d6a43",
+    "semantic_hash": "e96ff149d5222fb35f110832cb9d6a43"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\logging.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "09c46600cd4c373e929aa4ea8a1ea9b8",
+    "semantic_hash": "09c46600cd4c373e929aa4ea8a1ea9b8"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\mail.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "701b36f3d48d9de4abc5877f063e0949",
+    "semantic_hash": "701b36f3d48d9de4abc5877f063e0949"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\production.php": {
+    "mtime": 1753735925.279482,
+    "ast_hash": "34dff26e162db2c1cf8087c27ca91947",
+    "semantic_hash": "34dff26e162db2c1cf8087c27ca91947"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\queue.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "fa588a4871790fca01d6a90af9208d15",
+    "semantic_hash": "fa588a4871790fca01d6a90af9208d15"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\sanctum.php": {
+    "mtime": 1753544098.3650677,
+    "ast_hash": "1b82e817fc49336a6777bab65f0f668f",
+    "semantic_hash": "1b82e817fc49336a6777bab65f0f668f"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\services.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "e3185f8bf937203123588b3884abf896",
+    "semantic_hash": "e3185f8bf937203123588b3884abf896"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\config\\session.php": {
+    "mtime": 1753470851.6554632,
+    "ast_hash": "9630e0f0e4e88c4b3624d74dce2ca1b2",
+    "semantic_hash": "9630e0f0e4e88c4b3624d74dce2ca1b2"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\factories\\UserFactory.php": {
+    "mtime": 1783427930.197173,
+    "ast_hash": "a157d7052d802d5ed786ea80843f40d4",
+    "semantic_hash": "a157d7052d802d5ed786ea80843f40d4"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\0001_01_01_000000_create_users_table.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "138280095e9d19f2ba6fb830415602e2",
+    "semantic_hash": "138280095e9d19f2ba6fb830415602e2"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\0001_01_01_000001_create_cache_table.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "6803c10a1aa695d40633ec8bea5576d5",
+    "semantic_hash": "6803c10a1aa695d40633ec8bea5576d5"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\0001_01_01_000002_create_jobs_table.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "ead9cce2650b36345454f85e8c0214a0",
+    "semantic_hash": "ead9cce2650b36345454f85e8c0214a0"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2025_01_01_000000_create_sessions_table.php": {
+    "mtime": 1783427930.1983085,
+    "ast_hash": "d239dcc1521de985dd820eb8bd70050c",
+    "semantic_hash": "d239dcc1521de985dd820eb8bd70050c"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160000_create_departamentos_table.php": {
+    "mtime": 1783427930.200426,
+    "ast_hash": "b784e2ee9e932f754b78d957d40f721e",
+    "semantic_hash": "b784e2ee9e932f754b78d957d40f721e"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160001_create_municipios_table.php": {
+    "mtime": 1783438741.7467377,
+    "ast_hash": "63838766f5146ad358df00887faded99",
+    "semantic_hash": "63838766f5146ad358df00887faded99"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160002_create_sectores_table.php": {
+    "mtime": 1783427930.2014267,
+    "ast_hash": "9e9197bacf01ff8f47ae67b0852944b2",
+    "semantic_hash": "9e9197bacf01ff8f47ae67b0852944b2"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160003_create_entidades_table.php": {
+    "mtime": 1783427930.2024293,
+    "ast_hash": "47a3a61c8be63c78fbda2a9a519ddf1a",
+    "semantic_hash": "47a3a61c8be63c78fbda2a9a519ddf1a"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160004_create_fases_table.php": {
+    "mtime": 1783427930.2024293,
+    "ast_hash": "715f8043b090698413d1354171734a7f",
+    "semantic_hash": "715f8043b090698413d1354171734a7f"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160005_create_tipos_procesos_table.php": {
+    "mtime": 1783427930.2039356,
+    "ast_hash": "ab79dd58055d483c00cebdfda08d54e3",
+    "semantic_hash": "ab79dd58055d483c00cebdfda08d54e3"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160006_create_modalidades_table.php": {
+    "mtime": 1783427930.2049446,
+    "ast_hash": "e55ec40ac4f68193df5a21571b65b429",
+    "semantic_hash": "e55ec40ac4f68193df5a21571b65b429"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160007_create_tipo_eventos_table.php": {
+    "mtime": 1783427930.2054515,
+    "ast_hash": "d90c0409026e818227ae00952ed06f56",
+    "semantic_hash": "d90c0409026e818227ae00952ed06f56"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160008_create_prioridades_table.php": {
+    "mtime": 1783427930.206455,
+    "ast_hash": "f45874677040e186d7f811b312d0343a",
+    "semantic_hash": "f45874677040e186d7f811b312d0343a"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160009_create_responsable_table.php": {
+    "mtime": 1783427930.207453,
+    "ast_hash": "494d6da838aa623e5a009a1796104a93",
+    "semantic_hash": "494d6da838aa623e5a009a1796104a93"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160010_create_estados_table.php": {
+    "mtime": 1783427930.208455,
+    "ast_hash": "59df9ff0897478258feb31fa473e44a2",
+    "semantic_hash": "59df9ff0897478258feb31fa473e44a2"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160011_add_rol_and_activo_to_users_table.php": {
+    "mtime": 1783427930.2091713,
+    "ast_hash": "327aee797c44eac3afb18de70c7d49f8",
+    "semantic_hash": "327aee797c44eac3afb18de70c7d49f8"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160012_create_proyectos_table.php": {
+    "mtime": 1783438741.7477608,
+    "ast_hash": "c44630535ae6bf9cc3bc6c689d1c1c8c",
+    "semantic_hash": "c44630535ae6bf9cc3bc6c689d1c1c8c"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160013_create_presupuesto_proyecto_table.php": {
+    "mtime": 1783427930.2114182,
+    "ast_hash": "8e0d538a96a1957e06b5d75877d412c7",
+    "semantic_hash": "8e0d538a96a1957e06b5d75877d412c7"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160014_create_procesos_licitacion_table.php": {
+    "mtime": 1783427930.212639,
+    "ast_hash": "4471b77a536cc70b4697696eb24a23fa",
+    "semantic_hash": "4471b77a536cc70b4697696eb24a23fa"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160015_create_eventos_licitacion_table.php": {
+    "mtime": 1783427930.2137544,
+    "ast_hash": "cc34fb69be6533e1720ca9ed1f39ddb3",
+    "semantic_hash": "cc34fb69be6533e1720ca9ed1f39ddb3"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160016_create_check_formulacion_table.php": {
+    "mtime": 1783427930.214972,
+    "ast_hash": "a6c67b8b9dabf07997690c70117c21cc",
+    "semantic_hash": "a6c67b8b9dabf07997690c70117c21cc"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160017_create_contratos_table.php": {
+    "mtime": 1783427930.2160413,
+    "ast_hash": "2a28b69a76258f11cfe5d80a2754745b",
+    "semantic_hash": "2a28b69a76258f11cfe5d80a2754745b"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160018_create_anexos_contratos_table.php": {
+    "mtime": 1783427930.2160413,
+    "ast_hash": "42512a35a2c25a4af306cdbab374907e",
+    "semantic_hash": "42512a35a2c25a4af306cdbab374907e"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160019_create_avance_financiero_table.php": {
+    "mtime": 1783427930.217233,
+    "ast_hash": "1ca8fb4a3ac73dc3cd613cd6e3666597",
+    "semantic_hash": "1ca8fb4a3ac73dc3cd613cd6e3666597"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160020_create_avance_fisico_table.php": {
+    "mtime": 1783427930.219251,
+    "ast_hash": "1f27a84a7d75cd233bd4e61afc077130",
+    "semantic_hash": "1f27a84a7d75cd233bd4e61afc077130"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_06_160021_create_eventos_table.php": {
+    "mtime": 1783427930.219251,
+    "ast_hash": "72c34eed488c6b14c7bf894d6a304825",
+    "semantic_hash": "72c34eed488c6b14c7bf894d6a304825"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_08_100000_create_proyecto_ubicaciones_table.php": {
+    "mtime": 1783527815.0341704,
+    "ast_hash": "b5fc0ac5fa345994dd13ff1fe8b850b2",
+    "semantic_hash": "b5fc0ac5fa345994dd13ff1fe8b850b2"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_10_100000_create_actividades_contrato_table.php": {
+    "mtime": 1783703301.9167335,
+    "ast_hash": "5d44bce70e67a2a9affb0885ba62f3ac",
+    "semantic_hash": "5d44bce70e67a2a9affb0885ba62f3ac"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_10_100001_create_actividad_avances_table.php": {
+    "mtime": 1783703301.917739,
+    "ast_hash": "2ea6cf19e63b815bc8f10687444507f3",
+    "semantic_hash": "2ea6cf19e63b815bc8f10687444507f3"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_14_120000_add_porcentaje_anticipo_to_contratos_table.php": {
+    "mtime": 1784074600.987033,
+    "ast_hash": "9eababba9702f2243b90a75ed5fb8b24",
+    "semantic_hash": "9eababba9702f2243b90a75ed5fb8b24"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\migrations\\2026_07_15_190000_change_porcentaje_ejecutado_to_decimal.php": {
+    "mtime": 1784159563.0278933,
+    "ast_hash": "9a645b3936c74fddff2c37b1441703df",
+    "semantic_hash": "9a645b3936c74fddff2c37b1441703df"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\seeders\\AdminUserSeeder.php": {
+    "mtime": 1783427930.2204428,
+    "ast_hash": "6324aa72e04a5e33b5d572730f5ec7d9",
+    "semantic_hash": "6324aa72e04a5e33b5d572730f5ec7d9"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\seeders\\DatabaseSeeder.php": {
+    "mtime": 1783427930.2219565,
+    "ast_hash": "868818921433e85821bbb5c1b3c4eb72",
+    "semantic_hash": "868818921433e85821bbb5c1b3c4eb72"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\seeders\\DemoDataSeeder.php": {
+    "mtime": 1783521371.1824129,
+    "ast_hash": "da592e2c32f644cd7b9673f77e663d51",
+    "semantic_hash": "da592e2c32f644cd7b9673f77e663d51"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\seeders\\DepartamentosSeeder.php": {
+    "mtime": 1783427930.2229629,
+    "ast_hash": "8c829d3b007c3bd906cb2289a50bfb8e",
+    "semantic_hash": "8c829d3b007c3bd906cb2289a50bfb8e"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\seeders\\MunicipiosSeeder.php": {
+    "mtime": 1783427930.2229629,
+    "ast_hash": "52139b4e75e6c1c670cdc03e8be7332f",
+    "semantic_hash": "52139b4e75e6c1c670cdc03e8be7332f"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\seeders\\data\\departamentos.json": {
+    "mtime": 1783427930.2254846,
+    "ast_hash": "a4c392630d71574ae40897a10b5c050b",
+    "semantic_hash": "a4c392630d71574ae40897a10b5c050b"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\database\\seeders\\data\\municipios.json": {
+    "mtime": 1783427930.2306173,
+    "ast_hash": "8f05cc9283361e5c31d62525b3beb67d",
+    "semantic_hash": "8f05cc9283361e5c31d62525b3beb67d"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\index.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "d8eda274115af5fd2aaa8230af329ef7",
+    "semantic_hash": "d8eda274115af5fd2aaa8230af329ef7"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\mix-manifest.json": {
+    "mtime": 1784159619.151144,
+    "ast_hash": "eb97877f41d0d35595a5b4ab5f49d751",
+    "semantic_hash": "eb97877f41d0d35595a5b4ab5f49d751"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\test.php": {
+    "mtime": 1753476876.5027523,
+    "ast_hash": "8a408dc4ad15f5eda8acb4e5471e523d",
+    "semantic_hash": "8a408dc4ad15f5eda8acb4e5471e523d"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\js\\app.js": {
+    "mtime": 1784159535.3822813,
+    "ast_hash": "d86027071df93fc886b2bb3cb266a02f",
+    "semantic_hash": "d86027071df93fc886b2bb3cb266a02f"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\app.jsx": {
+    "mtime": 1783549989.079769,
+    "ast_hash": "450f3538d9dcabaf8385bb65d7524914",
+    "semantic_hash": "450f3538d9dcabaf8385bb65d7524914"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\axios.js": {
+    "mtime": 1783548619.8092475,
+    "ast_hash": "bfab95e86eeb8d8992199046ee119d8e",
+    "semantic_hash": "bfab95e86eeb8d8992199046ee119d8e"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\bootstrap.js": {
+    "mtime": 1747007756.0,
+    "ast_hash": "78f909acc19aea4717eddca5a87c1ba3",
+    "semantic_hash": "78f909acc19aea4717eddca5a87c1ba3"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\leafletIconFix.js": {
+    "mtime": 1783549051.8226783,
+    "ast_hash": "202d5aac7524dcb12799edf9705ada16",
+    "semantic_hash": "202d5aac7524dcb12799edf9705ada16"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\Dashboard.jsx": {
+    "mtime": 1783550765.224025,
+    "ast_hash": "fae8a00c7dcee0a202b971d19f9372ac",
+    "semantic_hash": "fae8a00c7dcee0a202b971d19f9372ac"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\DistribucionMunicipios.jsx": {
+    "mtime": 1783551129.9197812,
+    "ast_hash": "56b988ed9b7dc245038b34c2bd359bae",
+    "semantic_hash": "56b988ed9b7dc245038b34c2bd359bae"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\Estadisticas.jsx": {
+    "mtime": 1783550598.1184897,
+    "ast_hash": "683ad5d70ccaa06415a6a536e2433705",
+    "semantic_hash": "683ad5d70ccaa06415a6a536e2433705"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\GestionarEventos.jsx": {
+    "mtime": 1783372957.5972965,
+    "ast_hash": "49730c74ab59b8da92c92c3a19c21292",
+    "semantic_hash": "49730c74ab59b8da92c92c3a19c21292"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\GestionarProyectos.jsx": {
+    "mtime": 1783372957.5983696,
+    "ast_hash": "e38c1d977ea4480df4f7f5c9077146fe",
+    "semantic_hash": "e38c1d977ea4480df4f7f5c9077146fe"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\Header.jsx": {
+    "mtime": 1783543917.6809685,
+    "ast_hash": "07fa4b5c7b831eda44253d2967c4daa7",
+    "semantic_hash": "07fa4b5c7b831eda44253d2967c4daa7"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\KpiStrip.jsx": {
+    "mtime": 1783448247.0078413,
+    "ast_hash": "58c8b3b2abc0fd691efce212c8589848",
+    "semantic_hash": "58c8b3b2abc0fd691efce212c8589848"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\Login.jsx": {
+    "mtime": 1783372957.6003697,
+    "ast_hash": "96d56ba49fb123c79c53af154ce3f582",
+    "semantic_hash": "96d56ba49fb123c79c53af154ce3f582"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\MapaUbicaciones.jsx": {
+    "mtime": 1783549051.8194265,
+    "ast_hash": "393ee451b08ae99f8b3e85bbaeb3ca53",
+    "semantic_hash": "393ee451b08ae99f8b3e85bbaeb3ca53"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\Navigation.jsx": {
+    "mtime": 1783372957.6008935,
+    "ast_hash": "8657c24c6c15a9aa5c1ee62e24754bfc",
+    "semantic_hash": "8657c24c6c15a9aa5c1ee62e24754bfc"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\Parametros.jsx": {
+    "mtime": 1784159534.080821,
+    "ast_hash": "1b1dee4e5babf237cb8a0a8b19c709e0",
+    "semantic_hash": "1b1dee4e5babf237cb8a0a8b19c709e0"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\ProximosEventos.jsx": {
+    "mtime": 1783549051.8216784,
+    "ast_hash": "5d0602a5b7e1fa2fc76110c95d9443a7",
+    "semantic_hash": "5d0602a5b7e1fa2fc76110c95d9443a7"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\components\\ResumenFase.jsx": {
+    "mtime": 1783551110.4062376,
+    "ast_hash": "5a9748439fc75dd04a65a23a914366b3",
+    "semantic_hash": "5a9748439fc75dd04a65a23a914366b3"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\js\\utils\\assetHelper.js": {
+    "mtime": 1783543825.7581077,
+    "ast_hash": "3e1103db486bddc06aba93c1bf37042b",
+    "semantic_hash": "3e1103db486bddc06aba93c1bf37042b"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\views\\app.blade.php": {
+    "mtime": 1783552097.817355,
+    "ast_hash": "dfe81f99994d71acc5d7be349573487a",
+    "semantic_hash": "dfe81f99994d71acc5d7be349573487a"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\views\\test-csrf.blade.php": {
+    "mtime": 1753542624.2420275,
+    "ast_hash": "89ad0d8d95c8428ae46f5e87ac94dea3",
+    "semantic_hash": "89ad0d8d95c8428ae46f5e87ac94dea3"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\views\\welcome.blade.php": {
+    "mtime": 1752813244.0447185,
+    "ast_hash": "c2a58efaef3cf2752a4c9ecd2057010a",
+    "semantic_hash": "c2a58efaef3cf2752a4c9ecd2057010a"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\routes\\api.php": {
+    "mtime": 1783703301.9796393,
+    "ast_hash": "77e5e600b13f66108638aa59b60f0430",
+    "semantic_hash": "77e5e600b13f66108638aa59b60f0430"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\routes\\console.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "3c6ce2e6d16444282b24a9aa63885563",
+    "semantic_hash": "3c6ce2e6d16444282b24a9aa63885563"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\routes\\web.php": {
+    "mtime": 1753742498.962904,
+    "ast_hash": "1a28c061b9c40f19fdfb2ecd25ab3bba",
+    "semantic_hash": "1a28c061b9c40f19fdfb2ecd25ab3bba"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\storage\\framework\\views\\1ba5e91279c78a0cd73f240acb89ce79.php": {
+    "mtime": 1783703372.6390848,
+    "ast_hash": "1c83afb59d9b88b52cf6b0ca4b9be93e",
+    "semantic_hash": "1c83afb59d9b88b52cf6b0ca4b9be93e"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\storage\\framework\\views\\45191c5f41da6edb99fd0503add93c86.php": {
+    "mtime": 1783552107.1629493,
+    "ast_hash": "15694fb0a980118fec5120bfd9ad256b",
+    "semantic_hash": "15694fb0a980118fec5120bfd9ad256b"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\storage\\framework\\views\\5a9dcfc76238cec5ac3ad9cd04902335.php": {
+    "mtime": 1783703372.650317,
+    "ast_hash": "510ce2d9ec7527dd31ada68222ced9b1",
+    "semantic_hash": "510ce2d9ec7527dd31ada68222ced9b1"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\storage\\framework\\views\\b2d0ec154252a76c32901d95e52e45c2.php": {
+    "mtime": 1755963047.2983747,
+    "ast_hash": "37f8c5dda4568865ed4164f589e78afe",
+    "semantic_hash": "37f8c5dda4568865ed4164f589e78afe"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\TestCase.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "7e567dc27e68d5b57bae16af07f68907",
+    "semantic_hash": "7e567dc27e68d5b57bae16af07f68907"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Feature\\AutorizacionTest.php": {
+    "mtime": 1783438741.7543135,
+    "ast_hash": "66f42d6536321617eb866dae27950a1c",
+    "semantic_hash": "66f42d6536321617eb866dae27950a1c"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Feature\\ExampleTest.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "0f4d91c9c5bbcd4e2f46cf885acb7fb6",
+    "semantic_hash": "0f4d91c9c5bbcd4e2f46cf885acb7fb6"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Feature\\Schema\\AvancesTest.php": {
+    "mtime": 1784159644.096529,
+    "ast_hash": "b75765a9eab61290efe6d96374c0b32b",
+    "semantic_hash": "b75765a9eab61290efe6d96374c0b32b"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Feature\\Schema\\CatalogosSimplesTest.php": {
+    "mtime": 1783427930.2394874,
+    "ast_hash": "f11dbc9951b499c6c52026c020d8114e",
+    "semantic_hash": "f11dbc9951b499c6c52026c020d8114e"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Feature\\Schema\\ContratosTest.php": {
+    "mtime": 1784074600.993038,
+    "ast_hash": "6d86d8927938be99f511702d4b0f9927",
+    "semantic_hash": "6d86d8927938be99f511702d4b0f9927"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Feature\\Schema\\DepartamentosTest.php": {
+    "mtime": 1783427930.2419567,
+    "ast_hash": "bb9b11e2300369ebf8bbe18410985902",
+    "semantic_hash": "bb9b11e2300369ebf8bbe18410985902"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Feature\\Schema\\EventosTest.php": {
+    "mtime": 1783438741.7574341,
+    "ast_hash": "586fef90b48716af242ac4e36c0bd664",
+    "semantic_hash": "586fef90b48716af242ac4e36c0bd664"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Feature\\Schema\\FasesEstadosTest.php": {
+    "mtime": 1783427930.2443926,
+    "ast_hash": "ae9657e7a494074766d12d0286f083c1",
+    "semantic_hash": "ae9657e7a494074766d12d0286f083c1"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Feature\\Schema\\HijasDeProyectoTest.php": {
+    "mtime": 1783438741.758438,
+    "ast_hash": "c109907a90edfbccb8596d6ee410c71a",
+    "semantic_hash": "c109907a90edfbccb8596d6ee410c71a"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Feature\\Schema\\MunicipiosTest.php": {
+    "mtime": 1783427930.2457378,
+    "ast_hash": "fa8e22559c83370e15b2b30a93cef5c5",
+    "semantic_hash": "fa8e22559c83370e15b2b30a93cef5c5"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Feature\\Schema\\ProyectosTest.php": {
+    "mtime": 1783438741.7599437,
+    "ast_hash": "7aa0c4f6318d462bcba577e8b8d423dd",
+    "semantic_hash": "7aa0c4f6318d462bcba577e8b8d423dd"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Feature\\Schema\\UserRolTest.php": {
+    "mtime": 1783427930.2480085,
+    "ast_hash": "f0b138bd58dae1957b6048953c67fdaa",
+    "semantic_hash": "f0b138bd58dae1957b6048953c67fdaa"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\tests\\Unit\\ExampleTest.php": {
+    "mtime": 1747007756.0,
+    "ast_hash": "3f679e9508c834f0ad95943455fcd836",
+    "semantic_hash": "3f679e9508c834f0ad95943455fcd836"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\PRODUCTION_SETUP.md": {
+    "mtime": 1753735925.2917871,
+    "ast_hash": "43e235e6f4931e3d35b8ec0d7d5581ba",
+    "semantic_hash": "43e235e6f4931e3d35b8ec0d7d5581ba"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\README-Dashboard.md": {
+    "mtime": 1754490737.0159082,
+    "ast_hash": "ec51f6e1bf0e14721fc0a4c18a6302c5",
+    "semantic_hash": "ec51f6e1bf0e14721fc0a4c18a6302c5"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\README.md": {
+    "mtime": 1753225784.5105264,
+    "ast_hash": "90b8957d29f93833c55d31d27881e17b",
+    "semantic_hash": "90b8957d29f93833c55d31d27881e17b"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\plans\\2026-07-06-esquema-autorizacion.md": {
+    "mtime": 1783427930.231618,
+    "ast_hash": "b2ae60046081b9b1f66ae4899411b0d3",
+    "semantic_hash": "b2ae60046081b9b1f66ae4899411b0d3"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\plans\\2026-07-07-dashboard-kpis-ejecutivos.md": {
+    "mtime": 1783446787.437452,
+    "ast_hash": "fc59a0ec0f25588f5f4852946b44e82b",
+    "semantic_hash": "fc59a0ec0f25588f5f4852946b44e82b"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\plans\\2026-07-07-dashboard-layout-alertas.md": {
+    "mtime": 1783485277.3827608,
+    "ast_hash": "aff98559f1431bba536b80c98f1be425",
+    "semantic_hash": "aff98559f1431bba536b80c98f1be425"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\plans\\2026-07-07-dashboard-municipio-card.md": {
+    "mtime": 1783432835.790729,
+    "ast_hash": "dd5b8d8ed821b048677cf640443387bb",
+    "semantic_hash": "dd5b8d8ed821b048677cf640443387bb"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\plans\\2026-07-07-estadisticas-graficas-interactivas.md": {
+    "mtime": 1783479545.6627107,
+    "ast_hash": "8e4e2d7395f5d4aab77b632a73bed8c6",
+    "semantic_hash": "8e4e2d7395f5d4aab77b632a73bed8c6"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\plans\\2026-07-08-dashboard-mapa-ubicaciones.md": {
+    "mtime": 1783541514.4994247,
+    "ast_hash": "d693964d04ee7a74ab5540ce3135e92b",
+    "semantic_hash": "d693964d04ee7a74ab5540ce3135e92b"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\plans\\2026-07-08-ubicacion-proyectos-mapa.md": {
+    "mtime": 1783525660.4997342,
+    "ast_hash": "538469286f3ac84061dffc20a563cdf3",
+    "semantic_hash": "538469286f3ac84061dffc20a563cdf3"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\plans\\2026-07-10-gestion-avance-contratos.md": {
+    "mtime": 1783696698.6842604,
+    "ast_hash": "26c26d1c5e2bd2307d9bc8f51bc39db9",
+    "semantic_hash": "26c26d1c5e2bd2307d9bc8f51bc39db9"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\plans\\2026-07-14-anticipo-contrato.md": {
+    "mtime": 1784074600.988041,
+    "ast_hash": "51a5a9352c239725f8e4da324c910cd9",
+    "semantic_hash": "51a5a9352c239725f8e4da324c910cd9"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\specs\\2026-07-06-esquema-autorizacion-design.md": {
+    "mtime": 1783427930.2336364,
+    "ast_hash": "2f8b25c3647642eeaf3184e9787df898",
+    "semantic_hash": "2f8b25c3647642eeaf3184e9787df898"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\specs\\2026-07-07-dashboard-kpis-ejecutivos-design.md": {
+    "mtime": 1783445517.935802,
+    "ast_hash": "46da13143bb56a80e6684490b6d0dfcf",
+    "semantic_hash": "46da13143bb56a80e6684490b6d0dfcf"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\specs\\2026-07-07-dashboard-layout-alertas-design.md": {
+    "mtime": 1783482187.2692702,
+    "ast_hash": "6848bb11d03f59734b8580ca0aed1fb3",
+    "semantic_hash": "6848bb11d03f59734b8580ca0aed1fb3"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\specs\\2026-07-07-dashboard-municipio-card-design.md": {
+    "mtime": 1783431695.2278767,
+    "ast_hash": "1ba5bdf129b2026c32f70c4053a84eaf",
+    "semantic_hash": "1ba5bdf129b2026c32f70c4053a84eaf"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\specs\\2026-07-07-estadisticas-graficas-interactivas-design.md": {
+    "mtime": 1783475571.0838146,
+    "ast_hash": "5f32a767005a7491c9c8d8a4e12ad954",
+    "semantic_hash": "5f32a767005a7491c9c8d8a4e12ad954"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\specs\\2026-07-08-dashboard-mapa-ubicaciones-design.md": {
+    "mtime": 1783529518.403723,
+    "ast_hash": "e51610050aaa8671707585601a5f634c",
+    "semantic_hash": "e51610050aaa8671707585601a5f634c"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\specs\\2026-07-08-ubicacion-proyectos-mapa-design.md": {
+    "mtime": 1783522783.8127854,
+    "ast_hash": "ee12ab14dff8393fbcc3d7507353ff4e",
+    "semantic_hash": "ee12ab14dff8393fbcc3d7507353ff4e"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\specs\\2026-07-10-anticipo-contrato-design.md": {
+    "mtime": 1784065079.5328727,
+    "ast_hash": "71e7ec0e0461954d9fad19decdc12057",
+    "semantic_hash": "71e7ec0e0461954d9fad19decdc12057"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\docs\\superpowers\\specs\\2026-07-10-gestion-avance-contratos-design.md": {
+    "mtime": 1783694683.318236,
+    "ast_hash": "a54ab9378fe2d85714bfb3bc6f14f220",
+    "semantic_hash": "a54ab9378fe2d85714bfb3bc6f14f220"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\robots.txt": {
+    "mtime": 1747007756.0,
+    "ast_hash": "b6216d61c03e6ce0c9aea6ca7808f7ca",
+    "semantic_hash": "b6216d61c03e6ce0c9aea6ca7808f7ca"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\test-csrf.html": {
+    "mtime": 1753541396.7574828,
+    "ast_hash": "2ab293e92b8c84e72ebb7b24f9e2ad85",
+    "semantic_hash": "2ab293e92b8c84e72ebb7b24f9e2ad85"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\js\\app.js.LICENSE.txt": {
+    "mtime": 1753717046.1175208,
+    "ast_hash": "e1b7077c205ee0eadd50d3b1ebf2ca75",
+    "semantic_hash": "e1b7077c205ee0eadd50d3b1ebf2ca75"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\anexos_contratos\\1754940363_689a43cb51da2.pdf": {
+    "mtime": 1754940362.9447846,
+    "ast_hash": "d8bbddb90d2b47abb5dfa0539b6497dc",
+    "semantic_hash": "d8bbddb90d2b47abb5dfa0539b6497dc"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\anexos_contratos\\1754940557_689a448d25939.pdf": {
+    "mtime": 1754940556.9701006,
+    "ast_hash": "f9d123a6cf09612c3ca6d16e34138b76",
+    "semantic_hash": "f9d123a6cf09612c3ca6d16e34138b76"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\anexos_contratos\\1754929884_689a1adcadfdd.png": {
+    "mtime": 1754929884.335022,
+    "ast_hash": "779d71b70cc5d5f2b61d73786df084dc",
+    "semantic_hash": "779d71b70cc5d5f2b61d73786df084dc"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\anexos_contratos\\1754930736_689a1e30e31cc.png": {
+    "mtime": 1754930736.7329412,
+    "ast_hash": "779d71b70cc5d5f2b61d73786df084dc",
+    "semantic_hash": "779d71b70cc5d5f2b61d73786df084dc"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\anexos_contratos\\1754931316_689a207482b1d.png": {
+    "mtime": 1754931316.3404222,
+    "ast_hash": "779d71b70cc5d5f2b61d73786df084dc",
+    "semantic_hash": "779d71b70cc5d5f2b61d73786df084dc"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\public\\images\\logo.png": {
+    "mtime": 1783372957.540078,
+    "ast_hash": "6b4456453c7cef0cc8be1dc34d5597f8",
+    "semantic_hash": "6b4456453c7cef0cc8be1dc34d5597f8"
+  },
+  "C:\\xampp\\htdocs\\GestPro\\resources\\images\\logo.png": {
+    "mtime": 1783372957.5935445,
+    "ast_hash": "6b4456453c7cef0cc8be1dc34d5597f8",
+    "semantic_hash": "6b4456453c7cef0cc8be1dc34d5597f8"
+  }
+}

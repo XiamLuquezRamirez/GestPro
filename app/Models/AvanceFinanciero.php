@@ -20,6 +20,7 @@ class AvanceFinanciero extends Model
         'valor_facturado' => 'decimal:2',
         'amortizacion_50' => 'decimal:2',
         'valor_presente_acta' => 'decimal:2',
+        'porcentaje_ejecutado' => 'decimal:2',
     ];
 
     public function contrato(): BelongsTo
