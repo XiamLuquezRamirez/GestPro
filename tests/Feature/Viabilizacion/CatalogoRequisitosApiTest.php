@@ -149,7 +149,7 @@ class CatalogoRequisitosApiTest extends TestCase
         $a5 = $this->requisitoDe($borrador, 'a5');
         $url = "/GestPro/catalogo-requisitos/versiones/{$borrador}/requisitos/{$a5->id}";
 
-        $this->admin()->putJson($url, $this->datosDe($a5, ['condicion' => 'fase=2 & comp=suelo']))
+        $this->admin()->putJson($url, $this->datosDe($a5, ['condicion' => 'fase=9 & comp=suelo']))
             ->assertStatus(422)
             ->assertJsonPath('mensaje', 'El requisito no es válido.');
 
@@ -168,10 +168,44 @@ class CatalogoRequisitosApiTest extends TestCase
         $this->admin()->postJson($url, $base)->assertStatus(422);
         $this->admin()->postJson($url, [...$base, 'sector_id' => $salud, 'tipo_id' => $tipoJusticia])->assertStatus(422);
 
-        $creado = $this->admin()->postJson($url, [...$base, 'sector_id' => $salud, 'condicion' => 'siempre'])->assertCreated();
-        // En la sección C la condición se ignora: aplica por sector/tipo.
+        $creado = $this->admin()->postJson($url, [...$base, 'sector_id' => $salud])->assertCreated();
+        // En la sección C la condición es opcional: sin ella, aplica en toda fase.
         $this->assertNull($creado->json('condicion'));
         $this->assertNull($creado->json('tipo_id'));
+    }
+
+    public function test_un_requisito_sectorial_admite_una_condicion_valida(): void
+    {
+        $borrador = $this->crearBorrador();
+        $url = "/GestPro/catalogo-requisitos/versiones/{$borrador}/requisitos";
+        $salud = DB::table('requisitos_sectores')->where('clave', 'salud')->value('id');
+        $base = ['seccion' => 'C', 'fuente' => 'ot', 'codigo' => '7.9·9', 'texto' => 'Requisito nuevo', 'sector_id' => $salud];
+
+        $this->admin()->postJson($url, [...$base, 'clave' => 'sa98', 'condicion' => 'fase=9'])->assertStatus(422);
+
+        $creado = $this->admin()->postJson($url, [...$base, 'clave' => 'sa99', 'condicion' => 'fase=3'])->assertCreated();
+        $this->assertSame('fase=3', $creado->json('condicion'));
+
+        $vacia = $this->admin()->postJson($url, [...$base, 'clave' => 'sa97', 'condicion' => '  '])->assertCreated();
+        $this->assertNull($vacia->json('condicion'));
+    }
+
+    public function test_publicar_valida_las_condiciones_de_la_seccion_c(): void
+    {
+        $borrador = $this->crearBorrador();
+        DB::table('requisitos_catalogo')->where('catalogo_version_id', $borrador)->where('clave', 'j1')->update(['condicion' => 'fase=9']);
+
+        $this->admin()->postJson("/GestPro/catalogo-requisitos/versiones/{$borrador}/publicar")
+            ->assertStatus(422)
+            ->assertJsonPath('mensaje', 'La versión tiene condiciones inválidas y no puede publicarse.');
+    }
+
+    public function test_publicar_acepta_requisitos_sectoriales_sin_condicion(): void
+    {
+        // La mayoría de la sección C no lleva condición: null no es un error ahí.
+        $borrador = $this->crearBorrador();
+
+        $this->admin()->postJson("/GestPro/catalogo-requisitos/versiones/{$borrador}/publicar")->assertOk();
     }
 
     public function test_la_clave_de_un_requisito_no_se_repite_en_la_version(): void

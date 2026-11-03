@@ -13,6 +13,7 @@ import {
     faseLegible,
     mensajeError,
     nombreArchivoExcel,
+    puedeRadicar,
     sectoresConFuenteA12,
     seleccionDesde,
 } from '../utils/expedienteChecklist';
@@ -210,12 +211,10 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
     };
 
     const radicar = async () => {
-        const { cumplidos, total } = expediente.progreso;
-        const pendientes = total - cumplidos;
         const { isConfirmed } = await Swal.fire({
             icon: 'warning',
             title: '¿Radicar el expediente?',
-            html: `${pendientes > 0 ? `<p><b>Quedan ${pendientes} de ${total} requisitos sin cumplir.</b></p>` : ''}<p>El checklist quedará congelado y no admitirá más cambios.</p>`,
+            text: 'El checklist quedará congelado y no admitirá más cambios.',
             showCancelButton: true,
             confirmButtonText: 'Sí, radicar',
             cancelButtonText: 'Cancelar',
@@ -368,7 +367,18 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
                                                     <button type="button" className="exv-btn exv-btn-peligro" onClick={eliminar}>
                                                         <FontAwesomeIcon icon={faTrash} /> Eliminar
                                                     </button>
-                                                    <button type="button" className="exv-btn exv-btn-primario" onClick={radicar} disabled={recalculando}>
+                                                    {!puedeRadicar(expediente.progreso) && (
+                                                        <span className="exv-radicar-pista">
+                                                            {total === 0 && 'Sin requisitos para radicar'}
+                                                            {total > 0 && `${total - cumplidos === 1 ? 'Falta' : 'Faltan'} ${total - cumplidos} para radicar`}
+                                                        </span>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        className="exv-btn exv-btn-primario"
+                                                        onClick={radicar}
+                                                        disabled={recalculando || !puedeRadicar(expediente.progreso)}
+                                                    >
                                                         <FontAwesomeIcon icon={faStamp} /> Radicar
                                                     </button>
                                                 </>

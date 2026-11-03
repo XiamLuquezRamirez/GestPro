@@ -103,10 +103,29 @@ class CatalogoRequisitosTest extends TestCase
         $this->seed(CatalogoRequisitosSgrSeeder::class);
 
         $this->assertSame(0, DB::table('requisitos_catalogo')->whereIn('seccion', ['A', 'B', 'D'])->whereNull('condicion')->count());
-        $this->assertSame(0, DB::table('requisitos_catalogo')->where('seccion', 'C')->whereNotNull('condicion')->count());
         $this->assertSame(0, DB::table('requisitos_catalogo')->where('seccion', 'C')->whereNull('sector_id')->count());
         // 5 requisitos C aplican a todo su sector (tipo '*' en el prototipo).
         $this->assertSame(5, DB::table('requisitos_catalogo')->where('seccion', 'C')->whereNull('tipo_id')->count());
+    }
+
+    public function test_en_la_seccion_c_solo_llevan_fase_las_filas_que_la_indican_en_el_catalogo(): void
+    {
+        $this->seed(CatalogoRequisitosSgrSeeder::class);
+
+        $conFase = DB::table('requisitos_catalogo')->where('seccion', 'C')->whereNotNull('condicion')
+            ->orderBy('clave')->pluck('condicion', 'clave')->all();
+
+        $this->assertSame([
+            'mi2a' => 'fase=3', 'mi2c' => 'fase=3', 'mi2d' => 'fase=3', 'mi2e' => 'fase=3',
+            'mi2f' => 'fase=3', 'mi2g' => 'fase=3', 'mi2h' => 'fase=3', 'mi2i' => 'fase=3',
+            'tr10b' => 'fase=2', 'vi4a' => 'fase=2', 'vi4b' => 'fase=3', 'vi7b' => 'fase=2',
+        ], $conFase);
+
+        // La nota sobre fases I y II debe verse en esas fases: va en el requisito que
+        // sigue aplicando en ellas (certificado CREG), no en uno exclusivo de fase III.
+        $nota = fn ($clave) => DB::table('requisitos_catalogo')->where('clave', $clave)->value('nota');
+        $this->assertStringContainsString('Fase I y II', $nota('mi2b'));
+        $this->assertNull($nota('mi2a'));
     }
 
     public function test_las_lambdas_del_prototipo_quedaron_traducidas_al_dsl(): void
@@ -120,7 +139,7 @@ class CatalogoRequisitosTest extends TestCase
         $this->assertSame('fase=3 & (comp=suelo|comp=infraestructura)', $condicion('a12'));
         $this->assertSame('comp=predios & fase!=1', $condicion('b1'));
         $this->assertSame('esp=desastre', $condicion('d1'));
-        $this->assertSame(19, DB::table('requisitos_catalogo')->whereNotNull('condicion')->distinct()->count('condicion'));
+        $this->assertSame(19, DB::table('requisitos_catalogo')->whereIn('seccion', ['A', 'B', 'D'])->distinct()->count('condicion'));
     }
 
     public function test_requisito_sectorial_queda_ligado_a_su_sector_y_tipo(): void

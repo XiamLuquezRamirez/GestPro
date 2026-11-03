@@ -95,7 +95,11 @@ final class CatalogoService
         $errores = [];
         $componentes = RequisitoComponente::pluck('clave')->all();
         $tipologias = RequisitoTipologia::pluck('clave')->all();
-        foreach ($version->requisitos()->where('activo', true)->whereIn('seccion', ['A', 'B', 'D'])->get() as $r) {
+        // En la sección C la condición es opcional: solo se valida si la hay.
+        $conCondicion = $version->requisitos()->where('activo', true)
+            ->where(fn ($q) => $q->where('seccion', '!=', 'C')->orWhereNotNull('condicion'))
+            ->get();
+        foreach ($conCondicion as $r) {
             foreach ($this->evaluador->validarCondicion($r->condicion, $componentes, $tipologias) as $error) {
                 $errores[] = "{$r->clave}: {$error}";
             }
@@ -149,16 +153,20 @@ final class CatalogoService
                     $errores[] = 'El tipo de proyecto no pertenece al sector elegido.';
                 }
             }
-            $datos['condicion'] = null; // en C aplica por sector/tipo, no por condición
         } else {
             $datos['sector_id'] = null;
             $datos['tipo_id'] = null;
-            foreach ($this->evaluador->validarCondicion($datos['condicion'] ?? null,
+        }
+
+        // Obligatoria en A/B/D. En C es opcional: sin ella, aplica en toda fase.
+        $condicion = trim((string) ($datos['condicion'] ?? ''));
+        if ($seccion !== 'C' || $condicion !== '') {
+            foreach ($this->evaluador->validarCondicion($condicion,
                 RequisitoComponente::pluck('clave')->all(), RequisitoTipologia::pluck('clave')->all()) as $error) {
                 $errores[] = $error;
             }
-            $datos['condicion'] = trim((string) ($datos['condicion'] ?? ''));
         }
+        $datos['condicion'] = $condicion !== '' ? $condicion : null;
 
         if ($errores) {
             throw new ReglaNegocioException('El requisito no es válido.', $errores);

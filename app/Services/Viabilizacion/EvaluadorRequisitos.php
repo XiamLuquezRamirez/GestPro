@@ -10,8 +10,11 @@ namespace App\Services\Viabilizacion;
  * checklist-viabilizacion-sgr.html con su misma semántica, verificada contra la
  * lógica original en tests/Fixtures/paridad_evaluador_sgr.json.
  *
- * DSL de condiciones (secciones A, B y D):
- *   siempre · fase=3 · fase=1|2 · fase!=1 · comp=<clave> · esp=<clave>
+ * Diferencia deliberada con el prototipo: la sección C también evalúa su condición,
+ * para respetar la fase en las filas donde el catálogo la indica.
+ *
+ * DSL de condiciones (obligatoria en A, B y D; opcional en C):
+ *   siempre · fase=3 · fase=2 · fase=1|2 · fase!=1 · comp=<clave> · esp=<clave>
  *   combinables con "&" (todas deben cumplirse) y "(comp=a|comp=b)" (alguna).
  *
  * Semántica heredada a tener presente: un átomo que el evaluador no reconoce se
@@ -69,12 +72,11 @@ final class EvaluadorRequisitos
                 return false;
             }
             $marcados = $cfg->tiposDe($sector);
-            if ($marcados === []) {
-                return true; // sin tipos marcados: el sector completo
-            }
             $tipo = $requisito['tipo'] ?? null;
-
-            return $tipo === null || isset($marcados[$tipo]); // null = todo el sector
+            // Sin tipos marcados: el sector completo. Tipo null: todo el sector.
+            if ($marcados !== [] && $tipo !== null && ! isset($marcados[$tipo])) {
+                return false;
+            }
         }
 
         return $this->cumpleCondicion($requisito['condicion'] ?? null, $cfg);
@@ -101,7 +103,7 @@ final class EvaluadorRequisitos
                 $errores[] = 'Hay un "&" sin condición a uno de sus lados.';
                 continue;
             }
-            if (in_array($atomo, ['siempre', 'fase=3', 'fase=1|2', 'fase!=1'], true)) {
+            if (in_array($atomo, ['siempre', 'fase=3', 'fase=2', 'fase=1|2', 'fase!=1'], true)) {
                 continue;
             }
             if (preg_match('/^\((.+)\)$/', $atomo, $m)) {
@@ -126,13 +128,13 @@ final class EvaluadorRequisitos
                 }
                 continue;
             }
-            $errores[] = "Condición no reconocida: \"{$atomo}\". Se admiten: siempre, fase=3, fase=1|2, fase!=1, comp=<clave>, esp=<clave> y (comp=a|comp=b).";
+            $errores[] = "Condición no reconocida: \"{$atomo}\". Se admiten: siempre, fase=3, fase=2, fase=1|2, fase!=1, comp=<clave>, esp=<clave> y (comp=a|comp=b).";
         }
 
         return $errores;
     }
 
-    /** Traducción literal de compileCond(). */
+    /** Traducción de compileCond(), más el átomo fase=2 que el prototipo no tenía. */
     private function compilar(string $dsl): \Closure
     {
         if (trim($dsl) === '') {
@@ -147,6 +149,9 @@ final class EvaluadorRequisitos
             }
             if ($p === 'fase=3') {
                 return fn (ConfiguracionExpediente $c) => $c->fase === 3;
+            }
+            if ($p === 'fase=2') {
+                return fn (ConfiguracionExpediente $c) => $c->fase === 2;
             }
             if ($p === 'fase=1|2') {
                 return fn (ConfiguracionExpediente $c) => $c->fase === 1 || $c->fase === 2;

@@ -93,7 +93,10 @@ export const alternarSector = (seleccion, sectorId, catalogo) => {
     return { ...seleccion, sector_ids, tipo_ids: seleccion.tipo_ids.filter((id) => !delSector.includes(id)) };
 };
 
-export const sectoresConFuenteA12 = (sectores) => sectores.filter((s) => s.fuente).map((s) => s.nombre);
+/** Igual que el backend: solo se radica con todo lo que aplica cumplido. */
+export const puedeRadicar = ({ total, cumplidos }) => total > 0 && cumplidos === total;
+
+export const sectoresConFuenteA12 =(sectores) => sectores.filter((s) => s.fuente).map((s) => s.nombre);
 
 /** Mensaje legible de un error de la API (regla de negocio o validación). */
 export const mensajeError = (error) => {

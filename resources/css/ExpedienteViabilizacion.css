@@ -194,7 +194,8 @@
 .exv-pista { height: 7px; background: var(--exv-linea-suave); border-radius: 99px; overflow: hidden; }
 .exv-relleno { height: 100%; background: var(--exv-verde); transition: width .35s cubic-bezier(.4, 0, .2, 1); }
 .exv-relleno.completo { background: var(--exv-bronce); }
-.exv-barra-acciones { display: flex; gap: .5rem; flex-wrap: wrap; }
+.exv-barra-acciones { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.exv-radicar-pista { font-size: .8rem; font-weight: 600; color: var(--exv-alerta); }
 
 /* Notas y avisos */
 .exv-nota, .exv-aviso {

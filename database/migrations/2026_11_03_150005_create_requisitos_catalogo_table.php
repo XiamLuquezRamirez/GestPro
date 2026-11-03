@@ -9,9 +9,10 @@ return new class extends Migration
     public function up(): void
     {
         // Requisitos de viabilización, uno por fila y por versión del catálogo.
-        // - seccion A/B/D: aplican según `condicion` (DSL: siempre, fase=3, fase=1|2,
-        //   fase!=1, comp=<k>, esp=<k>, combinables con & y ( | )).
+        // - seccion A/B/D: aplican según `condicion` (DSL: siempre, fase=3, fase=2,
+        //   fase=1|2, fase!=1, comp=<k>, esp=<k>, combinables con & y ( | )).
         // - seccion C: aplican según sector_id/tipo_id; tipo_id null = todo el sector.
+        //   `condicion` es opcional: acota por fase las filas que la indican.
         // `clave` es el id estable del requisito (p. ej. "a1", "j2a"): permite
         // reconocer el mismo requisito al publicar una versión nueva.
         Schema::create('requisitos_catalogo', function (Blueprint $table) {

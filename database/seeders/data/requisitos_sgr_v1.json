@@ -2169,8 +2169,8 @@
       "subtitulo": "7.10.2 Gas combustible domiciliario (Fase III)",
       "codigo": "7.10.2·1",
       "texto": "Aval técnico de la empresa de servicios públicos (≤ 12 meses): garantía de disponibilidad de suministro y de transporte de gas para atender la demanda, con soportes o mecanismos complementarios.",
-      "nota": "Para Fase I y II aplica un subconjunto (certificado CREG y estudios de la fase). Ver numeral 7.10.2.",
-      "condicion": null,
+      "nota": null,
+      "condicion": "fase=3",
       "orden": 127
     },
     {
@@ -2182,7 +2182,7 @@
       "subtitulo": "7.10.2 Gas combustible domiciliario (Fase III)",
       "codigo": "7.10.2·2",
       "texto": "Certificado de la CREG de que la población beneficiaria no cuenta con cargos aprobados o en proceso para la distribución y comercialización por redes (no aplica a conexiones/redes internas de estratos 1 y 2 y población rural con subsidio VIS rural).",
-      "nota": null,
+      "nota": "Para Fase I y II aplica un subconjunto (certificado CREG y estudios de la fase). Ver numeral 7.10.2.",
       "condicion": null,
       "orden": 128
     },
@@ -2196,7 +2196,7 @@
       "codigo": "7.10.2·3",
       "texto": "Conexiones o redes internas (estratos 1 y 2): certificado de la ESP de que las redes están en su plan de expansión y garantiza la infraestructura para la conexión efectiva (art. 7, Res. 202/2013 CREG).",
       "nota": null,
-      "condicion": null,
+      "condicion": "fase=3",
       "orden": 129
     },
     {
@@ -2209,7 +2209,7 @@
       "codigo": "7.10.2·4",
       "texto": "Redes de distribución y transporte: estudio de mercado con los energéticos a sustituir y consumos estimados por sector.",
       "nota": null,
-      "condicion": null,
+      "condicion": "fase=3",
       "orden": 130
     },
     {
@@ -2222,7 +2222,7 @@
       "codigo": "7.10.2·5",
       "texto": "Listado de los potenciales hogares beneficiarios y su estrato socioeconómico.",
       "nota": null,
-      "condicion": null,
+      "condicion": "fase=3",
       "orden": 131
     },
     {
@@ -2235,7 +2235,7 @@
       "codigo": "7.10.2·6",
       "texto": "Demanda anual de gas combustible proyectada a 20 años.",
       "nota": null,
-      "condicion": null,
+      "condicion": "fase=3",
       "orden": 132
     },
     {
@@ -2248,7 +2248,7 @@
       "codigo": "7.10.2·7",
       "texto": "Redes internas: certificado de que las viviendas no han sido beneficiarias de otros subsidios que incluyan gas por red.",
       "nota": null,
-      "condicion": null,
+      "condicion": "fase=3",
       "orden": 133
     },
     {
@@ -2261,7 +2261,7 @@
       "codigo": "7.10.2·8",
       "texto": "Estudio que determine que el costo del servicio al usuario final es igual o menor que el del GLP por cilindro (metodologías CREG).",
       "nota": null,
-      "condicion": null,
+      "condicion": "fase=3",
       "orden": 134
     },
     {
@@ -2274,7 +2274,7 @@
       "codigo": "7.10.2·9",
       "texto": "Diagrama de prestación del servicio.",
       "nota": null,
-      "condicion": null,
+      "condicion": "fase=3",
       "orden": 135
     },
     {
@@ -2950,7 +2950,7 @@
       "codigo": "7.13.12·4-7",
       "texto": "Diseños típicos de las estructuras avaladas por el INVÍAS; presupuesto definitivo de obra aprobado por el INVÍAS; complementación y ajustes de estudios y diseños base reflejados en cronograma y presupuesto; y certificación del análisis de las áreas de influencia (art. 7, Ley 1682/2013). Se presenta en prefactibilidad.",
       "nota": null,
-      "condicion": null,
+      "condicion": "fase=2",
       "orden": 187
     },
     {
@@ -3054,7 +3054,7 @@
       "codigo": "7.14.5·II",
       "texto": "Fase II: acto administrativo de anuncio de la Operación Urbana Integral con su documento técnico; y estudio financiero preliminar del urbanismo y la vivienda.",
       "nota": null,
-      "condicion": null,
+      "condicion": "fase=2",
       "orden": 195
     },
     {
@@ -3067,7 +3067,7 @@
       "codigo": "7.14.5·III",
       "texto": "Fase III: acto administrativo de adopción de la Operación Urbana Integral; y documento técnico (área de influencia y tipo de intervención VIS/VIP, estudio de tráfico y movilidad, planos del sistema vial y de servicios públicos, factibilidades de servicios y estructura financiera).",
       "nota": null,
-      "condicion": null,
+      "condicion": "fase=3",
       "orden": 196
     },
     {
@@ -3158,7 +3158,7 @@
       "codigo": "7.14.9·1-3",
       "texto": "Acto de que el barrio a intervenir está legalizado (salvo que la legalización sea parte del proyecto); certificado de criterios de priorización y selección del barrio; y documento de componentes de intervención (con saneamiento básico y al menos dos de: infraestructura, ambiente, accesibilidad/movilidad, espacio público, espacio social).",
       "nota": null,
-      "condicion": null,
+      "condicion": "fase=2",
       "orden": 203
     },
     {

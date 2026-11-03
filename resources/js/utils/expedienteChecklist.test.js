@@ -6,6 +6,7 @@ import {
     construirHojasExcel,
     mensajeError,
     nombreArchivoExcel,
+    puedeRadicar,
     seleccionDesde,
     sectoresConFuenteA12,
 } from './expedienteChecklist';
@@ -214,5 +215,16 @@ describe('Excel', () => {
 
     it('el nombre del archivo no lleva caracteres inválidos', () => {
         expect(nombreArchivoExcel(expediente)).toBe('expediente-7-Acueducto-veredal-norte.xlsx');
+    });
+});
+
+describe('puedeRadicar', () => {
+    it('solo con todos los requisitos cumplidos', () => {
+        expect(puedeRadicar({ total: 8, cumplidos: 8 })).toBe(true);
+        expect(puedeRadicar({ total: 8, cumplidos: 7 })).toBe(false);
+    });
+
+    it('un expediente sin requisitos no se radica', () => {
+        expect(puedeRadicar({ total: 0, cumplidos: 0 })).toBe(false);
     });
 });

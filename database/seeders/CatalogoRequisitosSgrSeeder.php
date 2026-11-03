@@ -12,7 +12,9 @@ use RuntimeException;
  * Fuente: database/seeders/data/requisitos_sgr_v1.json, extraído del prototipo
  * checklist-viabilizacion-sgr.html (207 requisitos: Orientaciones Transitorias +
  * Acuerdo 12 de 2024). Las condiciones A/B/D del prototipo eran funciones JS; en
- * el JSON ya están traducidas al DSL.
+ * el JSON ya están traducidas al DSL. En la sección C, el prototipo no filtra por
+ * fase; el JSON agrega condición solo a las 12 filas que indican su fase en el
+ * subtítulo, el texto o la nota. Las demás aplican en toda fase.
  *
  * Idempotente: los catálogos (sectores, tipos, componentes, tipologías) se
  * actualizan por `clave`; los requisitos de una versión existente NO se tocan,

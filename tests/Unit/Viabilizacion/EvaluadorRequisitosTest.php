@@ -33,6 +33,8 @@ class EvaluadorRequisitosTest extends TestCase
             'siempre' => ['siempre', 2, [], [], true],
             'fase=3 en fase 3' => ['fase=3', 3, [], [], true],
             'fase=3 en fase 2' => ['fase=3', 2, [], [], false],
+            'fase=2 en fase 2' => ['fase=2', 2, [], [], true],
+            'fase=2 en fase 3' => ['fase=2', 3, [], [], false],
             'fase=1|2 en fase 1' => ['fase=1|2', 1, [], [], true],
             'fase=1|2 en fase 3' => ['fase=1|2', 3, [], [], false],
             'fase!=1 en fase 2' => ['fase!=1', 2, [], [], true],
@@ -49,7 +51,7 @@ class EvaluadorRequisitosTest extends TestCase
             'espacios tolerados' => ['  comp=predios   &   fase!=1 ', 2, ['predios'], [], true],
             // Semántica heredada del prototipo: átomo desconocido = true. El validador
             // impide guardarlos; aquí se documenta el comportamiento del evaluador.
-            'átomo desconocido se trata como verdadero (heredado)' => ['fase=2', 1, [], [], true],
+            'átomo desconocido se trata como verdadero (heredado)' => ['fase=9', 1, [], [], true],
             // Heredado: dentro del paréntesis solo se reconoce comp=.
             'esp dentro de paréntesis no se reconoce (heredado)' => ['(esp=paz|esp=car)', 1, [], ['paz'], false],
         ];
@@ -65,7 +67,7 @@ class EvaluadorRequisitosTest extends TestCase
 
     public function test_validador_acepta_las_condiciones_del_catalogo(): void
     {
-        $validas = ['siempre', 'fase=3', 'fase=1|2', 'fase!=1', 'comp=predios & fase!=1',
+        $validas = ['siempre', 'fase=3', 'fase=2', 'fase=1|2', 'fase!=1', 'comp=predios & fase!=1',
             'fase=3 & (comp=suelo|comp=infraestructura)', 'esp=desastre'];
 
         foreach ($validas as $dsl) {
@@ -75,9 +77,9 @@ class EvaluadorRequisitosTest extends TestCase
 
     public function test_validador_rechaza_atomos_desconocidos(): void
     {
-        $errores = $this->evaluador->validarCondicion('fase=2 & comp=suelo', ['suelo'], []);
+        $errores = $this->evaluador->validarCondicion('fase=9 & comp=suelo', ['suelo'], []);
         $this->assertCount(1, $errores);
-        $this->assertStringContainsString('fase=2', $errores[0]);
+        $this->assertStringContainsString('fase=9', $errores[0]);
     }
 
     public function test_validador_rechaza_claves_inexistentes_en_los_catalogos(): void
@@ -152,6 +154,22 @@ class EvaluadorRequisitosTest extends TestCase
         $this->assertSame(['e1', 'v1'], $this->evaluador->aplicables($reqs, $cfg));
     }
 
+    public function test_seccion_c_respeta_la_fase_ademas_del_sector_y_el_tipo(): void
+    {
+        $reqs = [
+            $this->req('g1', 'C', null, 'minas', 'gas'), // sin condición: toda fase
+            $this->req('g2', 'C', 'fase=3', 'minas', 'gas'),
+            $this->req('g3', 'C', 'fase=2', 'minas', 'gas'),
+            $this->req('g4', 'C', 'fase=3', 'minas', 'otro_tipo'),
+            $this->req('s1', 'C', 'fase=3', 'salud', 'infra_salud'), // sector no marcado
+        ];
+        $seleccion = fn (int $fase) => $this->cfg($fase, [], [], ['minas'], ['minas::gas']);
+
+        $this->assertSame(['g1'], $this->evaluador->aplicables($reqs, $seleccion(1)));
+        $this->assertSame(['g1', 'g3'], $this->evaluador->aplicables($reqs, $seleccion(2)));
+        $this->assertSame(['g1', 'g2'], $this->evaluador->aplicables($reqs, $seleccion(3)));
+    }
+
     // ------------------------------------------------ paridad con el HTML
 
     public static function casosParidad(): array
@@ -170,6 +188,13 @@ class EvaluadorRequisitosTest extends TestCase
             $config['fase_sgr'], $config['sectores'], $config['tipos'], $config['componentes'], $config['tipologias']
         );
 
-        $this->assertSame($esperado, $this->evaluador->aplicables($catalogo['requisitos'], $cfg));
+        // El prototipo no filtra la sección C por fase; GestPro sí, por decisión del
+        // usuario. La paridad se comprueba sobre lo demás, sin esa diferencia.
+        $requisitos = array_map(
+            fn (array $r) => $r['seccion'] === 'C' ? [...$r, 'condicion' => null] : $r,
+            $catalogo['requisitos']
+        );
+
+        $this->assertSame($esperado, $this->evaluador->aplicables($requisitos, $cfg));
     }
 }

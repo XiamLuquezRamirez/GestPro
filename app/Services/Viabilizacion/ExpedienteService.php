@@ -26,6 +26,7 @@ use Illuminate\Support\Str;
  * - En borrador, cambiar la configuración recalcula el checklist: los requisitos
  *   que dejan de aplicar se marcan aplica=false (conservan cumplimiento,
  *   observación y soporte) y los que vuelven a aplicar se recuperan tal cual.
+ * - Solo se radica con todos los requisitos que aplican cumplidos.
  * - Radicado, el expediente queda congelado: no se reconfigura ni se marca.
  */
 final class ExpedienteService
@@ -134,6 +135,16 @@ final class ExpedienteService
     public function radicar(ProyectoExpediente $expediente, ?User $usuario): ProyectoExpediente
     {
         $this->exigirBorrador($expediente);
+
+        ['total' => $total, 'cumplidos' => $cumplidos] = $this->progresoDe($expediente);
+        if ($total === 0) {
+            throw new ReglaNegocioException('No se puede radicar: el expediente no tiene requisitos aplicables.');
+        }
+        if ($cumplidos < $total) {
+            $pendientes = $total - $cumplidos;
+            $verbo = $pendientes === 1 ? 'falta' : 'faltan';
+            throw new ReglaNegocioException("No se puede radicar: {$verbo} {$pendientes} de {$total} requisitos por cumplir.");
+        }
 
         $expediente->update([
             'estado' => ProyectoExpediente::RADICADO,

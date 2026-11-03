@@ -17,6 +17,13 @@ class ExpedienteApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** Filas de la sección C que el catálogo excluye en cada fase. */
+    private const C_FUERA_DE_FASE = [
+        1 => ['mi2a', 'mi2c', 'mi2d', 'mi2e', 'mi2f', 'mi2g', 'mi2h', 'mi2i', 'vi4a', 'vi4b', 'vi7b', 'tr10b'],
+        2 => ['mi2a', 'mi2c', 'mi2d', 'mi2e', 'mi2f', 'mi2g', 'mi2h', 'mi2i', 'vi4b'],
+        3 => ['vi4a', 'vi7b', 'tr10b'],
+    ];
+
     private Proyecto $proyecto;
 
     protected function setUp(): void
@@ -77,6 +84,22 @@ class ExpedienteApiTest extends TestCase
         return collect($respuesta->json('requisitos'))->firstWhere('requisito.clave', $clave)['id'];
     }
 
+    private function seccionC($respuesta): array
+    {
+        return collect($respuesta->json('requisitos'))->where('requisito.seccion', 'C')->pluck('requisito.clave')->values()->all();
+    }
+
+    /** Marca como cumplidos los requisitos indicados en la respuesta, menos los excluidos. */
+    private function cumplirTodo($respuesta, array $salvo = []): void
+    {
+        $g = $this->como(Rol::Gestor);
+        foreach ($respuesta->json('requisitos') as $fila) {
+            if (! in_array($fila['requisito']['clave'], $salvo, true)) {
+                $g->patchJson("/GestPro/expedientes/{$respuesta->json('id')}/requisitos/{$fila['id']}", ['cumplido' => true])->assertOk();
+            }
+        }
+    }
+
     // ------------------------------------------------------------- creación
 
     public function test_crea_el_expediente_con_los_requisitos_que_aplican(): void
@@ -101,10 +124,67 @@ class ExpedienteApiTest extends TestCase
             $r = $this->crear($this->configuracion($c['fase_sgr'], $c['sectores'], $c['tipos'], $c['componentes'], $c['tipologias']));
             $r->assertCreated();
 
+            // El prototipo no filtra la sección C por fase; GestPro sí. Se descuenta
+            // esa única diferencia, cubierta por los tests de filtro por fase.
+            $esperado = array_values(array_diff($caso['esperado'], self::C_FUERA_DE_FASE[$c['fase_sgr']]));
+
             // Mismo conjunto y mismo orden: el prototipo pinta por sección A, B, D, C
             // y el catálogo ya viene en ese orden, igual que la API.
-            $this->assertSame($caso['esperado'], $this->claves($r), $caso['nombre']);
+            $this->assertSame($esperado, $this->claves($r), $caso['nombre']);
         }
+    }
+
+    // ----------------------------------------------- sección C según la fase
+
+    public function test_gas_en_fase_1_y_2_solo_pide_el_certificado_creg(): void
+    {
+        $gas = fn (int $fase) => $this->seccionC($this->crear($this->configuracion($fase, ['minas'], ['minas::gas'])));
+        $todos = ['mi2a', 'mi2b', 'mi2c', 'mi2d', 'mi2e', 'mi2f', 'mi2g', 'mi2h', 'mi2i'];
+
+        $this->assertSame(['mi2b'], $gas(1));
+        $this->assertSame(['mi2b'], $gas(2));
+        $this->assertSame($todos, $gas(3));
+    }
+
+    public function test_operaciones_urbanas_cambia_de_requisito_segun_la_fase(): void
+    {
+        $tipo = fn (int $fase) => $this->seccionC($this->crear($this->configuracion($fase, ['vivienda'], ['vivienda::operaciones_urbanas'])));
+
+        $this->assertSame([], $tipo(1));
+        $this->assertSame(['vi4a'], $tipo(2));
+        $this->assertSame(['vi4b'], $tipo(3));
+    }
+
+    public function test_requisitos_de_prefactibilidad_solo_aplican_en_fase_2(): void
+    {
+        $claves = fn (int $fase, array $sectores, array $tipos) => $this->seccionC($this->crear($this->configuracion($fase, $sectores, $tipos)));
+
+        $this->assertContains('vi7b', $claves(2, ['vivienda'], ['vivienda::renovacion_mejoramiento']));
+        $this->assertNotContains('vi7b', $claves(3, ['vivienda'], ['vivienda::renovacion_mejoramiento']));
+        $this->assertContains('tr10b', $claves(2, ['transporte'], ['transporte::corredores_rurales']));
+        $this->assertNotContains('tr10b', $claves(3, ['transporte'], ['transporte::corredores_rurales']));
+    }
+
+    public function test_requisitos_sin_fase_en_el_catalogo_aplican_en_todas(): void
+    {
+        foreach ([1, 2, 3] as $fase) {
+            $this->assertContains('j1', $this->seccionC($this->crear($this->configuracion($fase, ['justicia'], ['justicia::casas_justicia']))));
+        }
+    }
+
+    public function test_cambiar_de_fase_retiene_lo_cumplido_en_la_seccion_c(): void
+    {
+        $r = $this->crear($this->configuracion(3, ['minas'], ['minas::gas']));
+        $expediente = $r->json('id');
+        $mi2a = $this->filaDe($r, 'mi2a');
+        $this->como(Rol::Gestor)->patchJson("/GestPro/expedientes/{$expediente}/requisitos/{$mi2a}", ['cumplido' => true])->assertOk();
+
+        $fase2 = $this->como(Rol::Gestor)->putJson("/GestPro/expedientes/{$expediente}/configuracion", $this->configuracion(2, ['minas'], ['minas::gas']));
+        $fase2->assertOk()->assertJsonPath('retenidos', 1);
+        $this->assertSame(['mi2b'], $this->seccionC($fase2));
+
+        $fase3 = $this->como(Rol::Gestor)->putJson("/GestPro/expedientes/{$expediente}/configuracion", $this->configuracion(3, ['minas'], ['minas::gas']));
+        $this->assertTrue(collect($fase3->json('requisitos'))->firstWhere('requisito.clave', 'mi2a')['cumplido']);
     }
 
     public function test_un_tipo_de_un_sector_no_seleccionado_es_rechazado(): void
@@ -298,13 +378,14 @@ class ExpedienteApiTest extends TestCase
         $r = $this->crear($this->configuracion(3));
         $expediente = $r->json('id');
         $a1 = $this->filaDe($r, 'a1');
+        $this->cumplirTodo($r);
 
         $this->como(Rol::Gestor)->postJson("/GestPro/expedientes/{$expediente}/radicar")
             ->assertOk()->assertJsonPath('estado', 'radicado');
         $this->assertNotNull(DB::table('proyectos_expedientes')->where('id', $expediente)->value('fecha_radicado'));
 
         $g = $this->como(Rol::Gestor);
-        $g->patchJson("/GestPro/expedientes/{$expediente}/requisitos/{$a1}", ['cumplido' => true])->assertStatus(422);
+        $g->patchJson("/GestPro/expedientes/{$expediente}/requisitos/{$a1}", ['cumplido' => false])->assertStatus(422);
         $g->putJson("/GestPro/expedientes/{$expediente}/configuracion", $this->configuracion(1))->assertStatus(422);
         $g->postJson("/GestPro/expedientes/{$expediente}/requisitos/{$a1}/soporte", [
             'archivo' => UploadedFile::fake()->create('x.pdf', 10, 'application/pdf'),
@@ -313,7 +394,51 @@ class ExpedienteApiTest extends TestCase
         $g->deleteJson("/GestPro/expedientes/{$expediente}")->assertStatus(422);
 
         $this->assertDatabaseHas('proyectos_expedientes', ['id' => $expediente, 'fase_sgr' => 3]);
-        $this->assertDatabaseHas('proyectos_requisitos', ['id' => $a1, 'cumplido' => false]);
+        $this->assertDatabaseHas('proyectos_requisitos', ['id' => $a1, 'cumplido' => true]);
+    }
+
+    public function test_no_se_puede_radicar_con_requisitos_pendientes(): void
+    {
+        $r = $this->crear($this->configuracion(3));
+        $expediente = $r->json('id');
+
+        $this->como(Rol::Gestor)->postJson("/GestPro/expedientes/{$expediente}/radicar")
+            ->assertStatus(422)
+            ->assertJsonPath('mensaje', 'No se puede radicar: faltan 8 de 8 requisitos por cumplir.');
+
+        // Un solo pendiente también lo impide.
+        $this->cumplirTodo($r, ['a11']);
+        $this->como(Rol::Gestor)->postJson("/GestPro/expedientes/{$expediente}/radicar")
+            ->assertStatus(422)
+            ->assertJsonPath('mensaje', 'No se puede radicar: falta 1 de 8 requisitos por cumplir.');
+
+        $this->assertDatabaseHas('proyectos_expedientes', ['id' => $expediente, 'estado' => 'borrador', 'fecha_radicado' => null]);
+    }
+
+    public function test_los_requisitos_que_dejaron_de_aplicar_no_cuentan_como_pendientes(): void
+    {
+        $r = $this->crear($this->configuracion(2, [], [], ['predios']));
+        $expediente = $r->json('id');
+        $predios = array_values(array_filter($this->claves($r), fn ($c) => str_starts_with($c, 'b')));
+        $this->assertNotEmpty($predios);
+        $this->cumplirTodo($r, $predios);
+
+        $g = $this->como(Rol::Gestor);
+        $g->postJson("/GestPro/expedientes/{$expediente}/radicar")->assertStatus(422);
+
+        // Sin el componente, sus requisitos ya no aplican y el expediente queda completo.
+        $g->putJson("/GestPro/expedientes/{$expediente}/configuracion", $this->configuracion(2))->assertOk();
+        $g->postJson("/GestPro/expedientes/{$expediente}/radicar")->assertOk()->assertJsonPath('estado', 'radicado');
+    }
+
+    public function test_no_se_puede_radicar_un_expediente_sin_requisitos(): void
+    {
+        $r = $this->crear($this->configuracion(3));
+        DB::table('proyectos_requisitos')->where('expediente_id', $r->json('id'))->update(['aplica' => false]);
+
+        $this->como(Rol::Gestor)->postJson("/GestPro/expedientes/{$r->json('id')}/radicar")
+            ->assertStatus(422)
+            ->assertJsonPath('mensaje', 'No se puede radicar: el expediente no tiene requisitos aplicables.');
     }
 
     public function test_eliminar_un_borrador_borra_su_checklist_y_sus_soportes(): void
