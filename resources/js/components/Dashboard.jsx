@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Header from './Header';
 import axios from 'axios';
 import '../../css/Dashboard.css';
@@ -13,6 +14,7 @@ import ContratosPanel from './ContratosPanel';
 import { construirSerieTemporal, severidadDesfase, COLOR_SEVERIDAD } from '../utils/avanceContratos';
 
 const Dashboard = ({ user, onLogout }) => {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState(''); // Inicialmente vacío
     const [municipioResaltado, setMunicipioResaltado] = useState(null);
     const [fases, setFases] = useState([]);
@@ -200,6 +202,12 @@ const Dashboard = ({ user, onLogout }) => {
                                     <p><span className="icono">🏢</span><strong>Entidad Presenta:</strong> {modalProyecto.descripcion_entidad_presenta}</p>
                                     <p><span className="icono">🏦</span><strong>Entidad Financia:</strong> {modalProyecto.descripcion_entidad_financia}</p>
                                     <p><span className="icono">💡</span><strong>Fuente de Financiación:</strong> {modalProyecto.fuente_financiacion}</p>
+                                    <p>
+                                        <span className="icono">📋</span>
+                                        <button type="button" className="tab-button" onClick={() => navigate(`/viabilizacion/${modalProyecto.id}`)}>
+                                            Expediente de viabilización SGR
+                                        </button>
+                                    </p>
                                 </div>
                             )}
                             {modalProyectoTab === 'componentes' && (

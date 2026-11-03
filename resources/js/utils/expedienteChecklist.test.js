@@ -1,0 +1,218 @@
+import { describe, it, expect } from 'vitest';
+import {
+    agruparRequisitos,
+    alternarId,
+    alternarSector,
+    construirHojasExcel,
+    mensajeError,
+    nombreArchivoExcel,
+    seleccionDesde,
+    sectoresConFuenteA12,
+} from './expedienteChecklist';
+
+const fila = (id, seccion, extra = {}) => ({
+    id,
+    cumplido: false,
+    fecha_cumplido: null,
+    usuario_cumplido: null,
+    observacion: null,
+    soporte: null,
+    ...extra.fila,
+    requisito: {
+        id: id * 10,
+        clave: `r${id}`,
+        seccion,
+        fuente: 'a12',
+        sector: null,
+        tipo: null,
+        subtitulo: null,
+        codigo: `c${id}`,
+        texto: `Texto ${id}`,
+        nota: null,
+        ...extra.requisito,
+    },
+});
+
+const salud = { id: 1, clave: 'salud', nombre: 'Salud', fuente: null };
+const justicia = { id: 2, clave: 'justicia', nombre: 'Justicia', fuente: 'Anexo 08 del Acuerdo 12/2024' };
+
+describe('agruparRequisitos', () => {
+    it('ordena las secciones como el prototipo: A, B, D, C', () => {
+        const secciones = agruparRequisitos([fila(1, 'C', { requisito: { sector: salud } }), fila(2, 'D'), fila(3, 'B'), fila(4, 'A')]);
+        expect(secciones.map((s) => s.clave)).toEqual(['A', 'B', 'D', 'C']);
+    });
+
+    it('omite las secciones sin requisitos', () => {
+        expect(agruparRequisitos([fila(1, 'A')]).map((s) => s.clave)).toEqual(['A']);
+        expect(agruparRequisitos([])).toEqual([]);
+    });
+
+    it('cuenta total y cumplidos por sección', () => {
+        const [a] = agruparRequisitos([fila(1, 'A', { fila: { cumplido: true } }), fila(2, 'A')]);
+        expect(a.total).toBe(2);
+        expect(a.cumplidos).toBe(1);
+    });
+
+    it('agrupa la sección C por sector y dentro por subtítulo, sin reordenar', () => {
+        const [c] = agruparRequisitos([
+            fila(1, 'C', { requisito: { sector: justicia, subtitulo: '8.1 Casas' } }),
+            fila(2, 'C', { requisito: { sector: justicia, subtitulo: '8.1 Casas' } }),
+            fila(3, 'C', { requisito: { sector: justicia, subtitulo: '8.2 Cárceles' } }),
+            fila(4, 'C', { requisito: { sector: salud, subtitulo: '7.1 Infra' } }),
+        ]);
+
+        expect(c.grupos.map((g) => g.sector.clave)).toEqual(['justicia', 'salud']);
+        expect(c.grupos[0].subgrupos.map((s) => s.subtitulo)).toEqual(['8.1 Casas', '8.2 Cárceles']);
+        expect(c.grupos[0].subgrupos[0].filas.map((f) => f.id)).toEqual([1, 2]);
+    });
+
+    it('las secciones sin sector forman un único grupo', () => {
+        const [b] = agruparRequisitos([
+            fila(1, 'B', { requisito: { subtitulo: 'Predios' } }),
+            fila(2, 'B', { requisito: { subtitulo: 'Licencias' } }),
+        ]);
+        expect(b.grupos).toHaveLength(1);
+        expect(b.grupos[0].sector).toBeNull();
+        expect(b.grupos[0].subgrupos.map((s) => s.subtitulo)).toEqual(['Predios', 'Licencias']);
+    });
+});
+
+describe('seleccion', () => {
+    it('seleccionDesde extrae los ids de la configuración del expediente', () => {
+        const expediente = {
+            fase_sgr: 2,
+            configuracion: {
+                sectores: [{ id: 1 }],
+                tipos: [{ id: 5, sector_id: 1 }],
+                componentes: [{ id: 7 }],
+                tipologias: [{ id: 9 }],
+            },
+        };
+        expect(seleccionDesde(expediente)).toEqual({
+            fase_sgr: 2, sector_ids: [1], tipo_ids: [5], componente_ids: [7], tipologia_ids: [9],
+        });
+    });
+
+    it('alternarId agrega y quita', () => {
+        expect(alternarId([1, 2], 3)).toEqual([1, 2, 3]);
+        expect(alternarId([1, 2], 1)).toEqual([2]);
+    });
+
+    it('quitar un sector quita también sus tipos marcados y deja los de otros sectores', () => {
+        // Sin esto el backend rechazaría la configuración (tipo de sector no seleccionado).
+        const catalogo = { sectores: [{ id: 1, tipos: [{ id: 10 }, { id: 11 }] }, { id: 2, tipos: [{ id: 20 }] }] };
+        const seleccion = { fase_sgr: 3, sector_ids: [1, 2], tipo_ids: [10, 20], componente_ids: [], tipologia_ids: [] };
+
+        const resultado = alternarSector(seleccion, 1, catalogo);
+
+        expect(resultado.sector_ids).toEqual([2]);
+        expect(resultado.tipo_ids).toEqual([20]);
+    });
+
+    it('agregar un sector no toca los tipos', () => {
+        const catalogo = { sectores: [{ id: 1, tipos: [{ id: 10 }] }, { id: 2, tipos: [] }] };
+        const seleccion = { fase_sgr: 3, sector_ids: [1], tipo_ids: [10], componente_ids: [], tipologia_ids: [] };
+
+        const resultado = alternarSector(seleccion, 2, catalogo);
+
+        expect(resultado.sector_ids).toEqual([1, 2]);
+        expect(resultado.tipo_ids).toEqual([10]);
+    });
+
+    it('sectoresConFuenteA12 lista solo los seleccionados que se rigen por el Acuerdo 12', () => {
+        expect(sectoresConFuenteA12([salud, justicia])).toEqual(['Justicia']);
+    });
+});
+
+describe('mensajeError', () => {
+    it('usa el mensaje de una regla de negocio y sus detalles', () => {
+        const e = { response: { data: { mensaje: 'Radicado', errores: ['uno', 'dos'] } } };
+        expect(mensajeError(e)).toBe('Radicado uno dos');
+    });
+
+    it('usa los errores de validación de Laravel', () => {
+        const e = { response: { data: { message: 'Inválido', errors: { archivo: ['Tipo no permitido'] } } } };
+        expect(mensajeError(e)).toBe('Tipo no permitido');
+    });
+
+    it('cae en un mensaje genérico', () => {
+        expect(mensajeError(new Error('Network Error'))).toBe('Network Error');
+        expect(mensajeError({})).toBe('Ocurrió un error inesperado.');
+    });
+});
+
+describe('Excel', () => {
+    const expediente = {
+        id: 7,
+        proyecto: { id: 1, nombre: 'Acueducto: veredal/norte' },
+        catalogo_version: { numero: 1 },
+        fase_sgr: 3,
+        estado: 'borrador',
+        fecha_radicado: null,
+        configuracion: {
+            sectores: [salud],
+            tipos: [{ id: 5, sector_id: 1, nombre: 'Infraestructura en salud' }],
+            componentes: [{ id: 7, nombre: 'Predios' }],
+            tipologias: [],
+        },
+        progreso: { total: 2, cumplidos: 1, porcentaje: 50 },
+        requisitos: [
+            fila(1, 'A', {
+                fila: {
+                    cumplido: true,
+                    fecha_cumplido: '2026-11-03T15:00:00-05:00',
+                    usuario_cumplido: 'Ana',
+                    observacion: 'Ok',
+                    soporte: { nombre: 'a.pdf' },
+                },
+                requisito: { nota: 'Una nota' },
+            }),
+            fila(2, 'C', {
+                requisito: { fuente: 'ot', sector: salud, tipo: { nombre: 'Infraestructura en salud' }, subtitulo: '7.1' },
+            }),
+        ],
+    };
+
+    it('la hoja de checklist trae una fila por requisito con su cumplimiento', () => {
+        const { checklist } = construirHojasExcel(expediente);
+
+        expect(checklist).toHaveLength(2);
+        expect(checklist[0]).toMatchObject({
+            'Sección': 'S.1 Requisitos generales',
+            'Código': 'c1',
+            'Fuente': 'A12',
+            'Requisito': 'Texto 1',
+            'Nota': 'Una nota',
+            'Cumplido': 'Sí',
+            'Fecha de cumplimiento': '2026-11-03',
+            'Responsable': 'Ana',
+            'Observación': 'Ok',
+            'Soporte': 'a.pdf',
+        });
+        expect(checklist[1]).toMatchObject({
+            'Sección': 'S.3 Requisitos sectoriales',
+            'Sector': 'Salud',
+            'Tipo de proyecto': 'Infraestructura en salud',
+            'Fuente': 'OT',
+            'Cumplido': 'No',
+            'Fecha de cumplimiento': '',
+        });
+    });
+
+    it('la hoja de resumen recoge la configuración y el avance', () => {
+        const { resumen } = construirHojasExcel(expediente);
+        const valor = (campo) => resumen.find((r) => r.Campo === campo)?.Valor;
+
+        expect(valor('Proyecto')).toBe('Acueducto: veredal/norte');
+        expect(valor('Fase SGR')).toBe('III — Factibilidad');
+        expect(valor('Estado')).toBe('Borrador');
+        expect(valor('Sectores')).toBe('Salud');
+        expect(valor('Componentes')).toBe('Predios');
+        expect(valor('Tipologías')).toBe('—');
+        expect(valor('Avance')).toBe('1 de 2 (50%)');
+    });
+
+    it('el nombre del archivo no lleva caracteres inválidos', () => {
+        expect(nombreArchivoExcel(expediente)).toBe('expediente-7-Acueducto-veredal-norte.xlsx');
+    });
+});

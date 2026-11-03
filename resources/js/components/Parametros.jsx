@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Header from './Header';
 import axios from '../axios';
-import { faPlus, faTrash, faSave, faTimes, faCalculator, faFile, faInfo, faEdit } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faTrash, faSave, faTimes, faCalculator, faFile, faInfo, faEdit, faClipboardCheck } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
 import EmojiPicker from 'emoji-picker-react';
@@ -21,6 +22,7 @@ const CapturadorClicMapa = ({ onAgregarPunto }) => {
 };
 
 const Parametros = ({ user, onLogout }) => {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('proyectos');
     const [showModal, setShowModal] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
@@ -1698,6 +1700,16 @@ const Parametros = ({ user, onLogout }) => {
                                                     title="Agregar Contrato"
                                                 >
                                                     <FontAwesomeIcon icon={faFile} /> Contrato
+                                                </button>
+                                            )}
+
+                                            {type === 'proyectos' && (
+                                                <button
+                                                    onClick={() => navigate(`/viabilizacion/${item.id}`)}
+                                                    className="btn-add-contrato-list"
+                                                    title="Expediente de viabilización SGR"
+                                                >
+                                                    <FontAwesomeIcon icon={faClipboardCheck} /> Expediente SGR
                                                 </button>
                                             )}
 

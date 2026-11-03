@@ -9,6 +9,9 @@ const Header = ({ user, onLogout }) => {
     const location = useLocation();
 
     const getPageTitle = () => {
+        if (location.pathname.startsWith('/viabilizacion/')) {
+            return 'Expediente de Viabilización SGR';
+        }
         switch(location.pathname) {
             case '/dashboard':
                 return 'Dashboard de Gestión de Proyectos';

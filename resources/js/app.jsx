@@ -5,6 +5,7 @@ import Login from './components/Login';
 import Navigation from './components/Navigation';
 import Dashboard from './components/Dashboard';
 import Parametros from './components/Parametros';
+import ExpedienteViabilizacion from './components/ExpedienteViabilizacion';
 import axios from './axios';
 import '../css/app.css';
 
@@ -67,6 +68,11 @@ function App() {
         <Route
           path="/parametros"
           element={user ? <Parametros user={user} onLogout={logout} /> : <Navigate to="/" />}
+        />
+        {/* No usar /expedientes/...: bajo /GestPro chocaría con la API del mismo nombre. */}
+        <Route
+          path="/viabilizacion/:proyectoId"
+          element={user ? <ExpedienteViabilizacion user={user} onLogout={logout} /> : <Navigate to="/" />}
         />
       </Routes>
     </Router>
