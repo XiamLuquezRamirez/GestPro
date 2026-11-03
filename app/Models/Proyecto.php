@@ -83,6 +83,11 @@ class Proyecto extends Model
         return $this->hasMany(CheckFormulacion::class, 'proyecto');
     }
 
+    public function expedientes(): HasMany
+    {
+        return $this->hasMany(ProyectoExpediente::class, 'proyecto_id');
+    }
+
     public function contratos(): HasMany
     {
         return $this->hasMany(Contrato::class, 'proyecto');

@@ -107,4 +107,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/guardarUsuario', [ProyectoController::class, 'guardarUsuario']);
         Route::post('/validarEmail', [ProyectoController::class, 'validarEmail']);
     });
+
+    // Expedientes de viabilización SGR (heredan auth:api de este grupo).
+    require __DIR__ . '/viabilizacion.php';
 });
