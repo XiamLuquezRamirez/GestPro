@@ -1,0 +1,582 @@
+{
+  "origen": "lógica original de checklist-viabilizacion-sgr.html",
+  "casos": [
+    {
+      "nombre": "fase 3 sin nada",
+      "configuracion": {
+        "fase_sgr": 3,
+        "sectores": [],
+        "tipos": [],
+        "componentes": [],
+        "tipologias": []
+      },
+      "esperado": [
+        "a1",
+        "a2",
+        "a3",
+        "a4",
+        "a8",
+        "a9",
+        "a10",
+        "a11"
+      ]
+    },
+    {
+      "nombre": "fase 1 sin nada",
+      "configuracion": {
+        "fase_sgr": 1,
+        "sectores": [],
+        "tipos": [],
+        "componentes": [],
+        "tipologias": []
+      },
+      "esperado": [
+        "a1",
+        "a2",
+        "a3",
+        "a4",
+        "a6",
+        "a7"
+      ]
+    },
+    {
+      "nombre": "fase 2 con predios y licencias",
+      "configuracion": {
+        "fase_sgr": 2,
+        "sectores": [],
+        "tipos": [],
+        "componentes": [
+          "predios",
+          "licencias"
+        ],
+        "tipologias": []
+      },
+      "esperado": [
+        "a1",
+        "a2",
+        "a3",
+        "a4",
+        "a6",
+        "a7",
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6",
+        "b7"
+      ]
+    },
+    {
+      "nombre": "fase 1 con predios (no aplica B en fase 1)",
+      "configuracion": {
+        "fase_sgr": 1,
+        "sectores": [],
+        "tipos": [],
+        "componentes": [
+          "predios"
+        ],
+        "tipologias": []
+      },
+      "esperado": [
+        "a1",
+        "a2",
+        "a3",
+        "a4",
+        "a6",
+        "a7"
+      ]
+    },
+    {
+      "nombre": "fase 3 todos los componentes",
+      "configuracion": {
+        "fase_sgr": 3,
+        "sectores": [],
+        "tipos": [],
+        "componentes": [
+          "infraestructura",
+          "capacitacion",
+          "suelo",
+          "predios",
+          "licencias",
+          "maquinaria",
+          "cofinanciacion",
+          "etapas",
+          "servicios"
+        ],
+        "tipologias": []
+      },
+      "esperado": [
+        "a1",
+        "a2",
+        "a3",
+        "a4",
+        "a5",
+        "a8",
+        "a9",
+        "a10",
+        "a11",
+        "a12",
+        "a13",
+        "a14",
+        "a15",
+        "a16",
+        "a17",
+        "a18",
+        "a19",
+        "a20",
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6",
+        "b7",
+        "b8",
+        "b9",
+        "b10"
+      ]
+    },
+    {
+      "nombre": "fase 3 desastre sin sector",
+      "configuracion": {
+        "fase_sgr": 3,
+        "sectores": [],
+        "tipos": [],
+        "componentes": [],
+        "tipologias": [
+          "desastre"
+        ]
+      },
+      "esperado": [
+        "d1",
+        "d2",
+        "d3",
+        "d4",
+        "d5",
+        "d6",
+        "d7"
+      ]
+    },
+    {
+      "nombre": "fase 3 desastre + predios + salud",
+      "configuracion": {
+        "fase_sgr": 3,
+        "sectores": [
+          "salud"
+        ],
+        "tipos": [],
+        "componentes": [
+          "predios"
+        ],
+        "tipologias": [
+          "desastre"
+        ]
+      },
+      "esperado": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6",
+        "d1",
+        "d2",
+        "d3",
+        "d4",
+        "d5",
+        "d6",
+        "d7",
+        "sa1a",
+        "sa1b",
+        "sa1c",
+        "sa1d",
+        "sa1e",
+        "sa2a",
+        "sa2b",
+        "sa2c",
+        "sa3",
+        "sa4a",
+        "sa4b",
+        "sa5",
+        "sa6a",
+        "sa6b",
+        "sa6c",
+        "sa6d"
+      ]
+    },
+    {
+      "nombre": "fase 3 justicia completo",
+      "configuracion": {
+        "fase_sgr": 3,
+        "sectores": [
+          "justicia"
+        ],
+        "tipos": [],
+        "componentes": [],
+        "tipologias": []
+      },
+      "esperado": [
+        "a1",
+        "a2",
+        "a3",
+        "a4",
+        "a8",
+        "a9",
+        "a10",
+        "a11",
+        "j1",
+        "j2a",
+        "j2b",
+        "j2c",
+        "j2d",
+        "j2e",
+        "j2f",
+        "j2g",
+        "j2h",
+        "j2i",
+        "j2j",
+        "j2k",
+        "j2l",
+        "j2m",
+        "j3a",
+        "j3b",
+        "j3c",
+        "j3d"
+      ]
+    },
+    {
+      "nombre": "fase 3 justicia solo casas de justicia",
+      "configuracion": {
+        "fase_sgr": 3,
+        "sectores": [
+          "justicia"
+        ],
+        "tipos": [
+          "justicia::casas_justicia"
+        ],
+        "componentes": [],
+        "tipologias": []
+      },
+      "esperado": [
+        "a1",
+        "a2",
+        "a3",
+        "a4",
+        "a8",
+        "a9",
+        "a10",
+        "a11",
+        "j1"
+      ]
+    },
+    {
+      "nombre": "fase 3 educación completo + vivienda solo agua",
+      "configuracion": {
+        "fase_sgr": 3,
+        "sectores": [
+          "educacion",
+          "vivienda"
+        ],
+        "tipos": [
+          "vivienda::agua_saneamiento"
+        ],
+        "componentes": [],
+        "tipologias": []
+      },
+      "esperado": [
+        "a1",
+        "a2",
+        "a3",
+        "a4",
+        "a8",
+        "a9",
+        "a10",
+        "a11",
+        "ed1a",
+        "ed1b",
+        "ed1c",
+        "ed1d",
+        "ed1e",
+        "ed2a",
+        "ed2b",
+        "ed2c",
+        "ed3a",
+        "ed3b",
+        "ed3c",
+        "ed4a",
+        "ed4b",
+        "ed4c",
+        "ed5",
+        "vi1a",
+        "vi1b",
+        "vi1c",
+        "vi1d"
+      ]
+    },
+    {
+      "nombre": "fase 1 tipologías especiales + maquinaria",
+      "configuracion": {
+        "fase_sgr": 1,
+        "sectores": [],
+        "tipos": [],
+        "componentes": [
+          "maquinaria"
+        ],
+        "tipologias": [
+          "paz",
+          "fonpet",
+          "car",
+          "pgn",
+          "estructuracion"
+        ]
+      },
+      "esperado": [
+        "a1",
+        "a2",
+        "a3",
+        "a4",
+        "a6",
+        "a7",
+        "b8",
+        "b9",
+        "b10",
+        "b11",
+        "b12",
+        "b13",
+        "b14",
+        "b15"
+      ]
+    },
+    {
+      "nombre": "fase 3 ctei solo formación (incluye ítems de todo el sector)",
+      "configuracion": {
+        "fase_sgr": 3,
+        "sectores": [
+          "ctei"
+        ],
+        "tipos": [
+          "ctei::formacion"
+        ],
+        "componentes": [],
+        "tipologias": []
+      },
+      "esperado": [
+        "a1",
+        "a2",
+        "a3",
+        "a4",
+        "a8",
+        "a9",
+        "a10",
+        "a11",
+        "ct1a",
+        "ct1b",
+        "ct1c",
+        "ct3a",
+        "ct3b"
+      ]
+    },
+    {
+      "nombre": "fase 2 todos los sectores + suelo",
+      "configuracion": {
+        "fase_sgr": 2,
+        "sectores": [
+          "agricultura",
+          "ambiente",
+          "ctei",
+          "comercio",
+          "cultura",
+          "deporte",
+          "educacion",
+          "inclusion",
+          "justicia",
+          "minas",
+          "salud",
+          "tic",
+          "transporte",
+          "vivienda"
+        ],
+        "tipos": [],
+        "componentes": [
+          "suelo"
+        ],
+        "tipologias": []
+      },
+      "esperado": [
+        "a1",
+        "a2",
+        "a3",
+        "a4",
+        "a5",
+        "a6",
+        "a7",
+        "j1",
+        "j2a",
+        "j2b",
+        "j2c",
+        "j2d",
+        "j2e",
+        "j2f",
+        "j2g",
+        "j2h",
+        "j2i",
+        "j2j",
+        "j2k",
+        "j2l",
+        "j2m",
+        "j3a",
+        "j3b",
+        "j3c",
+        "j3d",
+        "ct1a",
+        "ct1b",
+        "ct1c",
+        "ct2a",
+        "ct2b",
+        "ct3a",
+        "ct3b",
+        "ct4a",
+        "ct4b",
+        "ct5a",
+        "ct5b",
+        "co1",
+        "co2a",
+        "co2b",
+        "co2c",
+        "co2d",
+        "co2e",
+        "co2f",
+        "co3",
+        "co4",
+        "ag1a",
+        "ag1b",
+        "ag1c",
+        "ag2",
+        "ag3",
+        "am1",
+        "am2",
+        "cu1",
+        "cu2a",
+        "cu2b",
+        "cu3a",
+        "cu3b",
+        "cu3c",
+        "de1",
+        "de2",
+        "de3",
+        "de4",
+        "de5",
+        "de6",
+        "ed1a",
+        "ed1b",
+        "ed1c",
+        "ed1d",
+        "ed1e",
+        "ed2a",
+        "ed2b",
+        "ed2c",
+        "ed3a",
+        "ed3b",
+        "ed3c",
+        "ed4a",
+        "ed4b",
+        "ed4c",
+        "ed5",
+        "in1a",
+        "in1b",
+        "in2a",
+        "in2b",
+        "in3",
+        "in4a",
+        "in4b",
+        "in4c",
+        "mi1a",
+        "mi1b",
+        "mi1c",
+        "mi1d",
+        "mi2a",
+        "mi2b",
+        "mi2c",
+        "mi2d",
+        "mi2e",
+        "mi2f",
+        "mi2g",
+        "mi2h",
+        "mi2i",
+        "mi3a",
+        "mi3b",
+        "mi3c",
+        "mi3d",
+        "mi3e",
+        "sa1a",
+        "sa1b",
+        "sa1c",
+        "sa1d",
+        "sa1e",
+        "sa2a",
+        "sa2b",
+        "sa2c",
+        "sa3",
+        "sa4a",
+        "sa4b",
+        "sa5",
+        "sa6a",
+        "sa6b",
+        "sa6c",
+        "sa6d",
+        "ti1a",
+        "ti1b",
+        "ti1c",
+        "ti2a",
+        "ti2b",
+        "ti2c",
+        "ti2d",
+        "ti3",
+        "ti4a",
+        "ti4b",
+        "ti5a",
+        "ti5b",
+        "ti5c",
+        "tr1a",
+        "tr1b",
+        "tr2a",
+        "tr2b",
+        "tr2c",
+        "tr2d",
+        "tr3",
+        "tr4a",
+        "tr4b",
+        "tr5",
+        "tr6",
+        "tr7a",
+        "tr7b",
+        "tr8",
+        "tr9a",
+        "tr9b",
+        "tr10a",
+        "tr10b",
+        "vi1a",
+        "vi1b",
+        "vi1c",
+        "vi1d",
+        "vi2",
+        "vi3a",
+        "vi3b",
+        "vi4a",
+        "vi4b",
+        "vi5a",
+        "vi5b",
+        "vi5c",
+        "vi6a",
+        "vi6b",
+        "vi7a",
+        "vi7b",
+        "vi8a",
+        "vi8b",
+        "vi9a",
+        "vi9b"
+      ]
+    }
+  ]
+}
