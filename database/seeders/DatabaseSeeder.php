@@ -12,6 +12,8 @@ class DatabaseSeeder extends Seeder
             DepartamentosSeeder::class,
             MunicipiosSeeder::class,
             AdminUserSeeder::class,
+            CatalogoRequisitosSgrSeeder::class,
+            MapeoSectoresSgrSeeder::class,
         ]);
     }
 }
