@@ -107,8 +107,8 @@ final class ExpedienteService
         $this->exigirEditable($expediente, $fila);
 
         $anterior = $fila->soporte_archivo;
-        $extension = strtolower($archivo->getClientOriginalExtension() ?: $archivo->extension());
-        $ruta = $archivo->storeAs("expedientes/{$expediente->id}", Str::uuid() . '.' . $extension, self::DISCO);
+        // Extensión deducida del contenido, no la que declara quien sube el archivo.
+        $ruta = $archivo->storeAs("expedientes/{$expediente->id}", Str::uuid() . '.' . $archivo->extension(), self::DISCO);
 
         $fila->update(['soporte_archivo' => $ruta, 'soporte_nombre' => $archivo->getClientOriginalName()]);
 

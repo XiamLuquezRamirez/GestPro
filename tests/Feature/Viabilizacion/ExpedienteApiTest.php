@@ -253,6 +253,44 @@ class ExpedienteApiTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors('archivo');
     }
 
+    /**
+     * Archivo real en disco. UploadedFile::fake() deduce el tipo por el nombre, a
+     * diferencia de una subida real, que lo deduce del contenido: con un falso estos
+     * casos no reproducen lo que pasa en producción.
+     */
+    private function archivoReal(string $nombre, string $contenido): UploadedFile
+    {
+        $ruta = tempnam(sys_get_temp_dir(), 'soporte');
+        file_put_contents($ruta, $contenido);
+
+        return new UploadedFile($ruta, $nombre, null, null, true);
+    }
+
+    public function test_soporte_rechaza_extension_peligrosa_aunque_el_contenido_parezca_pdf(): void
+    {
+        // mimes solo mira el contenido: sin validar también la extensión, este archivo
+        // pasaría y se guardaría y descargaría como .exe.
+        $r = $this->crear($this->configuracion(3));
+        $url = "/GestPro/expedientes/{$r->json('id')}/requisitos/{$this->filaDe($r, 'a1')}/soporte";
+
+        foreach (['virus.exe', 'factura.pdf.exe', 'pagina.php'] as $nombre) {
+            $this->como(Rol::Gestor)->postJson($url, [
+                'archivo' => $this->archivoReal($nombre, "%PDF-1.4\n%prueba\n"),
+            ])->assertStatus(422)->assertJsonValidationErrors('archivo');
+        }
+
+        $this->assertNull(DB::table('proyectos_requisitos')->where('id', $this->filaDe($r, 'a1'))->value('soporte_archivo'));
+    }
+
+    public function test_soporte_rechaza_contenido_ajeno_con_extension_permitida(): void
+    {
+        $r = $this->crear($this->configuracion(3));
+
+        $this->como(Rol::Gestor)->postJson("/GestPro/expedientes/{$r->json('id')}/requisitos/{$this->filaDe($r, 'a1')}/soporte", [
+            'archivo' => $this->archivoReal('factura.pdf', '<html><script>alert(1)</script></html>'),
+        ])->assertStatus(422)->assertJsonValidationErrors('archivo');
+    }
+
     // ------------------------------------------------------------- radicación
 
     public function test_radicado_el_checklist_queda_congelado(): void

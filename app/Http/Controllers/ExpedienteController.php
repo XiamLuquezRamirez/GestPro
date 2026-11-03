@@ -92,8 +92,15 @@ class ExpedienteController extends Controller
 
     public function subirSoporte(Request $request, ProyectoExpediente $expediente, ProyectoRequisito $requisito): JsonResponse
     {
+        // Ambas reglas hacen falta: mimes mira el contenido y extensions el nombre. Solo
+        // con mimes, un PDF renombrado virus.exe pasaría y se descargaría como .exe.
         $request->validate([
-            'archivo' => ['required', 'file', 'mimes:' . self::MIMES_SOPORTE, 'max:' . self::MAX_SOPORTE_KB],
+            'archivo' => [
+                'required', 'file',
+                'mimes:' . self::MIMES_SOPORTE,
+                'extensions:' . self::MIMES_SOPORTE,
+                'max:' . self::MAX_SOPORTE_KB,
+            ],
         ]);
         $fila = $this->servicio->guardarSoporte($expediente, $requisito, $request->file('archivo'));
 
