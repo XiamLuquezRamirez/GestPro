@@ -7,6 +7,7 @@ import {
     mensajeError,
     nombreArchivoExcel,
     puedeRadicar,
+    sectoresSinTipo,
     seleccionDesde,
     sectoresConFuenteA12,
 } from './expedienteChecklist';
@@ -226,5 +227,24 @@ describe('puedeRadicar', () => {
 
     it('un expediente sin requisitos no se radica', () => {
         expect(puedeRadicar({ total: 0, cumplidos: 0 })).toBe(false);
+    });
+});
+
+describe('sectoresSinTipo', () => {
+    const catalogo = {
+        sectores: [
+            { id: 1, nombre: 'Vivienda', tipos: [{ id: 10 }, { id: 11 }] },
+            { id: 2, nombre: 'Salud', tipos: [{ id: 20 }] },
+            { id: 3, nombre: 'Ambiente', tipos: [] },
+        ],
+    };
+
+    it('lista los sectores marcados con tipos disponibles y ninguno elegido', () => {
+        expect(sectoresSinTipo({ sector_ids: [1, 2], tipo_ids: [20] }, catalogo)).toEqual(['Vivienda']);
+    });
+
+    it('ignora sectores sin tipos o no marcados', () => {
+        expect(sectoresSinTipo({ sector_ids: [3], tipo_ids: [] }, catalogo)).toEqual([]);
+        expect(sectoresSinTipo({ sector_ids: [], tipo_ids: [] }, catalogo)).toEqual([]);
     });
 });

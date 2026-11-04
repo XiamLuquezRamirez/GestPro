@@ -93,6 +93,16 @@ export const alternarSector = (seleccion, sectorId, catalogo) => {
     return { ...seleccion, sector_ids, tipo_ids: seleccion.tipo_ids.filter((id) => !delSector.includes(id)) };
 };
 
+/**
+ * Sectores marcados sin ningún tipo elegido, pudiendo acotarse: cargan todos sus
+ * requisitos, incluidos los que no le apliquen al proyecto, y eso distorsiona el avance.
+ */
+export const sectoresSinTipo = (seleccion, catalogo) =>
+    catalogo.sectores
+        .filter((s) => seleccion.sector_ids.includes(s.id))
+        .filter((s) => (s.tipos ?? []).length > 0 && !s.tipos.some((t) => seleccion.tipo_ids.includes(t.id)))
+        .map((s) => s.nombre);
+
 /** Igual que el backend: solo se radica con todo lo que aplica cumplido. */
 export const puedeRadicar = ({ total, cumplidos }) => total > 0 && cumplidos === total;
 

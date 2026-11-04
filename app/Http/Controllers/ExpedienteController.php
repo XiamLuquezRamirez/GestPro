@@ -82,6 +82,14 @@ class ExpedienteController extends Controller
         return response()->json($this->servicio->presentar($expediente->refresh()));
     }
 
+    public function confirmarConfiguracion(Request $request, ProyectoExpediente $expediente): JsonResponse
+    {
+        $datos = $request->validate(self::REGLAS_CONFIGURACION);
+        $this->servicio->confirmarConfiguracion($expediente, $datos);
+
+        return response()->json($this->servicio->presentar($expediente->refresh()));
+    }
+
     public function updateRequisito(Request $request, ProyectoExpediente $expediente, ProyectoRequisito $requisito): JsonResponse
     {
         $datos = $request->validate([

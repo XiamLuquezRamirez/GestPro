@@ -28,6 +28,8 @@ Route::middleware('can:editar-datos')->group(function () {
         ->name('expedientes.store');
     Route::put('/expedientes/{expediente}/configuracion', [ExpedienteController::class, 'updateConfiguracion'])
         ->name('expedientes.configuracion');
+    Route::post('/expedientes/{expediente}/configuracion/confirmar', [ExpedienteController::class, 'confirmarConfiguracion'])
+        ->name('expedientes.configuracion.confirmar');
     Route::post('/expedientes/{expediente}/radicar', [ExpedienteController::class, 'radicar'])
         ->name('expedientes.radicar');
     Route::delete('/expedientes/{expediente}', [ExpedienteController::class, 'destroy'])

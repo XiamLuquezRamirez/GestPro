@@ -69,9 +69,33 @@ class ExpedienteApiTest extends TestCase
         ];
     }
 
+    /** Crea y confirma la configuración: lo habitual en estos tests es ir a chequear. */
+    private function crearEn(Proyecto $proyecto, array $config, Rol $rol = Rol::Gestor)
+    {
+        $respuesta = $this->como($rol)->postJson("/GestPro/proyectos/{$proyecto->id}/expedientes", $config);
+        if ($respuesta->getStatusCode() === 201) {
+            $this->como(Rol::Gestor)->postJson("/GestPro/expedientes/{$respuesta->json('id')}/configuracion/confirmar", $config)->assertOk();
+        }
+
+        return $respuesta;
+    }
+
     private function crear(array $config, Rol $rol = Rol::Gestor)
     {
-        return $this->como($rol)->postJson("/GestPro/proyectos/{$this->proyecto->id}/expedientes", $config);
+        return $this->crearEn($this->proyecto, $config, $rol);
+    }
+
+    /** En un proyecto propio: cada proyecto admite un solo expediente en borrador. */
+    private function crearAislado(array $config)
+    {
+        return $this->crearEn($this->otroProyecto('Proyecto aislado'), $config);
+    }
+
+    /** Deja el expediente radicado, para poder crear otro en el mismo proyecto. */
+    private function radicar($respuesta): void
+    {
+        $this->cumplirTodo($respuesta);
+        $this->como(Rol::Gestor)->postJson("/GestPro/expedientes/{$respuesta->json('id')}/radicar")->assertOk();
     }
 
     private function claves($respuesta): array
@@ -121,7 +145,7 @@ class ExpedienteApiTest extends TestCase
 
         foreach ($fixture['casos'] as $caso) {
             $c = $caso['configuracion'];
-            $r = $this->crear($this->configuracion($c['fase_sgr'], $c['sectores'], $c['tipos'], $c['componentes'], $c['tipologias']));
+            $r = $this->crearAislado($this->configuracion($c['fase_sgr'], $c['sectores'], $c['tipos'], $c['componentes'], $c['tipologias']));
             $r->assertCreated();
 
             // El prototipo no filtra la sección C por fase; GestPro sí. Se descuenta
@@ -138,7 +162,7 @@ class ExpedienteApiTest extends TestCase
 
     public function test_gas_en_fase_1_y_2_solo_pide_el_certificado_creg(): void
     {
-        $gas = fn (int $fase) => $this->seccionC($this->crear($this->configuracion($fase, ['minas'], ['minas::gas'])));
+        $gas = fn (int $fase) => $this->seccionC($this->crearAislado($this->configuracion($fase, ['minas'], ['minas::gas'])));
         $todos = ['mi2a', 'mi2b', 'mi2c', 'mi2d', 'mi2e', 'mi2f', 'mi2g', 'mi2h', 'mi2i'];
 
         $this->assertSame(['mi2b'], $gas(1));
@@ -148,7 +172,7 @@ class ExpedienteApiTest extends TestCase
 
     public function test_operaciones_urbanas_cambia_de_requisito_segun_la_fase(): void
     {
-        $tipo = fn (int $fase) => $this->seccionC($this->crear($this->configuracion($fase, ['vivienda'], ['vivienda::operaciones_urbanas'])));
+        $tipo = fn (int $fase) => $this->seccionC($this->crearAislado($this->configuracion($fase, ['vivienda'], ['vivienda::operaciones_urbanas'])));
 
         $this->assertSame([], $tipo(1));
         $this->assertSame(['vi4a'], $tipo(2));
@@ -157,7 +181,7 @@ class ExpedienteApiTest extends TestCase
 
     public function test_requisitos_de_prefactibilidad_solo_aplican_en_fase_2(): void
     {
-        $claves = fn (int $fase, array $sectores, array $tipos) => $this->seccionC($this->crear($this->configuracion($fase, $sectores, $tipos)));
+        $claves = fn (int $fase, array $sectores, array $tipos) => $this->seccionC($this->crearAislado($this->configuracion($fase, $sectores, $tipos)));
 
         $this->assertContains('vi7b', $claves(2, ['vivienda'], ['vivienda::renovacion_mejoramiento']));
         $this->assertNotContains('vi7b', $claves(3, ['vivienda'], ['vivienda::renovacion_mejoramiento']));
@@ -168,7 +192,7 @@ class ExpedienteApiTest extends TestCase
     public function test_requisitos_sin_fase_en_el_catalogo_aplican_en_todas(): void
     {
         foreach ([1, 2, 3] as $fase) {
-            $this->assertContains('j1', $this->seccionC($this->crear($this->configuracion($fase, ['justicia'], ['justicia::casas_justicia']))));
+            $this->assertContains('j1', $this->seccionC($this->crearAislado($this->configuracion($fase, ['justicia'], ['justicia::casas_justicia']))));
         }
     }
 
@@ -216,7 +240,7 @@ class ExpedienteApiTest extends TestCase
         $sector = DB::table('sectores')->insertGetId(['nombre' => 'Agua Potable', 'activo' => true, 'requisitos_sector_id' => $vivienda]);
         $this->proyecto->update(['sector' => $sector]);
 
-        $this->crear($this->configuracion(3))->assertCreated();
+        $this->radicar($this->crear($this->configuracion(3))->assertCreated());
         $this->crear($this->configuracion(2))->assertCreated();
 
         $this->como(Rol::Consulta)->getJson("/GestPro/proyectos/{$this->proyecto->id}/expedientes")
@@ -235,7 +259,7 @@ class ExpedienteApiTest extends TestCase
 
     public function test_resumen_trae_el_expediente_mas_reciente_de_cada_proyecto(): void
     {
-        $this->crear($this->configuracion(2))->assertCreated();
+        $this->radicar($this->crear($this->configuracion(2))->assertCreated());
         $reciente = $this->crear($this->configuracion(3));
         $this->como(Rol::Gestor)->patchJson(
             "/GestPro/expedientes/{$reciente->json('id')}/requisitos/{$this->filaDe($reciente, 'a1')}",
@@ -250,6 +274,7 @@ class ExpedienteApiTest extends TestCase
             ->assertJsonPath('0.expediente_id', $reciente->json('id'))
             ->assertJsonPath('0.estado', 'borrador')
             ->assertJsonPath('0.fase_sgr', 3)
+            ->assertJsonPath('0.configurado', true)
             ->assertJsonPath('0.fecha_radicado', null)
             ->assertJsonPath('0.progreso', ['total' => 8, 'cumplidos' => 1, 'porcentaje' => 13]);
     }
@@ -373,7 +398,7 @@ class ExpedienteApiTest extends TestCase
     public function test_un_requisito_de_otro_expediente_no_es_accesible(): void
     {
         $uno = $this->crear($this->configuracion(3));
-        $otro = $this->crear($this->configuracion(3));
+        $otro = $this->crearAislado($this->configuracion(3));
 
         $this->como(Rol::Gestor)
             ->patchJson("/GestPro/expedientes/{$otro->json('id')}/requisitos/{$this->filaDe($uno, 'a1')}", ['cumplido' => true])

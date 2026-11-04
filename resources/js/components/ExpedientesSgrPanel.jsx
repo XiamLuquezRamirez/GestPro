@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
 import '../../css/ExpedientesSgrPanel.css';
-import { faseLegible, mensajeError } from '../utils/expedienteChecklist';
+import { faseLegible } from '../utils/expedienteChecklist';
 import { ESTADO, construirFilas, contarPorEstado, filtrarFilas, rutaExpediente } from '../utils/expedientesResumen';
 
 const ETIQUETA_ESTADO = {
+    [ESTADO.SIN_CONFIGURAR]: 'Sin configurar',
     [ESTADO.SIN_EXPEDIENTE]: 'Sin expediente',
     [ESTADO.BORRADOR]: 'En borrador',
     [ESTADO.RADICADO]: 'Radicado',
@@ -15,6 +15,7 @@ const fecha = (iso) => (iso ? new Date(iso).toLocaleDateString('es-CO') : '—')
 
 const FilaExpediente = ({ fila }) => {
     const tieneExpediente = fila.expedienteId !== null;
+    const medible = fila.estado === ESTADO.BORRADOR || fila.estado === ESTADO.RADICADO;
 
     return (
         <tr>
@@ -28,13 +29,13 @@ const FilaExpediente = ({ fila }) => {
             <td>
                 {tieneExpediente ? (
                     <>
-                        <div>#{fila.expedienteId} · Fase {faseLegible(fila.faseSgr)}</div>
+                        <div>#{fila.expedienteId}{medible && ` · Fase ${faseLegible(fila.faseSgr)}`}</div>
                         {fila.cantidad > 1 && <div className="exs-secundario">{fila.cantidad} expedientes en total</div>}
                     </>
                 ) : '—'}
             </td>
             <td className="exs-col-avance">
-                {tieneExpediente ? (
+                {medible ? (
                     <>
                         <div className="exs-avance-texto">
                             <span>{fila.cumplidos} de {fila.total}</span>
@@ -46,7 +47,7 @@ const FilaExpediente = ({ fila }) => {
                             aria-valuenow={fila.porcentaje}
                             aria-valuemin={0}
                             aria-valuemax={100}
-                            aria-label={`Avance de ${fila.nombre}`}
+                            aria-label={`Requisitos cumplidos de ${fila.nombre}`}
                         >
                             <div
                                 className={`exs-relleno${fila.porcentaje === 100 ? ' completo' : ''}`}
@@ -56,7 +57,7 @@ const FilaExpediente = ({ fila }) => {
                     </>
                 ) : '—'}
             </td>
-            <td className="exs-col-numero">{tieneExpediente ? fila.pendientes : '—'}</td>
+            <td className="exs-col-numero">{medible ? fila.pendientes : '—'}</td>
             <td>{fila.estado === ESTADO.RADICADO ? fecha(fila.fechaRadicado) : fecha(fila.actualizado)}</td>
             <td className="exs-col-accion">
                 <Link className="exs-abrir" to={rutaExpediente(fila)}>Abrir</Link>
@@ -65,25 +66,9 @@ const FilaExpediente = ({ fila }) => {
     );
 };
 
-const ExpedientesSgrPanel = ({ proyectos }) => {
-    const [resumenes, setResumenes] = useState(null);
-    const [error, setError] = useState(null);
+const ExpedientesSgrPanel = ({ proyectos, resumenes, error, onReintentar }) => {
     const [estado, setEstado] = useState('todos');
     const [texto, setTexto] = useState('');
-
-    const cargar = useCallback(async () => {
-        setError(null);
-        try {
-            const { data } = await axios.get('/expedientes');
-            setResumenes(data);
-        } catch (e) {
-            setError(mensajeError(e));
-        }
-    }, []);
-
-    useEffect(() => {
-        cargar();
-    }, [cargar]);
 
     const filas = useMemo(() => construirFilas(proyectos, resumenes ?? []), [proyectos, resumenes]);
     const conteos = useMemo(() => contarPorEstado(filas), [filas]);
@@ -93,7 +78,7 @@ const ExpedientesSgrPanel = ({ proyectos }) => {
         return (
             <div className="exs-panel exs-mensaje" role="alert">
                 <p>No se pudo cargar el seguimiento de expedientes. {error}</p>
-                <button type="button" className="exs-reintentar" onClick={cargar}>Reintentar</button>
+                <button type="button" className="exs-reintentar" onClick={onReintentar}>Reintentar</button>
             </div>
         );
     }
@@ -108,7 +93,7 @@ const ExpedientesSgrPanel = ({ proyectos }) => {
 
     const opciones = [
         { valor: 'todos', etiqueta: 'Proyectos', cantidad: conteos.todos },
-        { valor: ESTADO.SIN_EXPEDIENTE, etiqueta: 'Sin expediente', cantidad: conteos[ESTADO.SIN_EXPEDIENTE] },
+        { valor: ESTADO.SIN_CONFIGURAR, etiqueta: 'Sin configurar', cantidad: conteos[ESTADO.SIN_CONFIGURAR] },
         {
             valor: ESTADO.BORRADOR,
             etiqueta: 'En borrador',
@@ -116,6 +101,7 @@ const ExpedientesSgrPanel = ({ proyectos }) => {
             detalle: `${conteos.pendientesEnBorrador} ${conteos.pendientesEnBorrador === 1 ? 'requisito pendiente' : 'requisitos pendientes'}`,
         },
         { valor: ESTADO.RADICADO, etiqueta: 'Radicados', cantidad: conteos[ESTADO.RADICADO] },
+        { valor: ESTADO.SIN_EXPEDIENTE, etiqueta: 'Sin expediente', cantidad: conteos[ESTADO.SIN_EXPEDIENTE] },
     ];
 
     return (
@@ -159,7 +145,7 @@ const ExpedientesSgrPanel = ({ proyectos }) => {
                                     <th>Proyecto</th>
                                     <th>Estado</th>
                                     <th>Expediente</th>
-                                    <th>Avance</th>
+                                    <th>Requisitos cumplidos</th>
                                     <th className="exs-col-numero">Pendientes</th>
                                     <th>Actualizado</th>
                                     <th aria-label="Acciones" />

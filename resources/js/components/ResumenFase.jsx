@@ -1,9 +1,35 @@
 import React, { useMemo } from 'react';
 import { calcularAvanceGrupo } from '../utils/kpisDashboard';
+import { avanceRequisitos, esFormulacion } from '../utils/expedientesResumen';
 
 const formatearPresupuesto = (valor) => '$' + Math.round(valor / 1_000_000).toLocaleString('es-CO') + ' M';
 
-const ResumenFase = ({ proyectos, nombreFase }) => {
+// En formulación aún no hay contratos: el avance sale del checklist SGR. Es un promedio
+// de requisitos cumplidos, no avance técnico, y por eso no se rotula como "avance".
+const StatRequisitos = ({ proyectos, resumenExpedientes }) => {
+    const { pct, medidos, total } = avanceRequisitos(proyectos, resumenExpedientes);
+
+    if (pct === null) {
+        return (
+            <div className="resumen-fase-stat">
+                <span className="resumen-fase-valor">—</span>
+                <span className="resumen-fase-etiqueta">Sin expedientes SGR configurados</span>
+            </div>
+        );
+    }
+
+    return (
+        <div className="resumen-fase-stat">
+            <span className="resumen-fase-valor">{pct}%</span>
+            <div className="resumen-fase-avance-bar">
+                <div className="resumen-fase-avance-fill" style={{ width: `${pct}%` }}></div>
+            </div>
+            <span className="resumen-fase-etiqueta">Requisitos SGR cumplidos (promedio de {medidos} de {total} proyectos)</span>
+        </div>
+    );
+};
+
+const ResumenFase = ({ proyectos, nombreFase, resumenExpedientes }) => {
     const resumen = useMemo(() => {
         const total = proyectos.length;
         const presupuestoTotal = proyectos.reduce((sum, p) => sum + (parseFloat(p.presupuesto) || 0), 0);
@@ -26,22 +52,26 @@ const ResumenFase = ({ proyectos, nombreFase }) => {
                 <span className="resumen-fase-valor">{formatearPresupuesto(resumen.presupuestoTotal)}</span>
                 <span className="resumen-fase-etiqueta">Presupuesto total</span>
             </div>
-            <div className="resumen-fase-stat">
-                {resumen.avance.tieneContratos ? (
-                    <>
-                        <span className="resumen-fase-valor">{resumen.avance.pct}%</span>
-                        <div className="resumen-fase-avance-bar">
-                            <div className="resumen-fase-avance-fill" style={{ width: `${resumen.avance.pct}%` }}></div>
-                        </div>
-                        <span className="resumen-fase-etiqueta">Ejecución financiera</span>
-                    </>
-                ) : (
-                    <>
-                        <span className="resumen-fase-valor">—</span>
-                        <span className="resumen-fase-etiqueta">Sin contratos en esta fase</span>
-                    </>
-                )}
-            </div>
+            {esFormulacion(nombreFase) ? (
+                <StatRequisitos proyectos={proyectos} resumenExpedientes={resumenExpedientes} />
+            ) : (
+                <div className="resumen-fase-stat">
+                    {resumen.avance.tieneContratos ? (
+                        <>
+                            <span className="resumen-fase-valor">{resumen.avance.pct}%</span>
+                            <div className="resumen-fase-avance-bar">
+                                <div className="resumen-fase-avance-fill" style={{ width: `${resumen.avance.pct}%` }}></div>
+                            </div>
+                            <span className="resumen-fase-etiqueta">Ejecución financiera</span>
+                        </>
+                    ) : (
+                        <>
+                            <span className="resumen-fase-valor">—</span>
+                            <span className="resumen-fase-etiqueta">Sin contratos en esta fase</span>
+                        </>
+                    )}
+                </div>
+            )}
             <div className="resumen-fase-stat">
                 <span className={`resumen-fase-valor${resumen.enRiesgo > 0 ? ' en-riesgo' : ''}`}>{resumen.enRiesgo}</span>
                 <span className="resumen-fase-etiqueta">En riesgo</span>

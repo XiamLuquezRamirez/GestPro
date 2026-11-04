@@ -4,6 +4,7 @@ namespace App\Services\Viabilizacion;
 
 use App\Exceptions\ReglaNegocioException;
 use App\Models\CatalogoVersion;
+use App\Models\Fase;
 use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
 use App\Models\ProyectoRequisito;
@@ -23,6 +24,9 @@ use Illuminate\Support\Str;
  *
  * Reglas:
  * - Se crea con la versión VIGENTE del catálogo y queda atada a ella.
+ * - Cada proyecto tiene como máximo un expediente en borrador.
+ * - Nace sin configurar: solo se chequea o radica tras confirmar la configuración,
+ *   porque ella decide qué requisitos aplican y, con eso, el porcentaje de avance.
  * - En borrador, cambiar la configuración recalcula el checklist: los requisitos
  *   que dejan de aplicar se marcan aplica=false (conservan cumplimiento,
  *   observación y soporte) y los que vuelven a aplicar se recuperan tal cual.
@@ -49,6 +53,10 @@ final class ExpedienteService
         $seleccion = $this->validarSeleccion($datos, null);
 
         return DB::transaction(function () use ($proyecto, $version, $datos, $seleccion, $usuario) {
+            // El bloqueo evita dos borradores por una doble petición simultánea.
+            Proyecto::query()->whereKey($proyecto->id)->lockForUpdate()->first();
+            $this->exigirSinBorrador($proyecto);
+
             $expediente = ProyectoExpediente::create([
                 'proyecto_id' => $proyecto->id,
                 'catalogo_version_id' => $version->id,
@@ -62,6 +70,62 @@ final class ExpedienteService
 
             return $expediente;
         });
+    }
+
+    /**
+     * Expediente que nace con el proyecto, si le corresponde. Nunca interrumpe a quien
+     * guarda el proyecto: un fallo se registra y el expediente se puede crear a mano.
+     */
+    public function crearAutomatico(Proyecto $proyecto, ?User $usuario): ?ProyectoExpediente
+    {
+        if (! $this->correspondeAutomatico($proyecto)) {
+            return null;
+        }
+
+        $proyecto->loadMissing('sectorRel');
+        $sugerido = $proyecto->sectorRel?->requisitos_sector_id;
+
+        try {
+            return $this->crear($proyecto, ['fase_sgr' => 3, 'sector_ids' => $sugerido ? [$sugerido] : []], $usuario);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    /** Proyecto en Formulación, financiado con regalías y todavía sin expediente. */
+    public function correspondeAutomatico(Proyecto $proyecto): bool
+    {
+        return $this->esFormulacion($proyecto->fase)
+            && $this->financiadoConRegalias($proyecto)
+            && ! $proyecto->expedientes()->exists();
+    }
+
+    public function confirmarConfiguracion(ProyectoExpediente $expediente, array $datos): ProyectoExpediente
+    {
+        return DB::transaction(function () use ($expediente, $datos) {
+            $this->actualizarConfiguracion($expediente, $datos);
+            if (! $expediente->estaConfigurado()) {
+                $expediente->update(['fecha_configuracion' => now()]);
+            }
+
+            return $expediente;
+        });
+    }
+
+    /** Aviso, sin bloquear el cambio, si el proyecto deja Formulación con un borrador. */
+    public function advertenciaAlSalirDeFormulacion(Proyecto $proyecto, mixed $faseAnterior): ?string
+    {
+        if (! $this->esFormulacion($faseAnterior) || $this->esFormulacion($proyecto->fase)) {
+            return null;
+        }
+
+        $borrador = $proyecto->expedientes()->where('estado', ProyectoExpediente::BORRADOR)->latest('id')->first();
+
+        return $borrador
+            ? "El proyecto salió de Formulación con el expediente de viabilización #{$borrador->id} sin radicar."
+            : null;
     }
 
     public function actualizarConfiguracion(ProyectoExpediente $expediente, array $datos): ProyectoExpediente
@@ -135,6 +199,7 @@ final class ExpedienteService
     public function radicar(ProyectoExpediente $expediente, ?User $usuario): ProyectoExpediente
     {
         $this->exigirBorrador($expediente);
+        $this->exigirConfigurado($expediente);
 
         ['total' => $total, 'cumplidos' => $cumplidos] = $this->progresoDe($expediente);
         if ($total === 0) {
@@ -301,6 +366,7 @@ final class ExpedienteService
                 'expediente_id' => $e->id,
                 'estado' => $e->estado,
                 'fase_sgr' => $e->fase_sgr,
+                'configurado' => $e->estaConfigurado(),
                 'fecha_radicado' => $e->fecha_radicado?->toIso8601String(),
                 'actualizado' => $e->updated_at?->toIso8601String(),
                 'progreso' => $this->progreso((int) $e->requisitos_aplican, (int) $e->requisitos_cumplidos),
@@ -317,6 +383,7 @@ final class ExpedienteService
             'proyecto' => ['id' => $expediente->proyecto->id, 'nombre' => $expediente->proyecto->nombre],
             'catalogo_version' => ['id' => $expediente->version->id, 'numero' => $expediente->version->numero],
             'fase_sgr' => $expediente->fase_sgr,
+            'configurado' => $expediente->estaConfigurado(),
             'estado' => $expediente->estado,
             'fecha_radicado' => $expediente->fecha_radicado?->toIso8601String(),
             'usuario_radico' => $expediente->usuarioRadico?->name,
@@ -433,9 +500,46 @@ final class ExpedienteService
         }
     }
 
+    private function exigirConfigurado(ProyectoExpediente $expediente): void
+    {
+        if (! $expediente->estaConfigurado()) {
+            throw new ReglaNegocioException('Confirma la configuración del expediente antes de chequear sus requisitos.');
+        }
+    }
+
+    private function exigirSinBorrador(Proyecto $proyecto): void
+    {
+        $borrador = $proyecto->expedientes()->where('estado', ProyectoExpediente::BORRADOR)->value('id');
+        if ($borrador) {
+            throw new ReglaNegocioException("El proyecto ya tiene el expediente #{$borrador} en borrador. Radícalo o elimínalo antes de crear otro.");
+        }
+    }
+
+    private function esFormulacion(mixed $faseId): bool
+    {
+        if (! $faseId) {
+            return false;
+        }
+
+        return $this->normalizar(Fase::query()->whereKey($faseId)->value('nombre')) === 'formulacion';
+    }
+
+    // La fuente es texto libre: se reconoce por palabra clave. Si no se detecta, el
+    // expediente se puede crear a mano desde la página del proyecto.
+    private function financiadoConRegalias(Proyecto $proyecto): bool
+    {
+        return Str::contains($this->normalizar($proyecto->fuente_financiacion), ['regalia', 'sgr']);
+    }
+
+    private function normalizar(?string $texto): string
+    {
+        return Str::lower(Str::ascii(trim((string) $texto)));
+    }
+
     private function exigirEditable(ProyectoExpediente $expediente, ProyectoRequisito $fila): void
     {
         $this->exigirBorrador($expediente);
+        $this->exigirConfigurado($expediente);
 
         if ($fila->expediente_id !== $expediente->id) {
             throw new ReglaNegocioException('El requisito no pertenece a este expediente.');

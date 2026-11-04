@@ -956,7 +956,8 @@ const Parametros = ({ user, onLogout }) => {
                 handleCloseModal();
                 Swal.fire({
                     title: 'Proyecto guardado correctamente',
-                    icon: 'success'
+                    icon: response.data?.advertencia ? 'warning' : 'success',
+                    text: response.data?.advertencia
                 }).then(() => {
                     listProyectos();
                     handleCloseModal();

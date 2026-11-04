@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
-import { faArrowLeft, faFileExcel, faPlus, faPrint, faStamp, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faCheck, faFileExcel, faPlus, faPrint, faSliders, faStamp, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
 import Header from './Header';
@@ -15,6 +15,7 @@ import {
     nombreArchivoExcel,
     puedeRadicar,
     sectoresConFuenteA12,
+    sectoresSinTipo,
     seleccionDesde,
 } from '../utils/expedienteChecklist';
 import '../../css/ExpedienteViabilizacion.css';
@@ -34,6 +35,8 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
     const [expediente, setExpediente] = useState(null);
     const [seleccion, setSeleccion] = useState(null);
     const [recalculando, setRecalculando] = useState(false);
+    const [confirmando, setConfirmando] = useState(false);
+    const [configAbierta, setConfigAbierta] = useState(false);
     const [errorCarga, setErrorCarga] = useState(null);
 
     const puedeEditar = ROLES_EDICION.includes(user?.rol);
@@ -75,6 +78,7 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
     useEffect(() => {
         clearTimeout(envio.current.temporizador);
         envio.current.pendiente = null;
+        setConfigAbierta(false);
 
         if (!idActual) {
             setExpediente(null);
@@ -119,6 +123,21 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
         setRecalculando(true);
         clearTimeout(envio.current.temporizador);
         envio.current.temporizador = setTimeout(() => enviarConfiguracion(expediente.id, nueva), ESPERA_RECALCULO_MS);
+    };
+
+    const confirmarConfiguracion = async () => {
+        setConfirmando(true);
+        try {
+            const { data } = await axios.post(`/expedientes/${expediente.id}/configuracion/confirmar`, seleccion);
+            setExpediente(data);
+            setSeleccion(seleccionDesde(data));
+            setConfigAbierta(false);
+            await cargarProyecto();
+        } catch (error) {
+            avisarError('No se pudo confirmar la configuración', error);
+        } finally {
+            setConfirmando(false);
+        }
     };
 
     const reemplazarFila = (fila, progreso) => setExpediente((prev) => ({
@@ -281,6 +300,10 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
     const a12 = expediente ? sectoresConFuenteA12(expediente.configuracion.sectores) : [];
     const esDesastre = expediente?.configuracion.tipologias.some((t) => t.clave === 'desastre');
     const { cumplidos = 0, total = 0, porcentaje = 0 } = expediente?.progreso ?? {};
+    const sinConfigurar = Boolean(expediente) && !expediente.configurado;
+    const panelVisible = sinConfigurar ? editable : configAbierta;
+    const hayBorrador = datosProyecto?.expedientes.some((e) => e.estado === 'borrador');
+    const sinTipo = sinConfigurar && seleccion ? sectoresSinTipo(seleccion, catalogo) : [];
 
     return (
         <div className="exv-pagina">
@@ -313,7 +336,7 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
                                         ))}
                                     </select>
                                 )}
-                                {puedeEditar && (
+                                {puedeEditar && !hayBorrador && (
                                     <button type="button" className="exv-btn" onClick={crearExpediente}>
                                         <FontAwesomeIcon icon={faPlus} /> Nuevo expediente
                                     </button>
@@ -331,21 +354,68 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
                                 </p>
                             </div>
                         ) : (
-                            <div className="exv-shell">
-                                <ExpedienteConfiguracion
-                                    catalogo={catalogo}
-                                    expediente={expediente}
-                                    seleccion={seleccion}
-                                    deshabilitada={!editable}
-                                    recalculando={recalculando}
-                                    onCambiar={cambiarSeleccion}
-                                />
+                            <div className={`exv-shell${panelVisible ? '' : ' plegada'}`}>
+                                {panelVisible && (
+                                    <ExpedienteConfiguracion
+                                        catalogo={catalogo}
+                                        expediente={expediente}
+                                        seleccion={seleccion}
+                                        deshabilitada={!editable}
+                                        recalculando={recalculando}
+                                        onCambiar={cambiarSeleccion}
+                                    />
+                                )}
 
+                                {sinConfigurar ? (
+                                    <main className="exv-tablero">
+                                        <div className="exv-confirmar">
+                                            {editable ? (
+                                                <>
+                                                    <h3>Configura el expediente para empezar a chequear</h3>
+                                                    <p>
+                                                        Se hace una sola vez. Revisa en el panel la fase SGR, el sector, el tipo de proyecto y
+                                                        los componentes: definen qué requisitos aplican y, con eso, el porcentaje de avance.
+                                                    </p>
+                                                    {seleccion.sector_ids.length === 0 && (
+                                                        <div className="exv-aviso">
+                                                            <b>Sin sector.</b> Solo se cargarán los requisitos generales.
+                                                        </div>
+                                                    )}
+                                                    {sinTipo.length > 0 && (
+                                                        <div className="exv-aviso">
+                                                            <b>Sin tipo de proyecto: {sinTipo.join(', ')}.</b> Se cargarán todos los requisitos de ese sector, incluidos los que no le apliquen al proyecto.
+                                                        </div>
+                                                    )}
+                                                    <div className="exv-confirmar-pie">
+                                                        <span>
+                                                            {recalculando
+                                                                ? 'Recalculando…'
+                                                                : `Con esta configuración ${total === 1 ? 'aplica 1 requisito' : `aplican ${total} requisitos`}.`}
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            className="exv-btn exv-btn-primario"
+                                                            onClick={confirmarConfiguracion}
+                                                            disabled={recalculando || confirmando}
+                                                        >
+                                                            <FontAwesomeIcon icon={faCheck} /> Confirmar configuración
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <h3>Este expediente aún no está configurado</h3>
+                                                    <p>Un Administrador o Gestor debe confirmar su configuración para que se pueda hacer seguimiento.</p>
+                                                </>
+                                            )}
+                                        </div>
+                                    </main>
+                                ) : (
                                 <main className="exv-tablero">
                                     <div className="exv-barra">
                                         <div className="exv-medidor">
                                             <div className="exv-medidor-top">
-                                                <b><span>{cumplidos}</span> / {total} documentos</b>
+                                                <b><span>{cumplidos}</span> / {total} requisitos cumplidos</b>
                                                 <em>{porcentaje}%</em>
                                             </div>
                                             <div className="exv-pista">
@@ -356,6 +426,15 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
                                             </div>
                                         </div>
                                         <div className="exv-barra-acciones">
+                                            <button
+                                                type="button"
+                                                className="exv-btn"
+                                                aria-expanded={configAbierta}
+                                                onClick={() => setConfigAbierta((abierta) => !abierta)}
+                                            >
+                                                <FontAwesomeIcon icon={faSliders} />{' '}
+                                                {configAbierta ? 'Ocultar configuración' : editable ? 'Editar configuración' : 'Ver configuración'}
+                                            </button>
                                             <button type="button" className="exv-btn" onClick={exportarExcel}>
                                                 <FontAwesomeIcon icon={faFileExcel} /> Excel
                                             </button>
@@ -407,7 +486,15 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
                                             Su checklist está congelado. Para corregirlo, crea un expediente nuevo.
                                         </div>
                                     )}
-                                    {expediente.configuracion.sectores.length > 0 && (
+                                    {!configAbierta && (
+                                        <div className="exv-config-resumen exv-no-imprimir">
+                                            <span><b>Fase</b> {faseLegible(expediente.fase_sgr)}</span>
+                                            <span><b>Sectores</b> {expediente.configuracion.sectores.map((s) => s.nombre).join('; ') || 'Solo generales'}</span>
+                                            {expediente.configuracion.tipos.length > 0 && <span><b>Tipos</b> {expediente.configuracion.tipos.map((t) => t.nombre).join('; ')}</span>}
+                                            {expediente.configuracion.componentes.length > 0 && <span><b>Componentes</b> {expediente.configuracion.componentes.map((c) => c.nombre).join('; ')}</span>}
+                                        </div>
+                                    )}
+                                    {configAbierta && expediente.configuracion.sectores.length > 0 && (
                                         <div className="exv-nota exv-no-imprimir">
                                             <b>Sectores seleccionados:</b> se suman los requisitos generales más los de cada sector marcado. Marca los <b>tipos de proyecto</b> para acotar cada sector (si no marcas ninguno de un sector, se muestra completo).
                                             {a12.length > 0 && <small>{a12.join(', ')}: se rige(n) por el Acuerdo 12/2024 (vigente), que reemplazó las Orientaciones Transitorias.</small>}
@@ -441,6 +528,7 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
                                         Herramienta de apoyo para conformar el expediente. Cada ítem es un resumen del requisito; el texto exacto y su aplicabilidad los determina la norma y la instancia competente.
                                     </p>
                                 </main>
+                                )}
                             </div>
                         )}
                     </>

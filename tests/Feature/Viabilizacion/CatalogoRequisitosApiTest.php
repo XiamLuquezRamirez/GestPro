@@ -250,7 +250,8 @@ class CatalogoRequisitosApiTest extends TestCase
         $this->assertSame($textoOriginal, collect($viejo->json('requisitos'))->firstWhere('requisito.clave', 'a1')['requisito']['texto']);
 
         // Uno nuevo usa v2.
-        $nuevo = $this->admin()->postJson("/GestPro/proyectos/{$proyecto->id}/expedientes", ['fase_sgr' => 3])->assertCreated();
+        $otroProyecto = Proyecto::create(['municipio' => $municipio->codigo, 'nombre' => 'Vía secundaria']);
+        $nuevo = $this->admin()->postJson("/GestPro/proyectos/{$otroProyecto->id}/expedientes", ['fase_sgr' => 3])->assertCreated();
         $nuevo->assertJsonPath('catalogo_version.numero', 2)->assertJsonPath('progreso.total', 7);
         $this->assertSame('Texto v2', collect($nuevo->json('requisitos'))->firstWhere('requisito.clave', 'a1')['requisito']['texto']);
     }

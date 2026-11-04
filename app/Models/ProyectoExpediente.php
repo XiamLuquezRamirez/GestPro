@@ -14,15 +14,21 @@ class ProyectoExpediente extends Model
 
     protected $table = 'proyectos_expedientes';
     protected $fillable = [
-        'proyecto_id', 'catalogo_version_id', 'fase_sgr', 'estado',
+        'proyecto_id', 'catalogo_version_id', 'fase_sgr', 'fecha_configuracion', 'estado',
         'fecha_radicado', 'usuario_radicado_id', 'usuario_creo_id',
     ];
     protected $casts = [
         'proyecto_id' => 'integer',
         'catalogo_version_id' => 'integer',
         'fase_sgr' => 'integer',
+        'fecha_configuracion' => 'datetime',
         'fecha_radicado' => 'datetime',
     ];
+
+    public function estaConfigurado(): bool
+    {
+        return $this->fecha_configuracion !== null;
+    }
 
     public function proyecto(): BelongsTo
     {

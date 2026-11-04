@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Proyecto;
+use App\Services\Viabilizacion\ExpedienteService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -265,12 +267,14 @@ class ProyectoController extends Controller
         return response()->json(['success' => 'Fase activada correctamente']);
     }
 
-    public function guardarProyecto(Request $request)
+    public function guardarProyecto(Request $request, ExpedienteService $expedientes)
     {
         $proyecto = $request->all();
+        $proyectoId = $proyecto['id'] ?? null;
+        $faseAnterior = null;
         DB::beginTransaction();
 
-       
+
         try {
             if ($proyecto['accion'] == 'Agregar') {
                 $proyectoId = DB::table('proyectos')->insertGetId([
@@ -307,6 +311,7 @@ class ProyectoController extends Controller
                 }
 
             } else {
+                $faseAnterior = DB::table('proyectos')->where('id', $proyecto['id'])->value('fase');
 
                 DB::table('proyectos')->where('id', $proyecto['id'])->update([
                     'municipio' => $proyecto['municipio'],
@@ -349,7 +354,17 @@ class ProyectoController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
         DB::commit();
-        return response()->json(['success' => 'Proyecto guardado correctamente']);
+
+        // Después del commit: el proyecto queda guardado pase lo que pase con el expediente.
+        $respuesta = ['success' => 'Proyecto guardado correctamente'];
+        $guardado = Proyecto::find($proyectoId);
+        if ($guardado && $proyecto['accion'] == 'Agregar') {
+            $expedientes->crearAutomatico($guardado, $request->user());
+        } elseif ($guardado && ($advertencia = $expedientes->advertenciaAlSalirDeFormulacion($guardado, $faseAnterior))) {
+            $respuesta['advertencia'] = $advertencia;
+        }
+
+        return response()->json($respuesta);
     }
 
     public function guardarContrato(Request $request)

@@ -85,6 +85,7 @@
     white-space: nowrap;
     border-radius: 10px;
 }
+.exs-estado-sin_configurar { color: #991b1b; background: #fee2e2; }
 .exs-estado-sin_expediente { color: #4b5563; background: #f3f4f6; }
 .exs-estado-borrador { color: #92400e; background: #fef3c7; }
 .exs-estado-radicado { color: #166534; background: #dcfce7; }

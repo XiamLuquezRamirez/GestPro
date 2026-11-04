@@ -13,6 +13,8 @@ import ProximosEventos from './ProximosEventos';
 import ContratosPanel from './ContratosPanel';
 import ExpedientesSgrPanel from './ExpedientesSgrPanel';
 import { construirSerieTemporal, severidadDesfase, COLOR_SEVERIDAD } from '../utils/avanceContratos';
+import { mensajeError } from '../utils/expedienteChecklist';
+import { textoAvanceProyecto } from '../utils/expedientesResumen';
 
 const PESTANA_EXPEDIENTES = 'expedientes';
 
@@ -25,6 +27,8 @@ const Dashboard = ({ user, onLogout }) => {
     const [fases, setFases] = useState([]);
     const [proyectos, setProyectos] = useState([]);
     const [modalProyecto, setModalProyecto] = useState(null);
+    const [resumenExpedientes, setResumenExpedientes] = useState(null);
+    const [errorExpedientes, setErrorExpedientes] = useState(null);
 
     const [isLargeScreen, setIsLargeScreen] = useState(false);
 
@@ -63,6 +67,7 @@ const Dashboard = ({ user, onLogout }) => {
     useEffect(() => {
         listFases();
         listProyectos();
+        listExpedientes();
     }, []);
 
     // Cuando se abre un nuevo modal, resetear la pestaña activa
@@ -85,6 +90,17 @@ const Dashboard = ({ user, onLogout }) => {
         const response = await axios.get('/proyectos');
         setProyectos(response.data);
         console.log(response.data);
+    };
+
+    // Si falla, el resto del Dashboard sigue funcionando: solo el seguimiento lo indica.
+    const listExpedientes = async () => {
+        setErrorExpedientes(null);
+        try {
+            const response = await axios.get('/expedientes');
+            setResumenExpedientes(response.data);
+        } catch (error) {
+            setErrorExpedientes(mensajeError(error));
+        }
     };
 
     // Mostrar solo las fases que tienen dashboard_fase === 1
@@ -162,6 +178,7 @@ const Dashboard = ({ user, onLogout }) => {
                                         <ResumenFase
                                             proyectos={proyectosDeLaFaseActiva}
                                             nombreFase={faseActiva.nombre}
+                                            resumenExpedientes={resumenExpedientes}
                                         />
                                         <ProximosEventos />
                                     </div>
@@ -169,7 +186,14 @@ const Dashboard = ({ user, onLogout }) => {
                             )}
                             {activeTab === 'estadisticas' && <Estadisticas proyectos={proyectos} />}
                             {activeTab === 'contratos' && <ContratosPanel proyectos={proyectos} />}
-                            {activeTab === PESTANA_EXPEDIENTES && <ExpedientesSgrPanel proyectos={proyectos} />}
+                            {activeTab === PESTANA_EXPEDIENTES && (
+                                <ExpedientesSgrPanel
+                                    proyectos={proyectos}
+                                    resumenes={resumenExpedientes}
+                                    error={errorExpedientes}
+                                    onReintentar={listExpedientes}
+                                />
+                            )}
                         </div>
                     </div>
                 </section>
@@ -215,6 +239,7 @@ const Dashboard = ({ user, onLogout }) => {
                                     <p><span className="icono">🏢</span><strong>Entidad Presenta:</strong> {modalProyecto.descripcion_entidad_presenta}</p>
                                     <p><span className="icono">🏦</span><strong>Entidad Financia:</strong> {modalProyecto.descripcion_entidad_financia}</p>
                                     <p><span className="icono">💡</span><strong>Fuente de Financiación:</strong> {modalProyecto.fuente_financiacion}</p>
+                                    <p><span className="icono">✅</span><strong>Requisitos SGR cumplidos:</strong> {textoAvanceProyecto(modalProyecto.id, resumenExpedientes)}</p>
                                     <p>
                                         <span className="icono">📋</span>
                                         <button type="button" className="tab-button" onClick={() => navigate(`/viabilizacion/${modalProyecto.id}`)}>

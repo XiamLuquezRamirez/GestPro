@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { ESTADO, construirFilas, contarPorEstado, filtrarFilas, rutaExpediente } from './expedientesResumen';
+import {
+    ESTADO,
+    avanceRequisitos,
+    construirFilas,
+    contarPorEstado,
+    esFormulacion,
+    filtrarFilas,
+    rutaExpediente,
+    textoAvanceProyecto,
+} from './expedientesResumen';
 
 const proyecto = (id, nombre, municipio = 'MEDELLÍN', fase = 'Formulación') => ({
     id,
@@ -14,6 +23,7 @@ const resumen = (proyectoId, estado, total, cumplidos, extra = {}) => ({
     expediente_id: proyectoId * 10,
     estado,
     fase_sgr: 3,
+    configurado: true,
     fecha_radicado: null,
     actualizado: '2026-11-04T10:00:00-05:00',
     progreso: { total, cumplidos, porcentaje: total ? Math.round((cumplidos / total) * 100) : 0 },
@@ -85,6 +95,7 @@ describe('contarPorEstado', () => {
 
         expect(contarPorEstado(filas)).toEqual({
             todos: 4,
+            [ESTADO.SIN_CONFIGURAR]: 0,
             [ESTADO.SIN_EXPEDIENTE]: 1,
             [ESTADO.BORRADOR]: 2,
             [ESTADO.RADICADO]: 1,
@@ -128,5 +139,77 @@ describe('rutaExpediente', () => {
 
         expect(rutaExpediente(conExpediente)).toBe('/viabilizacion/1?expediente=10');
         expect(rutaExpediente(sinExpediente)).toBe('/viabilizacion/2');
+    });
+});
+
+describe('expedientes sin configurar', () => {
+    const sinConfigurar = resumen(1, 'borrador', 8, 0, { configurado: false });
+
+    it('tienen estado propio y no muestran avance ni pendientes', () => {
+        const [fila] = construirFilas([proyecto(1, 'A')], [sinConfigurar]);
+
+        expect(fila).toMatchObject({ estado: ESTADO.SIN_CONFIGURAR, expedienteId: 10, porcentaje: null, pendientes: 0 });
+    });
+
+    it('van primero, porque son lo que requiere acción', () => {
+        const filas = construirFilas(
+            [proyecto(1, 'A'), proyecto(2, 'B'), proyecto(3, 'C')],
+            [resumen(2, 'borrador', 8, 1, { configurado: true }), sinConfigurar],
+        );
+
+        expect(filas.map((f) => f.proyectoId)).toEqual([1, 2, 3]);
+    });
+
+    it('se cuentan aparte y sus requisitos no suman como pendientes', () => {
+        const conteos = contarPorEstado(construirFilas([proyecto(1, 'A')], [sinConfigurar]));
+
+        expect(conteos[ESTADO.SIN_CONFIGURAR]).toBe(1);
+        expect(conteos[ESTADO.BORRADOR]).toBe(0);
+        expect(conteos.pendientesEnBorrador).toBe(0);
+    });
+});
+
+describe('esFormulacion', () => {
+    it('reconoce la fase sin importar tildes ni mayúsculas', () => {
+        expect(esFormulacion('Formulación')).toBe(true);
+        expect(esFormulacion(' FORMULACION ')).toBe(true);
+        expect(esFormulacion('Licitación')).toBe(false);
+        expect(esFormulacion(undefined)).toBe(false);
+    });
+});
+
+describe('avanceRequisitos', () => {
+    const proyectos = [proyecto(1, 'A'), proyecto(2, 'B'), proyecto(3, 'C'), proyecto(4, 'D')];
+
+    it('promedia solo los proyectos con expediente configurado de la lista', () => {
+        const avance = avanceRequisitos(proyectos, [
+            resumen(1, 'borrador', 10, 5, { configurado: true }),
+            resumen(2, 'radicado', 8, 8, { configurado: true }),
+            resumen(3, 'borrador', 8, 0, { configurado: false }),
+            resumen(99, 'borrador', 8, 0, { configurado: true }),
+        ]);
+
+        expect(avance).toEqual({ pct: 75, medidos: 2, total: 4 });
+    });
+
+    it('sin nada que medir, no inventa un 0 %', () => {
+        expect(avanceRequisitos(proyectos, [])).toEqual({ pct: null, medidos: 0, total: 4 });
+        expect(avanceRequisitos(proyectos, null)).toEqual({ pct: null, medidos: 0, total: 4 });
+    });
+});
+
+describe('textoAvanceProyecto', () => {
+    it('describe cada situación del proyecto', () => {
+        const resumenes = [
+            resumen(1, 'borrador', 8, 3, { configurado: true }),
+            resumen(2, 'borrador', 8, 0, { configurado: false }),
+            resumen(3, 'radicado', 8, 8, { configurado: true }),
+        ];
+
+        expect(textoAvanceProyecto(1, resumenes)).toBe('38% (3 de 8)');
+        expect(textoAvanceProyecto(2, resumenes)).toBe('Sin configurar');
+        expect(textoAvanceProyecto(3, resumenes)).toBe('100% (8 de 8) · Radicado');
+        expect(textoAvanceProyecto(4, resumenes)).toBe('Sin expediente');
+        expect(textoAvanceProyecto(1, null)).toBe('—');
     });
 });

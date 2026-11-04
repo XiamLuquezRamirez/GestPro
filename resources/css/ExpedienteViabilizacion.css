@@ -81,7 +81,45 @@
     gap: 1.5rem;
     align-items: start;
 }
+.exv-shell.plegada { grid-template-columns: minmax(0, 1fr); }
 .exv-tablero { min-width: 0; }
+
+/* Configuración inicial: se confirma una vez, antes de poder chequear */
+.exv-confirmar {
+    padding: 1.25rem 1.4rem;
+    background: var(--exv-tarjeta);
+    border: 1px solid var(--exv-linea);
+    border-top: 3px solid var(--exv-bronce);
+    border-radius: var(--exv-radio);
+}
+.exv-confirmar h3 { margin: 0 0 .5rem; font-size: 1.05rem; font-weight: 700; color: var(--exv-tinta); }
+.exv-confirmar p { margin: 0 0 1rem; font-size: .88rem; line-height: 1.5; color: var(--exv-tinta-suave); }
+.exv-confirmar-pie {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding-top: .9rem;
+    font-size: .88rem;
+    font-weight: 600;
+    border-top: 1px solid var(--exv-linea-suave);
+}
+
+/* Configuración plegada: se ve de un vistazo sin ocupar la pantalla */
+.exv-config-resumen {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem 1.25rem;
+    padding: .55rem .9rem;
+    margin-bottom: 1rem;
+    font-size: .8rem;
+    color: var(--exv-tinta-suave);
+    background: var(--exv-tarjeta);
+    border: 1px solid var(--exv-linea-suave);
+    border-radius: var(--exv-radio);
+}
+.exv-config-resumen b { margin-right: .25rem; font-weight: 700; color: var(--exv-tinta); }
 
 /* Panel de configuración */
 .exv-config {
