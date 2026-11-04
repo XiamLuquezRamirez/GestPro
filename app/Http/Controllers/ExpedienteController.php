@@ -37,6 +37,12 @@ class ExpedienteController extends Controller
     {
     }
 
+    /** Vista consolidada del Dashboard: el expediente más reciente de cada proyecto. */
+    public function resumen(): JsonResponse
+    {
+        return response()->json($this->servicio->resumenPorProyecto());
+    }
+
     public function index(Proyecto $proyecto): JsonResponse
     {
         $expedientes = $proyecto->expedientes()->orderByDesc('id')->get()

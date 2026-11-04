@@ -15,6 +15,8 @@ Route::get('/catalogo-requisitos/vigente', [CatalogoRequisitosController::class,
     ->name('catalogo-requisitos.vigente');
 Route::get('/proyectos/{proyecto}/expedientes', [ExpedienteController::class, 'index'])
     ->name('expedientes.index');
+Route::get('/expedientes', [ExpedienteController::class, 'resumen'])
+    ->name('expedientes.resumen');
 Route::get('/expedientes/{expediente}', [ExpedienteController::class, 'show'])
     ->name('expedientes.show');
 Route::get('/expedientes/{expediente}/requisitos/{requisito}/soporte', [ExpedienteController::class, 'descargarSoporte'])

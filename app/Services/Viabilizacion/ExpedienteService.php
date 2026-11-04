@@ -276,6 +276,38 @@ final class ExpedienteService
         ];
     }
 
+    /**
+     * Expediente más reciente de cada proyecto que tiene alguno, con su avance.
+     * Son dos consultas sin importar cuántos proyectos haya.
+     */
+    public function resumenPorProyecto(): array
+    {
+        $cantidades = ProyectoExpediente::query()
+            ->selectRaw('MAX(id) AS ultimo_id, COUNT(*) AS cantidad')
+            ->groupBy('proyecto_id')
+            ->pluck('cantidad', 'ultimo_id');
+
+        return ProyectoExpediente::query()
+            ->whereIn('id', $cantidades->keys())
+            ->withCount([
+                'requisitos as requisitos_aplican' => fn ($q) => $q->where('aplica', true),
+                'requisitos as requisitos_cumplidos' => fn ($q) => $q->where('aplica', true)->where('cumplido', true),
+            ])
+            ->orderBy('proyecto_id')
+            ->get()
+            ->map(fn (ProyectoExpediente $e) => [
+                'proyecto_id' => $e->proyecto_id,
+                'cantidad_expedientes' => (int) $cantidades[$e->id],
+                'expediente_id' => $e->id,
+                'estado' => $e->estado,
+                'fase_sgr' => $e->fase_sgr,
+                'fecha_radicado' => $e->fecha_radicado?->toIso8601String(),
+                'actualizado' => $e->updated_at?->toIso8601String(),
+                'progreso' => $this->progreso((int) $e->requisitos_aplican, (int) $e->requisitos_cumplidos),
+            ])
+            ->all();
+    }
+
     public function presentarCabecera(ProyectoExpediente $expediente): array
     {
         $expediente->loadMissing(['proyecto:id,nombre', 'version:id,numero', 'usuarioRadico:id,name', 'usuarioCreo:id,name']);

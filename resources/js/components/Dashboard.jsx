@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Header from './Header';
 import axios from 'axios';
 import '../../css/Dashboard.css';
@@ -11,11 +11,16 @@ import DistribucionMunicipios from './DistribucionMunicipios';
 import ResumenFase from './ResumenFase';
 import ProximosEventos from './ProximosEventos';
 import ContratosPanel from './ContratosPanel';
+import ExpedientesSgrPanel from './ExpedientesSgrPanel';
 import { construirSerieTemporal, severidadDesfase, COLOR_SEVERIDAD } from '../utils/avanceContratos';
+
+const PESTANA_EXPEDIENTES = 'expedientes';
 
 const Dashboard = ({ user, onLogout }) => {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState(''); // Inicialmente vacío
+    const [searchParams, setSearchParams] = useSearchParams();
+    // Esta pestaña va en la URL: al volver de un expediente debe seguir abierta.
+    const [activeTab, setActiveTab] = useState(searchParams.get('pestana') === PESTANA_EXPEDIENTES ? PESTANA_EXPEDIENTES : '');
     const [municipioResaltado, setMunicipioResaltado] = useState(null);
     const [fases, setFases] = useState([]);
     const [proyectos, setProyectos] = useState([]);
@@ -43,6 +48,7 @@ const Dashboard = ({ user, onLogout }) => {
     const handleTabChange = (tab) => {
         setActiveTab(tab);
         setMunicipioResaltado(null); // Reset al cambiar de pestaña
+        setSearchParams(tab === PESTANA_EXPEDIENTES ? { pestana: tab } : {}, { replace: true });
     };
 
     const handleOpenModalProyecto = (proyecto) => setModalProyecto(proyecto);
@@ -66,7 +72,7 @@ const Dashboard = ({ user, onLogout }) => {
 
     useEffect(() => {
         if (fases.length > 0) {
-            setActiveTab(fases[0].nombre);
+            setActiveTab((actual) => actual || fases[0].nombre);
         }
     }, [fases]);
 
@@ -123,6 +129,12 @@ const Dashboard = ({ user, onLogout }) => {
                             >
                                 Contratos
                             </button>
+                            <button
+                                className={`tab-button ${activeTab === PESTANA_EXPEDIENTES ? 'active' : ''}`}
+                                onClick={() => handleTabChange(PESTANA_EXPEDIENTES)}
+                            >
+                                Expedientes SGR
+                            </button>
                         </div>
 
                         <div className="tab-content">
@@ -157,6 +169,7 @@ const Dashboard = ({ user, onLogout }) => {
                             )}
                             {activeTab === 'estadisticas' && <Estadisticas proyectos={proyectos} />}
                             {activeTab === 'contratos' && <ContratosPanel proyectos={proyectos} />}
+                            {activeTab === PESTANA_EXPEDIENTES && <ExpedientesSgrPanel proyectos={proyectos} />}
                         </div>
                     </div>
                 </section>

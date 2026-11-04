@@ -226,6 +226,89 @@ class ExpedienteApiTest extends TestCase
             ->assertJsonPath('expedientes.0.fase_sgr', 2); // más reciente primero
     }
 
+    // ------------------------------------------------------ resumen consolidado
+
+    private function otroProyecto(string $nombre): Proyecto
+    {
+        return Proyecto::create(['municipio' => $this->proyecto->municipio, 'nombre' => $nombre]);
+    }
+
+    public function test_resumen_trae_el_expediente_mas_reciente_de_cada_proyecto(): void
+    {
+        $this->crear($this->configuracion(2))->assertCreated();
+        $reciente = $this->crear($this->configuracion(3));
+        $this->como(Rol::Gestor)->patchJson(
+            "/GestPro/expedientes/{$reciente->json('id')}/requisitos/{$this->filaDe($reciente, 'a1')}",
+            ['cumplido' => true]
+        )->assertOk();
+
+        $this->como(Rol::Consulta)->getJson('/GestPro/expedientes')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.proyecto_id', $this->proyecto->id)
+            ->assertJsonPath('0.cantidad_expedientes', 2)
+            ->assertJsonPath('0.expediente_id', $reciente->json('id'))
+            ->assertJsonPath('0.estado', 'borrador')
+            ->assertJsonPath('0.fase_sgr', 3)
+            ->assertJsonPath('0.fecha_radicado', null)
+            ->assertJsonPath('0.progreso', ['total' => 8, 'cumplidos' => 1, 'porcentaje' => 13]);
+    }
+
+    public function test_resumen_no_incluye_proyectos_sin_expediente(): void
+    {
+        $this->otroProyecto('Sin expediente');
+
+        $this->como(Rol::Consulta)->getJson('/GestPro/expedientes')->assertOk()->assertExactJson([]);
+    }
+
+    public function test_resumen_no_cuenta_lo_que_dejo_de_aplicar(): void
+    {
+        $r = $this->crear($this->configuracion(2, [], [], ['predios']));
+        $expediente = $r->json('id');
+        $this->como(Rol::Gestor)->patchJson("/GestPro/expedientes/{$expediente}/requisitos/{$this->filaDe($r, 'b1')}", ['cumplido' => true])->assertOk();
+        $this->como(Rol::Gestor)->putJson("/GestPro/expedientes/{$expediente}/configuracion", $this->configuracion(2))->assertOk();
+
+        $progreso = $this->como(Rol::Consulta)->getJson('/GestPro/expedientes')->json('0.progreso');
+
+        $this->assertSame(0, $progreso['cumplidos']);
+        $this->assertSame($this->como(Rol::Consulta)->getJson("/GestPro/expedientes/{$expediente}")->json('progreso.total'), $progreso['total']);
+    }
+
+    public function test_resumen_refleja_la_radicacion(): void
+    {
+        $r = $this->crear($this->configuracion(3));
+        $this->cumplirTodo($r);
+        $this->como(Rol::Gestor)->postJson("/GestPro/expedientes/{$r->json('id')}/radicar")->assertOk();
+
+        $fila = $this->como(Rol::Consulta)->getJson('/GestPro/expedientes')->json('0');
+
+        $this->assertSame('radicado', $fila['estado']);
+        $this->assertNotNull($fila['fecha_radicado']);
+        $this->assertSame(100, $fila['progreso']['porcentaje']);
+    }
+
+    public function test_resumen_no_hace_mas_consultas_con_mas_proyectos(): void
+    {
+        $this->crear($this->configuracion(3))->assertCreated();
+        $medir = function (): int {
+            $peticion = $this->como(Rol::Consulta);
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $peticion->getJson('/GestPro/expedientes')->assertOk();
+            DB::disableQueryLog();
+
+            return count(DB::getQueryLog());
+        };
+        $conUno = $medir();
+
+        foreach (['Dos', 'Tres', 'Cuatro'] as $nombre) {
+            $proyecto = $this->otroProyecto($nombre);
+            $this->como(Rol::Gestor)->postJson("/GestPro/proyectos/{$proyecto->id}/expedientes", $this->configuracion(3))->assertCreated();
+        }
+
+        $this->assertSame($conUno, $medir());
+    }
+
     // ---------------------------------------------------- recálculo borrador
 
     public function test_reconfigurar_recalcula_y_conserva_el_cumplimiento_de_lo_que_sale(): void
@@ -483,5 +566,6 @@ class ExpedienteApiTest extends TestCase
         $this->getJson("/GestPro/proyectos/{$this->proyecto->id}/expedientes")->assertUnauthorized();
         $this->postJson("/GestPro/expedientes/{$expediente->id}/radicar")->assertUnauthorized();
         $this->getJson('/GestPro/catalogo-requisitos/vigente')->assertUnauthorized();
+        $this->getJson('/GestPro/expedientes')->assertUnauthorized();
     }
 }
