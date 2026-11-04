@@ -30,6 +30,7 @@ class ProyectoController extends Controller
                 'proyectos.entidad_presenta',
                 'proyectos.entidad_financia',
                 'proyectos.fuente_financiacion',
+                'proyectos.sector',
                 'fase.color as color_fase',
                 'fase.dashboard as dashboard_fase',
                 'estado.color as color_estado',
@@ -178,6 +179,15 @@ class ProyectoController extends Controller
         return response()->json($fases);
     }
 
+    public function sectores()
+    {
+        $sectores = DB::table('sectores')
+            ->select('nombre', 'id', 'activo')
+            ->orderBy('nombre', 'asc')
+            ->get();
+        return response()->json($sectores);
+    }
+
     public function entidades()
     {
         $entidades = DB::table('entidades')
@@ -287,7 +297,8 @@ class ProyectoController extends Controller
                     'presupuesto' => $proyecto['presupuesto'],
                     'entidad_presenta' => $proyecto['entidadPresenta'],
                     'entidad_financia' => $proyecto['entidadFinancia'],
-                    'fuente_financiacion' => $proyecto['fuenteFinanciamiento']
+                    'fuente_financiacion' => $proyecto['fuenteFinanciamiento'],
+                    'sector' => ($proyecto['sector'] ?? null) ?: null
                 ]);
 
                 if (isset($proyecto['componentesPresupuesto']) && count($proyecto['componentesPresupuesto']) > 0) {
@@ -325,6 +336,11 @@ class ProyectoController extends Controller
                     'entidad_financia' => $proyecto['entidadFinancia'],
                     'fuente_financiacion' => $proyecto['fuenteFinanciamiento']
                 ]);
+
+                // Solo si viene en la petición: quien no lo envía no debe borrarlo.
+                if (array_key_exists('sector', $proyecto)) {
+                    DB::table('proyectos')->where('id', $proyecto['id'])->update(['sector' => $proyecto['sector'] ?: null]);
+                }
 
                 DB::table('presupuesto_proyecto')->where('proyecto', $proyecto['id'])->delete();
                 if (isset($proyecto['componentesPresupuesto']) && count($proyecto['componentesPresupuesto']) > 0) {

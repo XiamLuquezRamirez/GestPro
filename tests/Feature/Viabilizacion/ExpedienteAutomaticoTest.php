@@ -154,6 +154,79 @@ class ExpedienteAutomaticoTest extends TestCase
         $this->assertSame([$vivienda], $expediente->sectores()->pluck('requisitos_sectores.id')->all());
     }
 
+    // ---------------------------------------------------- sector del proyecto
+
+    private function sectorMapeado(string $claveSgr = 'vivienda'): int
+    {
+        $sgr = DB::table('requisitos_sectores')->where('clave', $claveSgr)->value('id');
+
+        return DB::table('sectores')->insertGetId(['nombre' => 'Agua Potable', 'activo' => true, 'requisitos_sector_id' => $sgr]);
+    }
+
+    public function test_el_sector_del_formulario_llega_preseleccionado_al_expediente(): void
+    {
+        $sector = $this->sectorMapeado();
+
+        $this->guardar(['sector' => $sector])->assertOk();
+
+        $proyecto = Proyecto::where('nombre', 'Acueducto veredal')->firstOrFail();
+        $this->assertSame($sector, (int) $proyecto->sector);
+
+        $expediente = $proyecto->expedientes()->sole();
+        $this->assertSame(
+            [DB::table('requisitos_sectores')->where('clave', 'vivienda')->value('id')],
+            $expediente->sectores()->pluck('requisitos_sectores.id')->all()
+        );
+        $this->assertNull($expediente->fecha_configuracion);
+    }
+
+    public function test_el_sector_es_opcional_y_vacio_se_guarda_como_null(): void
+    {
+        $this->guardar(['sector' => ''])->assertOk();
+
+        $this->assertNull(Proyecto::where('nombre', 'Acueducto veredal')->firstOrFail()->sector);
+    }
+
+    public function test_editar_cambia_el_sector_y_sin_la_clave_lo_conserva(): void
+    {
+        $original = $this->sectorMapeado();
+        $otro = $this->sectorMapeado('salud');
+        $proyecto = $this->proyecto(['sector' => $original]);
+
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id])->assertOk();
+        $this->assertSame($original, (int) $proyecto->refresh()->sector);
+
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'sector' => $otro])->assertOk();
+        $this->assertSame($otro, (int) $proyecto->refresh()->sector);
+
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'sector' => ''])->assertOk();
+        $this->assertNull($proyecto->refresh()->sector);
+    }
+
+    public function test_el_listado_de_proyectos_incluye_el_sector(): void
+    {
+        $sector = $this->sectorMapeado();
+        $proyecto = $this->proyecto(['sector' => $sector]);
+
+        $fila = collect($this->como(Rol::Consulta)->getJson('/GestPro/proyectos')->assertOk()->json())->firstWhere('id', $proyecto->id);
+
+        $this->assertSame($sector, (int) $fila['sector']);
+    }
+
+    public function test_el_catalogo_de_sectores_se_lista_por_nombre(): void
+    {
+        DB::table('sectores')->insert([
+            ['nombre' => 'Vías', 'activo' => true],
+            ['nombre' => 'Agua Potable', 'activo' => false],
+        ]);
+
+        $this->como(Rol::Consulta)->getJson('/GestPro/sectores')
+            ->assertOk()
+            ->assertJsonPath('0.nombre', 'Agua Potable')
+            ->assertJsonPath('0.activo', 0)
+            ->assertJsonPath('1.nombre', 'Vías');
+    }
+
     // ---------------------------------------------------- un expediente activo
 
     public function test_no_admite_dos_expedientes_en_borrador_en_un_proyecto(): void

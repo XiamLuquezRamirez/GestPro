@@ -44,6 +44,7 @@ const Parametros = ({ user, onLogout }) => {
     const [estados, setEstados] = useState([]);
     const [fases, setFases] = useState([]);
     const [entidades, setEntidades] = useState([]);
+    const [sectores, setSectores] = useState([]);
     const [eventos, setEventos] = useState([]);
     const [tipos, setTiposEventos] = useState([]);
     const [prioridades, setPrioridades] = useState([]);
@@ -113,6 +114,7 @@ const Parametros = ({ user, onLogout }) => {
         listEstados();
         listFases();
         listEntidades();
+        listSectores();
         ///
         listEventos();
         listTiposEventos();
@@ -146,6 +148,11 @@ const Parametros = ({ user, onLogout }) => {
     const listFases = async () => {
         const response = await axios.get('/fases');
         setFases(response.data);
+    }
+
+    const listSectores = async () => {
+        const response = await axios.get('/sectores');
+        setSectores(response.data);
     }
 
     const listEntidades = async () => {
@@ -195,6 +202,7 @@ const Parametros = ({ user, onLogout }) => {
         fase: 'formulacion',
         municipio: '',
         descripcion: '',
+        sector: '',
         entidadPresenta: '',
         entidadFinancia: '',
         fuenteFinanciamiento: '',
@@ -1149,6 +1157,7 @@ const Parametros = ({ user, onLogout }) => {
             fase: item.fase || '',
             municipio: item.municipio || '',
             descripcion: item.descripcion || '',
+            sector: item.sector || '',
             entidadPresenta: item.entidad_presenta || '',
             entidadFinancia: item.entidad_financia || '',
             fuenteFinanciamiento: item.fuente_financiacion || '',
@@ -1334,6 +1343,7 @@ const Parametros = ({ user, onLogout }) => {
             proyectoId: '',
             valor: '',
             descripcionComponente: '',
+            sector: '',
             entidadPresenta: '',
             entidadFinancia: '',
             fuenteFinanciamiento: '',
@@ -1373,6 +1383,7 @@ const Parametros = ({ user, onLogout }) => {
             proyectoId: '',
             valor: '',
             descripcionComponente: '',
+            sector: '',
             entidadPresenta: '',
             entidadFinancia: '',
             fuenteFinanciamiento: '',
@@ -2246,6 +2257,24 @@ const Parametros = ({ user, onLogout }) => {
                                                 ))}
                                             </select>
                                         </div>
+                                    </div>
+                                    <div className="form-group">
+                                        <label htmlFor="sector">Sector</label>
+                                        <select
+                                            id="sector"
+                                            name="sector"
+                                            value={formData.sector}
+                                            onChange={handleInputChange}>
+                                            <option value="">Seleccione un sector</option>
+                                            {/* Uno ya desactivado se conserva si el proyecto lo tiene. */}
+                                            {sectores
+                                                .filter(s => s.activo || String(s.id) === String(formData.sector))
+                                                .map(s => (
+                                                    <option key={s.id} value={s.id}>
+                                                        {s.nombre}
+                                                    </option>
+                                                ))}
+                                        </select>
                                     </div>
                                     <div className="form-group">
                                         <label htmlFor="descripcion">Descripción</label>
