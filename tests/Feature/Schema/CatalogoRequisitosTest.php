@@ -98,6 +98,33 @@ class CatalogoRequisitosTest extends TestCase
         $this->assertSame(3, DB::table('requisitos_sectores')->whereNotNull('fuente')->count());
     }
 
+    public function test_resembrar_completa_una_version_que_quedo_sin_requisitos(): void
+    {
+        // Pasa tras un rollback parcial: catalogo_versiones sobrevive y las demás
+        // tablas se recrean vacías. No hay snapshot que proteger en esa versión.
+        $this->seed(CatalogoRequisitosSgrSeeder::class);
+        $version = DB::table('catalogo_versiones')->where('numero', 1)->value('id');
+        DB::table('requisitos_catalogo')->delete();
+        DB::table('requisitos_tipos')->delete();
+
+        $this->seed(CatalogoRequisitosSgrSeeder::class);
+
+        $this->assertSame(1, DB::table('catalogo_versiones')->count());
+        $this->assertSame(207, DB::table('requisitos_catalogo')->where('catalogo_version_id', $version)->count());
+        $this->assertSame(59, DB::table('requisitos_tipos')->count());
+    }
+
+    public function test_resembrar_no_altera_una_version_con_requisitos(): void
+    {
+        $this->seed(CatalogoRequisitosSgrSeeder::class);
+        DB::table('requisitos_catalogo')->where('clave', 'a1')->update(['texto' => 'Texto publicado']);
+
+        $this->seed(CatalogoRequisitosSgrSeeder::class);
+
+        $this->assertSame(207, DB::table('requisitos_catalogo')->count());
+        $this->assertSame('Texto publicado', DB::table('requisitos_catalogo')->where('clave', 'a1')->value('texto'));
+    }
+
     public function test_secciones_a_b_d_llevan_condicion_y_la_c_sector(): void
     {
         $this->seed(CatalogoRequisitosSgrSeeder::class);

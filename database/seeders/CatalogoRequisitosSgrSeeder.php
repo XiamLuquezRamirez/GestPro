@@ -17,8 +17,8 @@ use RuntimeException;
  * subtítulo, el texto o la nota. Las demás aplican en toda fase.
  *
  * Idempotente: los catálogos (sectores, tipos, componentes, tipologías) se
- * actualizan por `clave`; los requisitos de una versión existente NO se tocan,
- * porque las versiones son inmutables (de eso depende el snapshot de los
+ * actualizan por `clave`; los requisitos de una versión que ya los tiene NO se
+ * tocan, porque las versiones son inmutables (de eso depende el snapshot de los
  * expedientes ya evaluados).
  */
 class CatalogoRequisitosSgrSeeder extends Seeder
@@ -55,22 +55,27 @@ class CatalogoRequisitosSgrSeeder extends Seeder
                 'nombre' => $c['nombre'], 'orden' => $c['orden'],
             ]);
 
-            if (DB::table('catalogo_versiones')->where('numero', self::VERSION)->exists()) {
+            $versionId = DB::table('catalogo_versiones')->where('numero', self::VERSION)->value('id');
+
+            if ($versionId && DB::table('requisitos_catalogo')->where('catalogo_version_id', $versionId)->exists()) {
                 return; // versión ya sembrada: inmutable
             }
 
-            $versionId = DB::table('catalogo_versiones')->insertGetId([
-                'numero' => self::VERSION,
-                'estado' => 'publicada',
-                'descripcion' => 'Orientaciones Transitorias + Acuerdo 12 de 2024 (carga inicial desde el prototipo)',
-                'fecha_publicacion' => now(),
-                'vigente' => true,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            // Una versión sin requisitos (rollback parcial) se completa en lugar de crearse.
+            if (! $versionId) {
+                $versionId = DB::table('catalogo_versiones')->insertGetId([
+                    'numero' => self::VERSION,
+                    'estado' => 'publicada',
+                    'descripcion' => 'Orientaciones Transitorias + Acuerdo 12 de 2024 (carga inicial desde el prototipo)',
+                    'fecha_publicacion' => now(),
+                    'vigente' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
 
-            // Solo puede haber una versión vigente.
-            DB::table('catalogo_versiones')->where('id', '!=', $versionId)->update(['vigente' => false]);
+                // Solo puede haber una versión vigente.
+                DB::table('catalogo_versiones')->where('id', '!=', $versionId)->update(['vigente' => false]);
+            }
 
             $filas = array_map(function ($r) use ($versionId, $sectores, $tipos) {
                 $sectorId = $r['sector'] ? ($sectores[$r['sector']] ?? null) : null;
