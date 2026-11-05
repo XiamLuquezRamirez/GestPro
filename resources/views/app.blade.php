@@ -46,7 +46,7 @@
     </style>
     <link rel="preload" href="{{ $base . mix('css/app.css') }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="{{ $base . mix('css/app.css') }}"></noscript>
-    <link rel="icon" href="{{ asset('favicon.ico') }}">
+    <link rel="icon" href="{{ asset('favicon.ico') }}?v=2">
     <script>
         window.__APP_BASE__ = @json($base);
         window.__ROUTER_BASE__ = @json($routerBase);

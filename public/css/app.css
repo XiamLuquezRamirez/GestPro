@@ -153,20 +153,9 @@ input[type='date'] { color-scheme: dark; }
 .swal2-styled.swal2-confirm { color: var(--gp-sobre-acento) !important; background: var(--gp-ambar) !important; }
 .swal2-styled.swal2-cancel { color: var(--gp-texto) !important; background: var(--gp-superficie-3) !important; }
 
-/* ---------- Mapas: mosaicos oscurecidos para integrarse con la sala ---------- */
+/* ---------- Mapas: claros, con los mosaicos y controles propios de Leaflet ---------- */
 /* z-index propio: las capas internas de Leaflet llegan a 1000 y taparían las barras y menús */
-.leaflet-container { z-index: 0; background: var(--gp-fondo-2) !important; font-family: var(--gp-fuente) !important; }
-/* Filtro por mosaico, no sobre toda la capa: con escalas no enteras (Windows al 125 %) el
-   borde reescalado de cada mosaico marcaba una cuadrícula visible. El píxel extra los solapa.
-   Va con doble clase porque leaflet.css se carga después y define `filter: inherit` en el mosaico. */
-.leaflet-container .leaflet-tile {
-    width: 257px !important;
-    height: 257px !important;
-    filter: invert(1) hue-rotate(165deg) brightness(.82) contrast(.9) saturate(.55);
-}
-.leaflet-control-attribution { color: var(--gp-texto-3) !important; background: rgba(11, 20, 17, .75) !important; }
-.leaflet-control-attribution a { color: var(--gp-texto-2) !important; }
-.leaflet-bar a { color: var(--gp-texto) !important; background: var(--gp-superficie-2) !important; border-color: var(--gp-linea) !important; }
+.leaflet-container { z-index: 0; background: #DDE5E8 !important; font-family: var(--gp-fuente) !important; }
 .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background: rgba(236, 162, 0, .28) !important; }
 .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
     color: var(--gp-sobre-acento) !important;

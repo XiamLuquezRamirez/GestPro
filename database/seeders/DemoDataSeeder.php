@@ -47,9 +47,9 @@ class DemoDataSeeder extends Seeder
     private function seedFases(): array
     {
         return [
-            'Formulación' => Fase::updateOrCreate(['nombre' => 'Formulación'], ['color' => '#ECA200', 'activo' => true, 'dashboard' => true]),
-            'Licitación' => Fase::updateOrCreate(['nombre' => 'Licitación'], ['color' => '#018EB2', 'activo' => true, 'dashboard' => true]),
-            'Ejecución' => Fase::updateOrCreate(['nombre' => 'Ejecución'], ['color' => '#3EAB2B', 'activo' => true, 'dashboard' => true]),
+            'Formulación' => Fase::updateOrCreate(['nombre' => 'Formulación'], ['color' => '#018EB2', 'activo' => true, 'dashboard' => true]),
+            'Licitación' => Fase::updateOrCreate(['nombre' => 'Licitación'], ['color' => '#3EAB2B', 'activo' => true, 'dashboard' => true]),
+            'Ejecución' => Fase::updateOrCreate(['nombre' => 'Ejecución'], ['color' => '#ECA200', 'activo' => true, 'dashboard' => true]),
         ];
     }
 
