@@ -397,6 +397,17 @@ tr:hover > td > .tb-fila-enlace { color: var(--gp-azul-texto); }
     .tb-mapa { min-height: clamp(24rem, 48vh, 46rem); }
 }
 
+/* La fila no depende del contenido: con muchos riesgos y eventos, el mapa medía más de 1000 px.
+   Lo que no quepa se desplaza dentro de su columna, sin ocultar ningún riesgo. La sala tiene su propia rejilla. */
+@media (min-width: 1001px) {
+    .tb-fase:not(.compacto) { grid-template-rows: clamp(24rem, 62vh, 46rem) auto; }
+    .tb-fase:not(.compacto) .tb-mapa { min-height: 0; }
+    .tb-fase:not(.compacto) .tb-fase-lateral { align-content: stretch; min-height: 0; overflow-y: auto; }
+}
+@media (min-width: 1320px) {
+    .tb-fase:not(.compacto) > .tb-distribucion { min-height: 0; overflow-y: auto; }
+}
+
 /* ---------- Adaptación ---------- */
 @media (max-width: 1180px) {
     .tb-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }

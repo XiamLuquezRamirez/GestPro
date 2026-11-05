@@ -144,7 +144,9 @@ const ExpedientesSgrPanel = ({ proyectos, resumenes, error, onReintentar, compac
                 </div>
 
                 {filasTabla.length === 0 ? (
-                    <p className="exs-sin-resultados">Ningún proyecto coincide con el filtro.</p>
+                    <p className="exs-sin-resultados">
+                        {compacto ? 'Aún no hay proyectos con expediente en seguimiento.' : 'Ningún proyecto coincide con el filtro.'}
+                    </p>
                 ) : (
                     <>
                         <table className="tb-tabla tb-tabla-cartas exs-tabla">
