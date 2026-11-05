@@ -6,9 +6,9 @@ export const UMBRAL_SANO = 10;
 export const UMBRAL_ATENCION = 25;
 
 export const COLOR_SEVERIDAD = {
-    sano: '#16a34a',
-    atencion: '#f59e0b',
-    critico: '#dc2626',
+    sano: '#3EAB2B',
+    atencion: '#ECA200',
+    critico: '#FF7A5C',
 };
 
 const numero = (valor) => {

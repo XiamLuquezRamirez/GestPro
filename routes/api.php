@@ -26,6 +26,7 @@ Route::get('/test', function () {
 Route::middleware('auth:api')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('/refrescar-token', [AuthController::class, 'refrescarToken']);
     Route::get('/user', [AuthController::class, 'me']);
 
     // Lectura: cualquier rol autenticado (Administrador, Gestor o Consulta)

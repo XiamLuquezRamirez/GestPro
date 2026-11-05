@@ -1,74 +1,64 @@
 import React from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+    faCircleCheck, faCircleDollarToSlot, faFileCircleExclamation, faFileContract, faLayerGroup, faTriangleExclamation,
+} from '@fortawesome/free-solid-svg-icons';
 import { calcularKpis } from '../utils/kpisDashboard';
+
+const Indicador = ({ icono, etiqueta, valor, detalle, titulo, tono = '', alerta = false, avance = null }) => (
+    <div className={`tb-kpi ${alerta ? 'alerta' : tono}`} title={titulo}>
+        <span className="tb-kpi-cabeza">
+            <FontAwesomeIcon icon={icono} />
+            <span>{etiqueta}</span>
+        </span>
+        <span className="tb-kpi-valor">{valor}</span>
+        {avance !== null && <span className="tb-pista"><span style={{ width: `${Math.min(avance, 100)}%` }} /></span>}
+        {detalle && <span className="tb-kpi-detalle">{detalle}</span>}
+    </div>
+);
 
 const KpiStrip = ({ proyectos }) => {
     const kpis = calcularKpis(proyectos);
-
-    const pctContratados = kpis.total > 0
-        ? Math.round((kpis.contratados / kpis.total) * 100)
-        : 0;
+    const pctContratados = kpis.total > 0 ? Math.round((kpis.contratados / kpis.total) * 100) : 0;
 
     return (
-        <div className="kpi-strip">
-            <div className="kpi-tile">
-                <span className="kpi-icono">📊</span>
-                <div>
-                    <div className="kpi-valor">{kpis.total}</div>
-                    <div className="kpi-etiqueta">Total proyectos</div>
-                </div>
-            </div>
-
-            <div className="kpi-tile">
-                <span className="kpi-icono">📄</span>
-                <div>
-                    <div className="kpi-valor">{kpis.totalContratos}</div>
-                    <div className="kpi-etiqueta">Total de contratos</div>
-                </div>
-            </div>
-
-            <div className="kpi-tile kpi-tile-riesgo">
-                <span className="kpi-icono">⚠️</span>
-                <div>
-                    <div className="kpi-valor">{kpis.enRiesgo}</div>
-                    <div className="kpi-etiqueta">En riesgo</div>
-                </div>
-            </div>
-
-            <div
-                className="kpi-tile"
-                title="Facturado en actas sobre el valor total contratado"
-            >
-                <span className="kpi-icono">💵</span>
-                <div>
-                    <div className="kpi-valor">
-                        {kpis.pctEjecucion === null ? '—' : `${kpis.pctEjecucion}%`}
-                    </div>
-                    <div className="kpi-etiqueta">Ejecución financiera</div>
-                </div>
-            </div>
-
-            <div
-                className="kpi-tile"
-                title={`${pctContratados}% de los proyectos ya tienen contrato`}
-            >
-                <span className="kpi-icono">🤝</span>
-                <div>
-                    <div className="kpi-valor">{kpis.contratados} / {kpis.total}</div>
-                    <div className="kpi-etiqueta">Contratados</div>
-                </div>
-            </div>
-
-            <div
-                className={`kpi-tile${kpis.desfaseCritico > 0 ? ' kpi-tile-riesgo' : ''}`}
-                title="Contratos donde lo facturado supera en más de 25 puntos al avance físico"
-            >
-                <span className="kpi-icono">🚨</span>
-                <div>
-                    <div className="kpi-valor">{kpis.desfaseCritico}</div>
-                    <div className="kpi-etiqueta">Contratos con desfase crítico</div>
-                </div>
-            </div>
-        </div>
+        <section className="tb-kpis" aria-label="Indicadores globales">
+            <Indicador icono={faLayerGroup} etiqueta="Proyectos" valor={kpis.total} tono="azul" detalle="En todas las fases" />
+            <Indicador icono={faFileContract} etiqueta="Contratos" valor={kpis.totalContratos} tono="verde" detalle="Registrados" />
+            <Indicador
+                icono={faCircleCheck}
+                etiqueta="Contratados"
+                tono="verde"
+                valor={`${pctContratados}%`}
+                avance={pctContratados}
+                detalle={`${kpis.contratados} de ${kpis.total} proyectos`}
+                titulo="Proyectos que ya tienen contrato"
+            />
+            <Indicador
+                icono={faCircleDollarToSlot}
+                etiqueta="Ejecución financiera"
+                tono="ambar"
+                valor={kpis.pctEjecucion === null ? '—' : `${kpis.pctEjecucion}%`}
+                avance={kpis.pctEjecucion}
+                detalle="Facturado sobre contratado"
+                titulo="Facturado en actas sobre el valor total contratado"
+            />
+            <Indicador
+                icono={faTriangleExclamation}
+                etiqueta="En riesgo"
+                valor={kpis.enRiesgo}
+                alerta={kpis.enRiesgo > 0}
+                detalle="Proyectos con retraso"
+            />
+            <Indicador
+                icono={faFileCircleExclamation}
+                etiqueta="Desfase crítico"
+                valor={kpis.desfaseCritico}
+                alerta={kpis.desfaseCritico > 0}
+                detalle="Contratos"
+                titulo="Contratos donde lo facturado supera en más de 25 puntos al avance físico"
+            />
+        </section>
     );
 };
 

@@ -5,10 +5,9 @@ import {
 } from 'recharts';
 import { calcularCadenaPresupuestal } from '../utils/cadenaPresupuestal';
 import { calcularAvanceGrupo } from '../utils/kpisDashboard';
+import { formatearMillones } from '../utils/tablero';
+import { COLORES_GRAFICA, EJE, LEYENDA, PALETA_CATEGORIAS, REJILLA, TOOLTIP, anchoEjeCategorias } from '../utils/temaGraficas';
 
-const formatearPresupuesto = (valor) => '$' + Math.round((valor || 0) / 1_000_000).toLocaleString('es-CO') + ' M';
-
-const PALETA_MUNICIPIOS = ['#1976d2', '#43a047', '#fb8c00', '#8e24aa', '#00acc1', '#c62828', '#6d4c41', '#546e7a'];
 const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 const FILTRO_INICIAL = {
@@ -19,14 +18,26 @@ const FILTRO_INICIAL = {
     fechaHasta: '',
 };
 
+const SinDatos = ({ children = 'Sin datos para el filtro actual.' }) => <p className="gp-vacio">{children}</p>;
+
+const BarraCadena = ({ titulo, valor, detalle, ancho, clase }) => (
+    <div className={`tb-cadena-fila ${clase}`}>
+        <div className="tb-cadena-texto">
+            <span>{titulo}</span>
+            <strong>{formatearMillones(valor)}{detalle && <small> {detalle}</small>}</strong>
+        </div>
+        <div className="tb-cadena-pista"><span style={{ width: ancho }} /></div>
+    </div>
+);
+
 const Estadisticas = ({ proyectos }) => {
     const [filtro, setFiltro] = useState(FILTRO_INICIAL);
 
-    const municipiosUnicos = [...new Set(proyectos.map(p => p.descripcion_municipio).filter(Boolean))].sort();
-    const fasesUnicas = [...new Set(proyectos.map(p => p.descripcion_fase).filter(Boolean))].sort();
-    const estadosUnicos = [...new Set(proyectos.map(p => p.descripcion_estado).filter(Boolean))].sort();
+    const municipiosUnicos = [...new Set(proyectos.map((p) => p.descripcion_municipio).filter(Boolean))].sort();
+    const fasesUnicas = [...new Set(proyectos.map((p) => p.descripcion_fase).filter(Boolean))].sort();
+    const estadosUnicos = [...new Set(proyectos.map((p) => p.descripcion_estado).filter(Boolean))].sort();
 
-    const proyectosFiltrados = proyectos.filter(p => {
+    const proyectosFiltrados = proyectos.filter((p) => {
         if (filtro.municipio && p.descripcion_municipio !== filtro.municipio) return false;
         if (filtro.fase && p.descripcion_fase !== filtro.fase) return false;
         if (filtro.estado && p.descripcion_estado !== filtro.estado) return false;
@@ -43,14 +54,14 @@ const Estadisticas = ({ proyectos }) => {
 
     const colorPorMunicipio = {};
     municipiosUnicos.forEach((m, i) => {
-        colorPorMunicipio[m] = PALETA_MUNICIPIOS[i % PALETA_MUNICIPIOS.length];
+        colorPorMunicipio[m] = PALETA_CATEGORIAS[i % PALETA_CATEGORIAS.length];
     });
 
     const dataPorEstado = Object.values(
         proyectosFiltrados.reduce((acc, p) => {
             const estado = p.descripcion_estado || 'Sin estado';
             if (!acc[estado]) {
-                acc[estado] = { estado, cantidad: 0, color: p.color_estado || '#9e9e9e' };
+                acc[estado] = { estado, cantidad: 0, color: p.color_estado || COLORES_GRAFICA.tenue };
             }
             acc[estado].cantidad++;
             return acc;
@@ -61,7 +72,7 @@ const Estadisticas = ({ proyectos }) => {
         proyectosFiltrados.reduce((acc, p) => {
             const fase = p.descripcion_fase || 'Sin fase';
             if (!acc[fase]) {
-                acc[fase] = { fase, cantidad: 0, color: p.color_fase || '#9e9e9e' };
+                acc[fase] = { fase, cantidad: 0, color: p.color_fase || COLORES_GRAFICA.tenue };
             }
             acc[fase].cantidad++;
             return acc;
@@ -96,29 +107,28 @@ const Estadisticas = ({ proyectos }) => {
     const proyectosPorFase = proyectosFiltrados.reduce((acc, p) => {
         const fase = p.descripcion_fase || 'Sin fase';
         if (!acc[fase]) {
-            acc[fase] = { fase, color: p.color_fase || '#9e9e9e', proyectos: [] };
+            acc[fase] = { fase, color: p.color_fase || COLORES_GRAFICA.tenue, proyectos: [] };
         }
         acc[fase].proyectos.push(p);
         return acc;
     }, {});
 
-    const fasesConAvance = Object.values(proyectosPorFase).map(item => ({
+    const fasesConAvance = Object.values(proyectosPorFase).map((item) => ({
         ...item,
         avance: calcularAvanceGrupo(item.proyectos),
     }));
 
     const dataAvancePorFase = fasesConAvance
-        .filter(item => item.avance.tieneContratos)
-        .map(item => ({ fase: item.fase, color: item.color, ejecucion: item.avance.pct }));
+        .filter((item) => item.avance.tieneContratos)
+        .map((item) => ({ fase: item.fase, color: item.color, ejecucion: item.avance.pct }));
 
     const fasesSinContratos = fasesConAvance
-        .filter(item => !item.avance.tieneContratos)
-        .map(item => item.fase);
+        .filter((item) => !item.avance.tieneContratos)
+        .map((item) => item.fase);
 
-   
     const dataPorMes = Object.values(
         proyectosFiltrados
-            .filter(p => p.fecha_inicio)
+            .filter((p) => p.fecha_inicio)
             .reduce((acc, p) => {
                 const [anio, mes] = p.fecha_inicio.split('-');
                 const clave = `${anio}-${mes}`;
@@ -135,299 +145,228 @@ const Estadisticas = ({ proyectos }) => {
     ).sort((a, b) => a.clave.localeCompare(b.clave));
 
     const handleFiltroChange = (campo) => (e) => {
-        setFiltro(prev => ({ ...prev, [campo]: e.target.value }));
+        setFiltro((prev) => ({ ...prev, [campo]: e.target.value }));
     };
 
     const limpiarFiltros = () => setFiltro(FILTRO_INICIAL);
 
     return (
-        <div className="estadisticas-content">
-            <div className="filtros-barra">
-                <div className="filtro-campo">
-                    <label>Municipio</label>
+        <div className="tb-estadisticas">
+            <div className="tb-filtros gp-panel">
+                <label>
+                    <span className="gp-etiqueta">Municipio</span>
                     <select value={filtro.municipio} onChange={handleFiltroChange('municipio')}>
                         <option value="">Todos</option>
-                        {municipiosUnicos.map(m => <option key={m} value={m}>{m}</option>)}
+                        {municipiosUnicos.map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
-                </div>
-                <div className="filtro-campo">
-                    <label>Fase</label>
+                </label>
+                <label>
+                    <span className="gp-etiqueta">Fase</span>
                     <select value={filtro.fase} onChange={handleFiltroChange('fase')}>
                         <option value="">Todas</option>
-                        {fasesUnicas.map(f => <option key={f} value={f}>{f}</option>)}
+                        {fasesUnicas.map((f) => <option key={f} value={f}>{f}</option>)}
                     </select>
-                </div>
-                <div className="filtro-campo">
-                    <label>Estado</label>
+                </label>
+                <label>
+                    <span className="gp-etiqueta">Estado</span>
                     <select value={filtro.estado} onChange={handleFiltroChange('estado')}>
                         <option value="">Todos</option>
-                        {estadosUnicos.map(e => <option key={e} value={e}>{e}</option>)}
+                        {estadosUnicos.map((e) => <option key={e} value={e}>{e}</option>)}
                     </select>
-                </div>
-                <div className="filtro-campo">
-                    <label>Desde</label>
+                </label>
+                <label>
+                    <span className="gp-etiqueta">Desde</span>
                     <input type="date" value={filtro.fechaDesde} onChange={handleFiltroChange('fechaDesde')} />
-                </div>
-                <div className="filtro-campo">
-                    <label>Hasta</label>
+                </label>
+                <label>
+                    <span className="gp-etiqueta">Hasta</span>
                     <input type="date" value={filtro.fechaHasta} onChange={handleFiltroChange('fechaHasta')} />
-                </div>
-                <button type="button" className="filtros-limpiar-btn" onClick={limpiarFiltros}>
-                    Limpiar filtros
-                </button>
+                </label>
+                <button type="button" className="gp-boton" onClick={limpiarFiltros} disabled={!hayFiltroActivo}>Limpiar filtros</button>
             </div>
 
-            <div className="cadena-presupuestal-card" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-                <h3 style={{ fontSize: 15, margin: '0 0 14px' }}>
-                    💰 Cadena presupuestal
-                    {hayFiltroActivo && (
-                        <span style={{ fontWeight: 400, color: '#6b7280', fontSize: 12 }}>
-                            {' '}— {proyectosFiltrados.length} proyecto(s) según los filtros
-                        </span>
-                    )}
+            <section className="tb-tarjeta gp-panel">
+                <h3>
+                    Cadena presupuestal
+                    {hayFiltroActivo && <span className="tb-tenue"> · {proyectosFiltrados.length} proyecto(s) según los filtros</span>}
                 </h3>
 
                 {proyectosFiltrados.length === 0 ? (
-                    <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
-                        Sin proyectos que coincidan con los filtros.
-                    </p>
+                    <SinDatos>Sin proyectos que coincidan con los filtros.</SinDatos>
                 ) : (
                     <>
-                        <div style={{ marginBottom: 12 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                                <span style={{ color: '#374151', fontWeight: 600 }}>📋 Planeado</span>
-                                <span style={{ fontWeight: 700 }}>{formatearPresupuesto(cadena.planeado)}</span>
-                            </div>
-                            <div style={{ background: '#e5e7eb', borderRadius: 4, height: 22 }}>
-                                <div style={{ background: '#64748b', width: anchoBarra(cadena.planeado), height: '100%', borderRadius: 4 }} />
-                            </div>
-                        </div>
-
-                        <div style={{ marginBottom: 12 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                                <span style={{ color: '#374151', fontWeight: 600 }}>📝 Contratado</span>
-                                <span style={{ fontWeight: 700, color: '#2563eb' }}>
-                                    {formatearPresupuesto(cadena.contratado)}
-                                    {cadena.pctContratado !== null && (
-                                        <span style={{ color: '#6b7280', fontSize: 11, fontWeight: 400 }}>
-                                            {' '}({cadena.pctContratado}% de lo planeado)
-                                        </span>
-                                    )}
-                                </span>
-                            </div>
-                            <div style={{ background: '#e5e7eb', borderRadius: 4, height: 22 }}>
-                                <div style={{ background: '#2563eb', width: anchoBarra(cadena.contratado), height: '100%', borderRadius: 4 }} />
-                            </div>
-                        </div>
-
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                                <span style={{ color: '#374151', fontWeight: 600 }}>💵 Ejecutado (facturado)</span>
-                                <span style={{ fontWeight: 700, color: '#16a34a' }}>
-                                    {formatearPresupuesto(cadena.ejecutado)}
-                                    {cadena.pctEjecutado !== null && (
-                                        <span style={{ color: '#6b7280', fontSize: 11, fontWeight: 400 }}>
-                                            {' '}({cadena.pctEjecutado}% de lo contratado)
-                                        </span>
-                                    )}
-                                </span>
-                            </div>
-                            <div style={{ background: '#e5e7eb', borderRadius: 4, height: 22 }}>
-                                <div style={{ background: '#16a34a', width: anchoBarra(cadena.ejecutado), height: '100%', borderRadius: 4 }} />
-                            </div>
-                        </div>
-
+                        <BarraCadena titulo="Planeado" valor={cadena.planeado} ancho={anchoBarra(cadena.planeado)} clase="planeado" />
+                        <BarraCadena
+                            titulo="Contratado"
+                            valor={cadena.contratado}
+                            detalle={cadena.pctContratado !== null ? `(${cadena.pctContratado}% de lo planeado)` : null}
+                            ancho={anchoBarra(cadena.contratado)}
+                            clase="contratado"
+                        />
+                        <BarraCadena
+                            titulo="Ejecutado (facturado)"
+                            valor={cadena.ejecutado}
+                            detalle={cadena.pctEjecutado !== null ? `(${cadena.pctEjecutado}% de lo contratado)` : null}
+                            ancho={anchoBarra(cadena.ejecutado)}
+                            clase="ejecutado"
+                        />
                         {cadena.excedente > 0 && (
-                            <div style={{ background: '#fffbeb', borderLeft: '3px solid #f59e0b', padding: '9px 11px', marginTop: 14, fontSize: 12, color: '#78350f' }}>
-                                ⚠️ Lo contratado supera lo planeado en <strong>{formatearPresupuesto(cadena.excedente)}</strong>.
-                            </div>
+                            <p className="tb-aviso-linea">
+                                Lo contratado supera lo planeado en <strong>{formatearMillones(cadena.excedente)}</strong>.
+                            </p>
                         )}
                     </>
                 )}
-            </div>
+            </section>
 
-            <div className="graficas-grid">
-                <div className="grafica-card">
-                    <h3>Proyectos por Estado</h3>
-                    {dataPorEstado.length === 0 ? (
-                        <p className="estadisticas-sin-datos">Sin datos para el filtro actual.</p>
-                    ) : (
+            <div className="tb-graficas">
+                <section className="tb-tarjeta gp-panel">
+                    <h3>Proyectos por estado</h3>
+                    {dataPorEstado.length === 0 ? <SinDatos /> : (
                         <ResponsiveContainer width="100%" height={Math.max(200, dataPorEstado.length * 45)}>
-                            <BarChart data={dataPorEstado} layout="vertical" margin={{ left: 20 }}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                <XAxis type="number" allowDecimals={false} />
-                                <YAxis type="category" dataKey="estado" width={140} />
-                                <Tooltip formatter={(value) => [`${value} proyectos (${Math.round((value / proyectosFiltrados.length) * 100)}%)`, '']} />
+                            <BarChart data={dataPorEstado} layout="vertical" margin={{ left: 8, right: 16 }}>
+                                <CartesianGrid {...REJILLA} horizontal={false} />
+                                <XAxis {...EJE} type="number" allowDecimals={false} />
+                                <YAxis {...EJE} type="category" dataKey="estado" width={anchoEjeCategorias(140)} />
+                                <Tooltip {...TOOLTIP} formatter={(value) => [`${value} proyectos (${Math.round((value / proyectosFiltrados.length) * 100)}%)`, '']} />
                                 <Bar dataKey="cantidad" radius={[0, 4, 4, 0]}>
-                                    {dataPorEstado.map(entry => (
-                                        <Cell key={entry.estado} fill={entry.color} />
-                                    ))}
+                                    {dataPorEstado.map((entry) => <Cell key={entry.estado} fill={entry.color} />)}
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                     )}
-                </div>
+                </section>
 
-                <div className="grafica-card">
-                    <h3>Proyectos por Fase</h3>
-                    {dataPorFase.length === 0 ? (
-                        <p className="estadisticas-sin-datos">Sin datos para el filtro actual.</p>
-                    ) : (
+                <section className="tb-tarjeta gp-panel">
+                    <h3>Proyectos por fase</h3>
+                    {dataPorFase.length === 0 ? <SinDatos /> : (
                         <ResponsiveContainer width="100%" height={260}>
                             <PieChart>
-                                <Pie
-                                    data={dataPorFase}
-                                    dataKey="cantidad"
-                                    nameKey="fase"
-                                    innerRadius={60}
-                                    outerRadius={90}
-                                    paddingAngle={2}
-                                >
-                                    {dataPorFase.map(entry => (
-                                        <Cell key={entry.fase} fill={entry.color} />
-                                    ))}
+                                <Pie data={dataPorFase} dataKey="cantidad" nameKey="fase" innerRadius={60} outerRadius={90} paddingAngle={2} stroke="none">
+                                    {dataPorFase.map((entry) => <Cell key={entry.fase} fill={entry.color} />)}
                                 </Pie>
-                                <Tooltip formatter={(value, name) => [`${value} proyectos (${Math.round((value / proyectosFiltrados.length) * 100)}%)`, name]} />
-                                <Legend formatter={(value) => {
-                                    const entry = dataPorFase.find(d => d.fase === value);
-                                    const pct = Math.round((entry.cantidad / proyectosFiltrados.length) * 100);
-                                    return `${value}: ${entry.cantidad} (${pct}%)`;
-                                }} />
+                                <Tooltip {...TOOLTIP} formatter={(value, name) => [`${value} proyectos (${Math.round((value / proyectosFiltrados.length) * 100)}%)`, name]} />
+                                <Legend
+                                    {...LEYENDA}
+                                    formatter={(value) => {
+                                        const entry = dataPorFase.find((d) => d.fase === value);
+                                        const pct = Math.round((entry.cantidad / proyectosFiltrados.length) * 100);
+                                        return `${value}: ${entry.cantidad} (${pct}%)`;
+                                    }}
+                                />
                             </PieChart>
                         </ResponsiveContainer>
                     )}
-                </div>
+                </section>
 
-                <div className="grafica-card">
-                    <h3>Proyectos por Municipio</h3>
-                    {dataPorMunicipio.length === 0 ? (
-                        <p className="estadisticas-sin-datos">Sin datos para el filtro actual.</p>
-                    ) : (
+                <section className="tb-tarjeta gp-panel">
+                    <h3>Proyectos por municipio</h3>
+                    {dataPorMunicipio.length === 0 ? <SinDatos /> : (
                         <ResponsiveContainer width="100%" height={Math.max(200, dataPorMunicipio.length * 45)}>
-                            <BarChart data={dataPorMunicipio} layout="vertical" margin={{ left: 20 }}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                <XAxis type="number" allowDecimals={false} />
-                                <YAxis type="category" dataKey="municipio" width={120} />
-                                <Tooltip formatter={(value) => [`${value} proyectos`, '']} />
+                            <BarChart data={dataPorMunicipio} layout="vertical" margin={{ left: 8, right: 16 }}>
+                                <CartesianGrid {...REJILLA} horizontal={false} />
+                                <XAxis {...EJE} type="number" allowDecimals={false} />
+                                <YAxis {...EJE} type="category" dataKey="municipio" width={anchoEjeCategorias(120)} />
+                                <Tooltip {...TOOLTIP} formatter={(value) => [`${value} proyectos`, '']} />
                                 <Bar dataKey="cantidad" radius={[0, 4, 4, 0]}>
-                                    {dataPorMunicipio.map(entry => (
-                                        <Cell key={entry.municipio} fill={colorPorMunicipio[entry.municipio] || '#9e9e9e'} />
-                                    ))}
+                                    {dataPorMunicipio.map((entry) => <Cell key={entry.municipio} fill={colorPorMunicipio[entry.municipio] || COLORES_GRAFICA.tenue} />)}
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                     )}
-                </div>
+                </section>
 
-                <div className="grafica-card">
-                    <h3>Presupuesto por Municipio</h3>
-                    {dataPresupuestoPorMunicipio.length === 0 ? (
-                        <p className="estadisticas-sin-datos">Sin datos para el filtro actual.</p>
-                    ) : (
+                <section className="tb-tarjeta gp-panel">
+                    <h3>Presupuesto por municipio</h3>
+                    {dataPresupuestoPorMunicipio.length === 0 ? <SinDatos /> : (
                         <ResponsiveContainer width="100%" height={Math.max(200, dataPresupuestoPorMunicipio.length * 45)}>
-                            <BarChart data={dataPresupuestoPorMunicipio} layout="vertical" margin={{ left: 20 }}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                <XAxis type="number" tickFormatter={(v) => formatearPresupuesto(v)} />
-                                <YAxis type="category" dataKey="municipio" width={120} />
-                                <Tooltip formatter={(value) => [formatearPresupuesto(value), 'Presupuesto']} />
+                            <BarChart data={dataPresupuestoPorMunicipio} layout="vertical" margin={{ left: 8, right: 16 }}>
+                                <CartesianGrid {...REJILLA} horizontal={false} />
+                                <XAxis {...EJE} type="number" tickFormatter={(v) => formatearMillones(v)} />
+                                <YAxis {...EJE} type="category" dataKey="municipio" width={anchoEjeCategorias(120)} />
+                                <Tooltip {...TOOLTIP} formatter={(value) => [formatearMillones(value), 'Presupuesto']} />
                                 <Bar dataKey="presupuesto" radius={[0, 4, 4, 0]}>
-                                    {dataPresupuestoPorMunicipio.map(entry => (
-                                        <Cell key={entry.municipio} fill={colorPorMunicipio[entry.municipio] || '#9e9e9e'} />
-                                    ))}
+                                    {dataPresupuestoPorMunicipio.map((entry) => <Cell key={entry.municipio} fill={colorPorMunicipio[entry.municipio] || COLORES_GRAFICA.tenue} />)}
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                     )}
-                </div>
+                </section>
 
-                <div className="grafica-card">
-                    <h3>Ejecución financiera por Fase</h3>
+                <section className="tb-tarjeta gp-panel">
+                    <h3>Ejecución financiera por fase</h3>
                     {dataAvancePorFase.length === 0 ? (
-                        <p className="estadisticas-sin-datos">
-                            Ninguna fase tiene contratos registrados para el filtro actual.
-                        </p>
+                        <SinDatos>Ninguna fase tiene contratos registrados para el filtro actual.</SinDatos>
                     ) : (
                         <ResponsiveContainer width="100%" height={220}>
                             <BarChart data={dataAvancePorFase}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="fase" />
-                                <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                                <Tooltip formatter={(value) => [`${value}%`, 'Ejecución financiera']} />
+                                <CartesianGrid {...REJILLA} vertical={false} />
+                                <XAxis {...EJE} dataKey="fase" />
+                                <YAxis {...EJE} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                                <Tooltip {...TOOLTIP} formatter={(value) => [`${value}%`, 'Ejecución financiera']} />
                                 <Bar dataKey="ejecucion" radius={[4, 4, 0, 0]}>
-                                    {dataAvancePorFase.map(entry => (
-                                        <Cell key={entry.fase} fill={entry.color} />
-                                    ))}
+                                    {dataAvancePorFase.map((entry) => <Cell key={entry.fase} fill={entry.color} />)}
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                     )}
                     {fasesSinContratos.length > 0 && (
-                        <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
-                            Sin contratos registrados: {fasesSinContratos.join(', ')}
-                        </p>
+                        <p className="tb-nota">Sin contratos registrados: {fasesSinContratos.join(', ')}</p>
                     )}
-                </div>
+                </section>
 
-                <div className="grafica-card">
+                <section className="tb-tarjeta gp-panel">
                     <h3>Proyectos iniciados por mes</h3>
-                    {dataPorMes.length === 0 ? (
-                        <p className="estadisticas-sin-datos">Sin datos para el filtro actual.</p>
-                    ) : (
+                    {dataPorMes.length === 0 ? <SinDatos /> : (
                         <ResponsiveContainer width="100%" height={220}>
                             <BarChart data={dataPorMes}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="etiqueta" />
-                                <YAxis allowDecimals={false} />
-                                <Tooltip formatter={(value) => [`${value} proyectos`, '']} />
-                                <Bar dataKey="cantidad" fill="#1976d2" radius={[4, 4, 0, 0]} />
+                                <CartesianGrid {...REJILLA} vertical={false} />
+                                <XAxis {...EJE} dataKey="etiqueta" />
+                                <YAxis {...EJE} allowDecimals={false} />
+                                <Tooltip {...TOOLTIP} formatter={(value) => [`${value} proyectos`, '']} />
+                                <Bar dataKey="cantidad" fill={COLORES_GRAFICA.azul} radius={[4, 4, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     )}
-                </div>
+                </section>
             </div>
 
-            <div className="estadisticas-tabla-section">
-                <h3>Proyectos filtrados ({proyectosFiltrados.length})</h3>
+            <section className="tb-tarjeta gp-panel">
+                <h3>Proyectos filtrados <span className="tb-contador">{proyectosFiltrados.length}</span></h3>
                 {proyectosFiltrados.length === 0 ? (
-                    <p className="estadisticas-sin-datos">No hay proyectos que coincidan con los filtros seleccionados.</p>
+                    <SinDatos>No hay proyectos que coincidan con los filtros seleccionados.</SinDatos>
                 ) : (
-                    <table className="estadisticas-tabla">
+                    <table className="tb-tabla tb-tabla-cartas">
                         <thead>
                             <tr>
                                 <th>Nombre</th>
                                 <th>Municipio</th>
                                 <th>Fase</th>
                                 <th>Estado</th>
-                                <th>Presupuesto</th>
-                                <th>Ejecución</th>
+                                <th className="numero">Presupuesto</th>
+                                <th className="numero">Ejecución</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {proyectosFiltrados.map(p => (
-                                <tr key={p.id}>
-                                    <td>{p.nombre}</td>
-                                    <td>{p.descripcion_municipio}</td>
-                                    <td>{p.descripcion_fase}</td>
-                                    <td>
-                                        <span className="tabla-estado-pastilla" style={{ backgroundColor: p.color_estado || '#9e9e9e' }}>
-                                            {p.descripcion_estado}
-                                        </span>
-                                    </td>
-                                    <td>{formatearPresupuesto(parseFloat(p.presupuesto))}</td>
-                                    <td>
-                                        {(() => {
-                                            const a = calcularAvanceGrupo([p]);
-                                            return a.tieneContratos
-                                                ? `${a.pct}%`
-                                                : <span style={{ color: '#9ca3af' }}>—</span>;
-                                        })()}
-                                    </td>
-                                </tr>
-                            ))}
+                            {proyectosFiltrados.map((p) => {
+                                const avance = calcularAvanceGrupo([p]);
+                                return (
+                                    <tr key={p.id}>
+                                        <td data-etiqueta="Nombre">{p.nombre}</td>
+                                        <td data-etiqueta="Municipio">{p.descripcion_municipio}</td>
+                                        <td data-etiqueta="Fase">{p.descripcion_fase}</td>
+                                        <td data-etiqueta="Estado">
+                                            <span className="tb-color-texto" style={{ '--color': p.color_estado || COLORES_GRAFICA.tenue }}>{p.descripcion_estado}</span>
+                                        </td>
+                                        <td data-etiqueta="Presupuesto" className="numero">{formatearMillones(parseFloat(p.presupuesto))}</td>
+                                        <td data-etiqueta="Ejecución" className="numero">{avance.tieneContratos ? `${avance.pct}%` : <span className="tb-tenue">—</span>}</td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 )}
-            </div>
+            </section>
         </div>
     );
 };

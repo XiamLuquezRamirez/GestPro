@@ -1,0 +1,327 @@
+/* Armazón: riel lateral, barras móviles y buscador. */
+.gp-app {
+    display: grid;
+    grid-template-columns: var(--gp-riel) minmax(0, 1fr);
+    min-height: 100dvh;
+}
+.gp-app.riel-plegado { grid-template-columns: var(--gp-riel-plegado) minmax(0, 1fr); }
+
+.gp-contenido { min-width: 0; padding: clamp(1.1rem, 2vw, 2rem) var(--gp-margen) 3rem; }
+
+/* ---------- Riel ---------- */
+.gp-riel {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    background: var(--gp-fondo-2);
+    border-right: 1px solid var(--gp-linea);
+}
+/* La franja de tres colores del logo: la marca está siempre presente */
+.gp-riel::before { content: ''; flex-shrink: 0; height: 3px; background: var(--gp-franja); }
+
+.gp-riel-marca {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: 1rem 1rem .75rem;
+    font-family: var(--gp-fuente-titulo);
+    font-size: 1.2rem;
+    font-weight: 750;
+    letter-spacing: -.02em;
+}
+.gp-riel-marca img { flex-shrink: 0; width: 2.7rem; height: 2.7rem; }
+.gp-riel-nombre { display: block; line-height: 1.1; }
+.gp-riel-nombre b { display: block; font-weight: 750; }
+.gp-riel-nombre small { display: block; margin-top: .1rem; font-family: var(--gp-fuente); font-size: .66rem; font-weight: 400; letter-spacing: 0; color: var(--gp-texto-2); }
+
+.gp-buscar {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin: 0 .75rem .6rem;
+    padding: .5rem .6rem;
+    font-size: .86rem;
+    color: var(--gp-texto-3);
+    background: var(--gp-superficie);
+    border: 1px solid var(--gp-linea);
+    border-radius: var(--gp-radio);
+    transition: border-color .15s, color .15s;
+}
+.gp-buscar:hover { color: var(--gp-texto); border-color: var(--gp-linea-fuerte); }
+.gp-buscar span { flex: 1; text-align: left; }
+kbd {
+    padding: .05rem .35rem;
+    font-family: var(--gp-fuente-datos);
+    font-size: .64rem;
+    color: var(--gp-texto-3);
+    background: var(--gp-fondo);
+    border: 1px solid var(--gp-linea);
+    border-radius: 3px;
+}
+
+.gp-nav { flex: 1; min-height: 0; overflow-y: auto; padding: .15rem .75rem .75rem; }
+.gp-nav-grupo { margin-top: .85rem; }
+.gp-nav-grupo:first-child { margin-top: .25rem; }
+.gp-nav-titulo { padding: 0 .55rem .3rem; white-space: nowrap; }
+
+.gp-enlace {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .42rem .55rem;
+    font-size: .9rem;
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--gp-texto-2);
+    text-decoration: none;
+    border-radius: var(--gp-radio);
+    transition: background .12s, color .12s;
+}
+.gp-enlace svg { flex-shrink: 0; color: var(--gp-texto-2); transition: color .12s; }
+.gp-enlace:hover { color: var(--gp-texto); background: var(--gp-superficie); }
+.gp-enlace:hover svg { color: var(--gp-texto-2); }
+.gp-enlace.activo { color: #fff; background: linear-gradient(90deg, #0180A1, #016F8C); font-weight: 650; box-shadow: 0 6px 16px -8px var(--gp-azul); }
+.gp-enlace.activo svg { color: #fff; }
+
+.gp-riel-pie { padding: .55rem .75rem .75rem; border-top: 1px solid var(--gp-linea); }
+.gp-enlace-sala { color: var(--gp-verde-texto); }
+.gp-enlace-sala svg { color: var(--gp-verde-texto); }
+.gp-enlace-sala:hover { color: var(--gp-verde-texto); background: var(--gp-verde-suave); }
+.gp-enlace-sala:hover svg { color: var(--gp-verde-texto); }
+
+.gp-usuario { display: flex; align-items: center; gap: .55rem; padding: .5rem .35rem 0; }
+.gp-avatar {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    font-family: var(--gp-fuente-datos);
+    font-size: .72rem;
+    font-weight: 700;
+    color: var(--gp-azul-texto);
+    background: var(--gp-azul-suave);
+    border-radius: 50%;
+}
+.gp-usuario-datos { flex: 1; min-width: 0; line-height: 1.25; }
+.gp-usuario-datos strong, .gp-usuario-datos span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gp-usuario-datos strong { font-size: .84rem; font-weight: 600; }
+.gp-usuario-datos span { font-size: .72rem; color: var(--gp-texto-3); }
+
+.gp-icono {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    color: var(--gp-texto-2);
+    background: none;
+    border: 0;
+    border-radius: var(--gp-radio);
+}
+.gp-icono:hover { color: var(--gp-texto); background: var(--gp-superficie-2); }
+
+.gp-plegar {
+    position: absolute;
+    top: 1.25rem;
+    right: -.7rem;
+    display: grid;
+    place-items: center;
+    width: 1.4rem;
+    height: 1.4rem;
+    font-size: .6rem;
+    color: var(--gp-texto-2);
+    background: var(--gp-superficie-2);
+    border: 1px solid var(--gp-linea-fuerte);
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity .15s;
+}
+.gp-riel:hover .gp-plegar, .gp-plegar:focus-visible { opacity: 1; }
+
+/* Riel plegado: solo iconos */
+.riel-plegado .gp-riel .gp-riel-marca { justify-content: center; padding-inline: 0; }
+.riel-plegado .gp-riel .gp-riel-marca span,
+.riel-plegado .gp-riel .gp-buscar span,
+.riel-plegado .gp-riel .gp-buscar kbd,
+.riel-plegado .gp-riel .gp-enlace span,
+.riel-plegado .gp-riel .gp-nav-titulo,
+.riel-plegado .gp-riel .gp-usuario-datos,
+.riel-plegado .gp-riel .gp-avatar { display: none; }
+.riel-plegado .gp-riel .gp-buscar { justify-content: center; margin-inline: .6rem; }
+.riel-plegado .gp-riel .gp-nav { padding-inline: .6rem; }
+.riel-plegado .gp-riel .gp-nav-grupo { margin-top: .5rem; padding-top: .5rem; border-top: 1px solid var(--gp-linea); }
+.riel-plegado .gp-riel .gp-nav-grupo:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.riel-plegado .gp-riel .gp-enlace { justify-content: center; padding: .55rem 0; }
+.riel-plegado .gp-riel .gp-riel-pie { padding-inline: .6rem; }
+.riel-plegado .gp-riel .gp-usuario { justify-content: center; padding-inline: 0; }
+
+/* Tableta: el riel se pliega solo para dar espacio al contenido.
+   Todo va bajo .gp-riel: la hoja "Más" del celular reutiliza estos mismos enlaces. */
+@media (max-width: 1100px) {
+    .gp-app, .gp-app.riel-plegado { grid-template-columns: var(--gp-riel-plegado) minmax(0, 1fr); }
+    .gp-riel .gp-riel-marca span,
+    .gp-riel .gp-buscar span,
+    .gp-riel .gp-buscar kbd,
+    .gp-riel .gp-enlace span,
+    .gp-riel .gp-nav-titulo,
+    .gp-riel .gp-usuario-datos,
+    .gp-riel .gp-avatar,
+    .gp-riel .gp-plegar { display: none; }
+    .gp-riel .gp-riel-marca { justify-content: center; padding-inline: 0; }
+    .gp-riel .gp-buscar { justify-content: center; margin-inline: .6rem; }
+    .gp-riel .gp-nav { padding-inline: .6rem; }
+    .gp-riel .gp-nav-grupo { margin-top: .5rem; padding-top: .5rem; border-top: 1px solid var(--gp-linea); }
+    .gp-riel .gp-nav-grupo:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+    .gp-riel .gp-enlace { justify-content: center; padding: .55rem 0; }
+    .gp-riel .gp-riel-pie { padding-inline: .6rem; }
+    .gp-riel .gp-usuario { justify-content: center; padding-inline: 0; }
+}
+
+/* ---------- Celular ---------- */
+.gp-barra-superior, .gp-barra-inferior { display: none; }
+
+@media (max-width: 720px) {
+    .gp-app, .gp-app.riel-plegado { display: block; }
+    .gp-riel { display: none; }
+    .gp-contenido { padding: 1rem 1rem calc(var(--gp-barra-inferior) + env(safe-area-inset-bottom) + 1.5rem); }
+
+    .gp-barra-superior {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        height: var(--gp-barra-superior);
+        padding: 0 .55rem 0 1rem;
+        background: rgba(15, 27, 23, .92);
+        border-bottom: 1px solid var(--gp-linea);
+        backdrop-filter: blur(10px);
+    }
+    .gp-barra-superior::after { content: ''; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--gp-franja); }
+    .gp-barra-superior h1 { flex: 1; overflow: hidden; font-size: 1.05rem; text-overflow: ellipsis; white-space: nowrap; }
+
+    .gp-barra-inferior {
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 30;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        height: calc(var(--gp-barra-inferior) + env(safe-area-inset-bottom));
+        padding-bottom: env(safe-area-inset-bottom);
+        background: rgba(15, 27, 23, .96);
+        border-top: 1px solid var(--gp-linea);
+        backdrop-filter: blur(10px);
+    }
+    .gp-barra-inferior a, .gp-barra-inferior button {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: .2rem;
+        font-size: .68rem;
+        font-weight: 600;
+        color: var(--gp-texto-3);
+        text-decoration: none;
+        background: none;
+        border: 0;
+    }
+    .gp-barra-inferior svg { font-size: 1.1rem; }
+    .gp-barra-inferior .activo { color: var(--gp-azul-texto); }
+
+    .gp-paleta-fondo { padding: .75rem !important; }
+}
+
+/* Hoja inferior con todas las secciones */
+.gp-hoja-fondo {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(4, 9, 7, .65);
+    animation: gp-aparecer .15s ease-out;
+}
+.gp-hoja {
+    width: 100%;
+    max-height: 85dvh;
+    overflow-y: auto;
+    padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom));
+    background: var(--gp-fondo-2);
+    border-top: 1px solid var(--gp-linea-fuerte);
+    border-radius: 14px 14px 0 0;
+    animation: gp-subir .2s cubic-bezier(.2, .8, .2, 1);
+}
+.gp-hoja-cabecera { display: flex; align-items: center; gap: .6rem; margin-bottom: .5rem; }
+.gp-hoja .gp-enlace { padding-block: .6rem; }
+.gp-hoja-pie { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: 1rem; }
+
+/* ---------- Buscador Ctrl+K ---------- */
+.gp-paleta-fondo {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 12dvh 1rem 1rem;
+    background: rgba(4, 9, 7, .7);
+    backdrop-filter: blur(3px);
+    animation: gp-aparecer .12s ease-out;
+}
+.gp-paleta {
+    width: min(38rem, 100%);
+    overflow: hidden;
+    background: var(--gp-superficie);
+    border: 1px solid var(--gp-linea-fuerte);
+    border-radius: var(--gp-radio-grande);
+    box-shadow: var(--gp-sombra);
+    animation: gp-caer .16s cubic-bezier(.2, .8, .2, 1);
+}
+.gp-paleta-entrada {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    padding: .85rem 1rem;
+    color: var(--gp-texto-3);
+    border-bottom: 1px solid var(--gp-linea);
+}
+.gp-paleta-entrada input {
+    flex: 1;
+    min-width: 0;
+    font-size: 1.05rem;
+    color: var(--gp-texto);
+    background: none;
+    border: 0;
+    outline: 0;
+}
+.gp-paleta-entrada input:focus-visible { box-shadow: none; }
+.gp-paleta-lista { max-height: min(52dvh, 26rem); overflow-y: auto; padding: .35rem; list-style: none; }
+.gp-paleta-lista button {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    width: 100%;
+    padding: .5rem .65rem;
+    text-align: left;
+    color: var(--gp-texto-2);
+    background: none;
+    border: 0;
+    border-radius: var(--gp-radio);
+}
+.gp-paleta-lista [aria-selected='true'] button { color: var(--gp-texto); background: var(--gp-azul-suave); }
+.gp-paleta-lista [aria-selected='true'] svg:first-child { color: var(--gp-azul-texto); }
+.gp-paleta-titulo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.gp-paleta-detalle { flex-shrink: 0; font-size: .76rem; color: var(--gp-texto-3); }
+.gp-paleta-enter { font-size: .72rem; color: var(--gp-azul-texto); }
+
+@keyframes gp-aparecer { from { opacity: 0; } }
+@keyframes gp-caer { from { opacity: 0; transform: translateY(-10px) scale(.98); } }
+@keyframes gp-subir { from { transform: translateY(100%); } }

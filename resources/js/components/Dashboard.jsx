@@ -1,346 +1,226 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import Header from './Header';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import '../../css/Dashboard.css';
-import '../../css/Dashboard-Extras.css';
-import KpiStrip from './KpiStrip';
-import Estadisticas from './Estadisticas';
-import MapaUbicaciones from './MapaUbicaciones';
-import DistribucionMunicipios from './DistribucionMunicipios';
-import ResumenFase from './ResumenFase';
-import ProximosEventos from './ProximosEventos';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faCalendarDays, faChartColumn, faClipboardCheck, faFileSignature, faLocationDot, faTv } from '@fortawesome/free-solid-svg-icons';
+import '../../css/Tablero.css';
 import ContratosPanel from './ContratosPanel';
+import DistribucionMunicipios from './DistribucionMunicipios';
+import Estadisticas from './Estadisticas';
 import ExpedientesSgrPanel from './ExpedientesSgrPanel';
-import { construirSerieTemporal, severidadDesfase, COLOR_SEVERIDAD } from '../utils/avanceContratos';
+import FlujoFases from './FlujoFases';
+import KpiStrip from './KpiStrip';
+import MapaUbicaciones from './MapaUbicaciones';
+import ModalProyecto from './ModalProyecto';
+import ModoSala from './ModoSala';
+import ProximosEventos from './ProximosEventos';
+import RiesgosFase from './RiesgosFase';
 import { mensajeError } from '../utils/expedienteChecklist';
-import { textoAvanceProyecto } from '../utils/expedientesResumen';
+import { VISTA, filasEnSala, resolverVista, resumirFases, slugFase } from '../utils/tablero';
 
-const PESTANA_EXPEDIENTES = 'expedientes';
+const VISTAS_ANALISIS = [
+    { id: VISTA.ESTADISTICAS, titulo: 'Estadísticas', icono: faChartColumn },
+    { id: VISTA.CONTRATOS, titulo: 'Contratos', icono: faFileSignature },
+    { id: VISTA.EXPEDIENTES, titulo: 'Expedientes SGR', icono: faClipboardCheck },
+];
 
-const Dashboard = ({ user, onLogout }) => {
-    const navigate = useNavigate();
+const hoyEnTexto = () => new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+const Dashboard = ({ sala = false }) => {
     const [searchParams, setSearchParams] = useSearchParams();
-    // Esta pestaña va en la URL: al volver de un expediente debe seguir abierta.
-    const [activeTab, setActiveTab] = useState(searchParams.get('pestana') === PESTANA_EXPEDIENTES ? PESTANA_EXPEDIENTES : '');
-    const [municipioResaltado, setMunicipioResaltado] = useState(null);
     const [fases, setFases] = useState([]);
     const [proyectos, setProyectos] = useState([]);
-    const [modalProyecto, setModalProyecto] = useState(null);
     const [resumenExpedientes, setResumenExpedientes] = useState(null);
     const [errorExpedientes, setErrorExpedientes] = useState(null);
+    const [errorCarga, setErrorCarga] = useState(null);
+    const [cargando, setCargando] = useState(true);
+    const [ultimaCarga, setUltimaCarga] = useState(null);
+    const [municipioResaltado, setMunicipioResaltado] = useState(null);
+    const [modalProyecto, setModalProyecto] = useState(null);
 
-    const [isLargeScreen, setIsLargeScreen] = useState(false);
-
-    // Detectar tamaño de pantalla
-    useEffect(() => {
-        const checkScreenSize = () => {
-            setIsLargeScreen(window.innerWidth >= 1200);
-        };
-
-        checkScreenSize();
-        window.addEventListener('resize', checkScreenSize);
-
-        return () => window.removeEventListener('resize', checkScreenSize);
-    }, []);
-
-    // Función para filtrar proyectos por nombre de fase
-    const getProyectosPorNombreFase = (nombreFase) => {
-        return proyectos.filter(proyecto => proyecto.descripcion_fase === nombreFase);
-    };
-
-    const handleTabChange = (tab) => {
-        setActiveTab(tab);
-        setMunicipioResaltado(null); // Reset al cambiar de pestaña
-        setSearchParams(tab === PESTANA_EXPEDIENTES ? { pestana: tab } : {}, { replace: true });
-    };
-
-    const handleOpenModalProyecto = (proyecto) => setModalProyecto(proyecto);
-    const handleCloseModalProyecto = () => setModalProyecto(null);
-
-    // Estado para la pestaña activa del modal de proyecto
-    const [modalProyectoTab, setModalProyectoTab] = useState('datos');
-
-    // Estado para el contrato seleccionado en el modal
-    const [modalContrato, setModalContrato] = useState(null);
-
-    useEffect(() => {
-        listFases();
-        listProyectos();
-        listExpedientes();
-    }, []);
-
-    // Cuando se abre un nuevo modal, resetear la pestaña activa
-    useEffect(() => {
-        if (modalProyecto) setModalProyectoTab('datos');
-    }, [modalProyecto]);
-
-    useEffect(() => {
-        if (fases.length > 0) {
-            setActiveTab((actual) => actual || fases[0].nombre);
-        }
-    }, [fases]);
-
-    const listFases = async () => {
-        const response = await axios.get('/fases');
-        setFases(response.data);
-    };
-
-    const listProyectos = async () => {
-        const response = await axios.get('/proyectos');
-        setProyectos(response.data);
-        console.log(response.data);
-    };
-
-    // Si falla, el resto del Dashboard sigue funcionando: solo el seguimiento lo indica.
-    const listExpedientes = async () => {
+    const listExpedientes = useCallback(async () => {
         setErrorExpedientes(null);
         try {
-            const response = await axios.get('/expedientes');
-            setResumenExpedientes(response.data);
+            const { data } = await axios.get('/expedientes');
+            setResumenExpedientes(data);
         } catch (error) {
+            // El resto del tablero sigue funcionando: solo el seguimiento lo indica.
             setErrorExpedientes(mensajeError(error));
         }
+    }, []);
+
+    const cargar = useCallback(async () => {
+        setErrorCarga(null);
+        try {
+            const [respuestaFases, respuestaProyectos] = await Promise.all([axios.get('/fases'), axios.get('/proyectos')]);
+            setFases(respuestaFases.data);
+            setProyectos(respuestaProyectos.data);
+            setUltimaCarga(new Date());
+        } catch (error) {
+            // Se conservan los datos anteriores: en una sala es mejor verlos con aviso que vacíos.
+            setErrorCarga({ mensaje: mensajeError(error), sesionVencida: error?.response?.status === 401 });
+        } finally {
+            setCargando(false);
+        }
+        await listExpedientes();
+    }, [listExpedientes]);
+
+    useEffect(() => {
+        cargar();
+    }, [cargar]);
+
+    const fasesTablero = useMemo(() => fases.filter((f) => f.dashboard === 1), [fases]);
+    const resumenFases = useMemo(
+        () => resumirFases(fasesTablero, proyectos, resumenExpedientes),
+        [fasesTablero, proyectos, resumenExpedientes],
+    );
+
+    // Un resultado del buscador Ctrl+K llega como ?proyecto=ID.
+    const proyectoPedido = searchParams.get('proyecto');
+    useEffect(() => {
+        if (!proyectoPedido || proyectos.length === 0) return;
+        const encontrado = proyectos.find((p) => String(p.id) === proyectoPedido);
+        if (encontrado) setModalProyecto(encontrado);
+        setSearchParams((previos) => {
+            const siguientes = new URLSearchParams(previos);
+            siguientes.delete('proyecto');
+            return siguientes;
+        }, { replace: true });
+    }, [proyectoPedido, proyectos, setSearchParams]);
+
+    const renderVista = (vista, compacto = false) => {
+        if (vista === VISTA.ESTADISTICAS) return <Estadisticas proyectos={proyectos} />;
+        if (vista === VISTA.CONTRATOS) return <ContratosPanel proyectos={proyectos} compacto={compacto} />;
+        if (vista === VISTA.EXPEDIENTES) {
+            return (
+                <ExpedientesSgrPanel
+                    proyectos={proyectos}
+                    resumenes={resumenExpedientes}
+                    error={errorExpedientes}
+                    onReintentar={listExpedientes}
+                    compacto={compacto}
+                />
+            );
+        }
+
+        const fase = fasesTablero.find((f) => slugFase(f.nombre) === vista);
+        if (!fase) return null;
+        const delGrupo = proyectos.filter((p) => p.descripcion_fase === fase.nombre);
+        // En la sala, riesgos y eventos comparten una columna sin desplazamiento: se reparten el alto.
+        const hayRiesgos = delGrupo.some((p) => p.descripcion_estado === 'Con retraso');
+        const filasCompartidas = filasEnSala(window.innerHeight, window.innerWidth) === 8 ? 3 : 2;
+        const limiteLateral = compacto && hayRiesgos ? filasCompartidas : undefined;
+
+        return (
+            <div className={`tb-fase${compacto ? ' compacto' : ''}`} key={fase.id}>
+                <section className="tb-mapa gp-panel" aria-label={`Mapa de proyectos en ${fase.nombre}`}>
+                    <header className="tb-mapa-cabecera">
+                        <FontAwesomeIcon icon={faLocationDot} />
+                        <div className="tb-mapa-titulo">
+                            <h2>Territorio</h2>
+                            <span>Proyectos en {fase.nombre}</span>
+                        </div>
+                        {!compacto && (
+                            <select
+                                className="tb-mapa-filtro"
+                                aria-label="Filtrar por municipio"
+                                value={municipioResaltado ?? ''}
+                                onChange={(e) => setMunicipioResaltado(e.target.value || null)}
+                            >
+                                <option value="">Todos los municipios</option>
+                                {[...new Set(delGrupo.map((p) => p.descripcion_municipio).filter(Boolean))].sort().map((m) => (
+                                    <option key={m} value={m}>{m}</option>
+                                ))}
+                            </select>
+                        )}
+                    </header>
+                    <MapaUbicaciones
+                        proyectos={delGrupo}
+                        onProyectoClick={setModalProyecto}
+                        municipioResaltado={municipioResaltado}
+                    />
+                </section>
+                <DistribucionMunicipios
+                    proyectos={delGrupo}
+                    onMunicipioClick={setMunicipioResaltado}
+                    municipioSeleccionado={municipioResaltado}
+                    onVolver={() => setMunicipioResaltado(null)}
+                    onProyectoClick={setModalProyecto}
+                    compacto={compacto}
+                />
+                <div className="tb-fase-lateral">
+                    <RiesgosFase proyectos={delGrupo} onProyectoClick={setModalProyecto} limite={limiteLateral} />
+                    <ProximosEventos limite={limiteLateral} />
+                </div>
+            </div>
+        );
     };
 
-    // Mostrar solo las fases que tienen dashboard_fase === 1
-    const fasesDashboard = fases.filter(fase => fase.dashboard === 1);
-    console.log(fasesDashboard);
+    if (sala) {
+        return (
+            <ModoSala
+                resumenFases={resumenFases}
+                proyectos={proyectos}
+                ultimaCarga={ultimaCarga}
+                errorCarga={errorCarga}
+                recargar={cargar}
+                renderVista={renderVista}
+            />
+        );
+    }
 
-    const faseActiva = fasesDashboard.find(fase => fase.nombre === activeTab);
-    const proyectosDeLaFaseActiva = faseActiva ? getProyectosPorNombreFase(faseActiva.nombre) : [];
+    const vista = resolverVista(searchParams.get('vista'), fasesTablero);
+
+    const cambiarVista = (siguiente) => {
+        setMunicipioResaltado(null);
+        setSearchParams({ vista: siguiente }, { replace: true });
+    };
 
     return (
-        <div className="dashboard-container">
-            {/* Header */}
-            <Header user={user} onLogout={onLogout} />
-
-            {/* Contenido principal */}
-            <main className="dashboard-main ocultar-scroll">
-                {/* KPIs ejecutivos — globales, no cambian por pestaña */}
-                <KpiStrip proyectos={proyectos} />
-
-                {/* Pestañas de Proyectos */}
-                <section className="proyectos-tabs-section">
-                    <div className="tabs-container">
-                        <div className="tabs-header">
-                            {fasesDashboard.map(fase => (
-                                <button
-                                    key={fase.id}
-                                    className={`tab-button ${activeTab === fase.nombre ? 'active' : ''}`}
-                                    onClick={() => handleTabChange(fase.nombre)}
-                                >
-                                    {fase.nombre} ({getProyectosPorNombreFase(fase.nombre).length})
-                                </button>
-                            ))}
+        <div className="tb">
+            <header className="tb-cabecera">
+                <div className="tb-titulo">
+                    <span className="tb-fecha"><FontAwesomeIcon icon={faCalendarDays} /> {hoyEnTexto()}</span>
+                    <h1>Tablero</h1>
+                </div>
+                <div className="tb-cabecera-acciones">
+                    <div className="tb-analisis" role="group" aria-label="Vistas de análisis">
+                        {VISTAS_ANALISIS.map((v) => (
                             <button
-                                className={`tab-button ${activeTab === 'estadisticas' ? 'active' : ''}`}
-                                onClick={() => handleTabChange('estadisticas')}
+                                key={v.id}
+                                type="button"
+                                className={vista === v.id ? 'activo' : ''}
+                                aria-pressed={vista === v.id}
+                                onClick={() => cambiarVista(v.id)}
                             >
-                                Estadísticas y Filtros
+                                <FontAwesomeIcon icon={v.icono} /> {v.titulo}
                             </button>
-                            <button
-                                className={`tab-button ${activeTab === 'contratos' ? 'active' : ''}`}
-                                onClick={() => handleTabChange('contratos')}
-                            >
-                                Contratos
-                            </button>
-                            <button
-                                className={`tab-button ${activeTab === PESTANA_EXPEDIENTES ? 'active' : ''}`}
-                                onClick={() => handleTabChange(PESTANA_EXPEDIENTES)}
-                            >
-                                Expedientes SGR
-                            </button>
-                        </div>
-
-                        <div className="tab-content">
-                            {faseActiva && (
-                                <div className="dashboard-fase-grid">
-                                    <div className="dashboard-fase-main">
-                                        <div className="fase-vista-header">
-                                            <h2>Proyectos en {faseActiva.nombre}</h2>
-                                            <p className="fase-vista-subtitulo">Ubicación geográfica de los proyectos</p>
-                                        </div>
-                                        <MapaUbicaciones
-                                            proyectos={proyectosDeLaFaseActiva}
-                                            onProyectoClick={handleOpenModalProyecto}
-                                            municipioResaltado={municipioResaltado}
-                                        />
-                                        <DistribucionMunicipios
-                                            proyectos={proyectosDeLaFaseActiva}
-                                            onMunicipioClick={setMunicipioResaltado}
-                                            municipioSeleccionado={municipioResaltado}
-                                            onVolver={() => setMunicipioResaltado(null)}
-                                            onProyectoClick={handleOpenModalProyecto}
-                                        />
-                                    </div>
-                                    <div className="dashboard-fase-lateral">
-                                        <ResumenFase
-                                            proyectos={proyectosDeLaFaseActiva}
-                                            nombreFase={faseActiva.nombre}
-                                            resumenExpedientes={resumenExpedientes}
-                                        />
-                                        <ProximosEventos />
-                                    </div>
-                                </div>
-                            )}
-                            {activeTab === 'estadisticas' && <Estadisticas proyectos={proyectos} />}
-                            {activeTab === 'contratos' && <ContratosPanel proyectos={proyectos} />}
-                            {activeTab === PESTANA_EXPEDIENTES && (
-                                <ExpedientesSgrPanel
-                                    proyectos={proyectos}
-                                    resumenes={resumenExpedientes}
-                                    error={errorExpedientes}
-                                    onReintentar={listExpedientes}
-                                />
-                            )}
-                        </div>
+                        ))}
                     </div>
-                </section>
-            </main>
-            {modalProyecto && (
-                <div className="modal-proyecto-overlay" onClick={handleCloseModalProyecto}>
-                    <div className="modal-proyecto" onClick={e => e.stopPropagation()}>
-                        <div className="modal-proyecto-header">
-                            <h2><span className="icono">📁</span>{modalProyecto.nombre}</h2>
-                            <button className="modal-close-btn" onClick={handleCloseModalProyecto}>×</button>
-                        </div>
-                        {/* Pestañas del modal */}
-                        <div className="modal-tabs">
-                            <button
-                                className={`modal-tab${modalProyectoTab === 'datos' ? ' active' : ''}`}
-                                onClick={() => setModalProyectoTab('datos')}
-                            >
-                                Datos Generales
-                            </button>
-                            <button
-                                className={`modal-tab${modalProyectoTab === 'componentes' ? ' active' : ''}`}
-                                onClick={() => setModalProyectoTab('componentes')}
-                            >
-                                Componentes
-                            </button>
-                            {modalProyecto.contratos && modalProyecto.contratos.length > 0 && (
-                                <button
-                                    className={`modal-tab${modalProyectoTab === 'contratos' ? ' active' : ''}`}
-                                    onClick={() => setModalProyectoTab('contratos')}
-                                >
-                                    Contratos
-                                </button>
-                            )}
-                        </div>
-                        <div className="modal-proyecto-content">
-                            {modalProyectoTab === 'datos' && (
-                                <div className="modal-tab-content datos-generales">
-                                    <p><span className="icono">📝</span><strong>Descripción:</strong> {modalProyecto.descripcion}</p>
-                                    <p><span className="icono">📍</span><strong>Municipio:</strong> {modalProyecto.descripcion_municipio}</p>
-                                    <p><span className="icono">🔄</span><strong>Fase:</strong> {modalProyecto.descripcion_fase}</p>
-                                    <p><span className="icono">📊</span><strong>Estado:</strong> {modalProyecto.descripcion_estado}</p>
-                                    <p><span className="icono">💰</span><strong>Presupuesto Total:</strong> $ {modalProyecto.totalPresupuesto?.toLocaleString()}</p>
-                                    <p><span className="icono">🏢</span><strong>Entidad Presenta:</strong> {modalProyecto.descripcion_entidad_presenta}</p>
-                                    <p><span className="icono">🏦</span><strong>Entidad Financia:</strong> {modalProyecto.descripcion_entidad_financia}</p>
-                                    <p><span className="icono">💡</span><strong>Fuente de Financiación:</strong> {modalProyecto.fuente_financiacion}</p>
-                                    <p><span className="icono">✅</span><strong>Requisitos SGR cumplidos:</strong> {textoAvanceProyecto(modalProyecto.id, resumenExpedientes)}</p>
-                                    <p>
-                                        <span className="icono">📋</span>
-                                        <button type="button" className="tab-button" onClick={() => navigate(`/viabilizacion/${modalProyecto.id}`)}>
-                                            Expediente de viabilización SGR
-                                        </button>
-                                    </p>
-                                </div>
-                            )}
-                            {modalProyectoTab === 'componentes' && (
-                                <div className="modal-tab-content componentes">
-                                    <h3>Componentes del Presupuesto</h3>
-                                    <ul>
-                                        {modalProyecto.componentesPresupuesto && modalProyecto.componentesPresupuesto.length > 0 ? (
-                                            modalProyecto.componentesPresupuesto.map(comp => (
-                                                <li key={comp.id}>
-                                                    <span className="badge-componente">{comp.componente}</span>
-                                                    <span className="icono">💵</span>$ {parseInt(comp.valor).toLocaleString()}
-                                                </li>
-                                            ))
-                                        ) : (
-                                            <li>No hay componentes registrados.</li>
-                                        )}
-                                    </ul>
-                                </div>
-                            )}
-                            {modalProyectoTab === 'contratos' && modalProyecto.contratos && (
-                                <div className="modal-tab-content contratos">
-                                    <h3>Contratos</h3>
-                                    {modalProyecto.contratos.length > 0 ? (
-                                        <table className="contratos-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Número</th>
-                                                    <th>Objeto</th>
-                                                    <th>Valor</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {modalProyecto.contratos.map(contrato => (
-                                                    <tr key={contrato.id} className="contrato-row" style={{ cursor: 'pointer' }} onClick={() => setModalContrato(contrato)}>
-                                                        <td>{contrato.n_contrato}</td>
-                                                        <td>{contrato.objeto}</td>
-                                                        <td>$ {contrato.valor ? parseInt(contrato.valor).toLocaleString() : ''}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    ) : (
-                                        <div>No hay contratos registrados.</div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    <Link to="/sala" className="gp-boton tb-boton-sala" title="Pantalla completa para TV o sala de reuniones">
+                        <FontAwesomeIcon icon={faTv} /> Modo sala
+                    </Link>
+                </div>
+            </header>
+
+            {errorCarga && (
+                <div className="tb-aviso" role="alert">
+                    <span>No se pudieron cargar los datos del tablero. {errorCarga.mensaje}</span>
+                    <button type="button" className="gp-boton" onClick={cargar}>Reintentar</button>
                 </div>
             )}
-            {modalContrato && (
-                <div className="modal-proyecto-overlay" onClick={() => setModalContrato(null)}>
-                    <div className="modal-proyecto" onClick={e => e.stopPropagation()}>
-                        <div className="modal-proyecto-header">
-                            <h2><span className="icono">📄</span>Contrato {modalContrato.n_contrato || modalContrato.numero || modalContrato.nombre}</h2>
-                            <button className="modal-close-btn" onClick={() => setModalContrato(null)}>×</button>
-                        </div>
-                        <div className="modal-proyecto-content">
-                            <p><span className="icono">🔢</span><strong>Número de Contrato:</strong> {modalContrato.n_contrato || modalContrato.numero || modalContrato.nombre}</p>
-                            <p><span className="icono">📝</span><strong>Objeto:</strong> {modalContrato.objeto || modalContrato.descripcion}</p>
-                            <p><span className="icono">🏢</span><strong>Contratante:</strong> {modalContrato.contratante}</p>
-                            <p><span className="icono">👷</span><strong>Contratista:</strong> {modalContrato.contratista}</p>
-                            <p><span className="icono">💵</span><strong>Monto:</strong> $ {modalContrato.monto ? parseInt(modalContrato.monto).toLocaleString() : (modalContrato.valor ? parseInt(modalContrato.valor).toLocaleString() : '')}</p>
-                            <p><span className="icono">📅</span><strong>Fecha de Inicio:</strong> {modalContrato.fecha_inicio || modalContrato.fecha}</p>
-                            <p><span className="icono">📅</span><strong>Fecha de Fin:</strong> {modalContrato.fecha_fin}</p>
-                            <p><span className="icono">🕵️‍♂️</span><strong>Interventoría:</strong> {modalContrato.interventoria || modalContrato.interventor}</p>
-                            {(() => {
-                                // Avances derivados del historial (actas + avances de actividad),
-                                // igual que la pestaña Contratos: las columnas avance_fisico /
-                                // avance_financiero son un snapshot que puede estar desactualizado.
-                                const serie = construirSerieTemporal(modalContrato);
-                                if (serie.length === 0) {
-                                    return (
-                                        <p><span className="icono">📈</span><strong>Avance:</strong> <em>Sin datos de avance registrados</em></p>
-                                    );
-                                }
-                                const ultimo = serie[serie.length - 1];
-                                const severidad = severidadDesfase(ultimo.brecha);
-                                return (
-                                    <>
-                                        <p><span className="icono">🏗️</span><strong>Avance Físico:</strong> {ultimo.fisico}%</p>
-                                        <p><span className="icono">💰</span><strong>Avance Financiero:</strong> {ultimo.financiero}%</p>
-                                        <p>
-                                            <span className="icono">📈</span><strong>Desfase:</strong>{' '}
-                                            <span style={{ color: COLOR_SEVERIDAD[severidad], fontWeight: 700 }}>
-                                                {ultimo.brecha > 0 ? '+' : ''}{ultimo.brecha}
-                                            </span>
-                                        </p>
-                                    </>
-                                );
-                            })()}
-                            <p><span className="icono">🔄</span><strong>Estado:</strong> {modalContrato.estado}</p>
-                        </div>
-                    </div>
-                </div>
+
+            <KpiStrip proyectos={proyectos} />
+            <FlujoFases fases={resumenFases} activa={vista} onElegir={cambiarVista} />
+
+            {cargando ? <p className="gp-vacio" role="status">Cargando tablero…</p> : <div className="tb-vista">{renderVista(vista)}</div>}
+
+            {modalProyecto && (
+                <ModalProyecto
+                    proyecto={modalProyecto}
+                    resumenExpedientes={resumenExpedientes}
+                    onCerrar={() => setModalProyecto(null)}
+                />
             )}
         </div>
     );

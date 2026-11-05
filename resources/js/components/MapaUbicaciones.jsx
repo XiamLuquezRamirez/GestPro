@@ -17,7 +17,8 @@ const AjustarVistaInicial = ({ puntos }) => {
 
     useEffect(() => {
         if (!ajustadoRef.current && puntos.length > 0) {
-            map.fitBounds(puntos.map(p => [p.lat, p.lng]), { maxZoom: 13, padding: [40, 40] });
+            // Sin animación: el mapa debe aparecer ya encuadrado, sin pedir mosaicos de más.
+            map.fitBounds(puntos.map(p => [p.lat, p.lng]), { maxZoom: 13, padding: [40, 40], animate: false });
             ajustadoRef.current = true;
         }
     }, [puntos]);
@@ -31,10 +32,10 @@ const CentradorMunicipio = ({ municipio, puntos }) => {
     const map = useMap();
 
     useEffect(() => {
-        if (!municipio) return;
-        const puntosDelMunicipio = puntos.filter(p => p.proyecto.descripcion_municipio === municipio);
-        if (puntosDelMunicipio.length > 0) {
-            map.fitBounds(puntosDelMunicipio.map(p => [p.lat, p.lng]), { maxZoom: 14, padding: [40, 40] });
+        // Sin municipio se vuelve a la vista de todos, para que el selector "Todos" tenga efecto.
+        const encuadre = municipio ? puntos.filter(p => p.proyecto.descripcion_municipio === municipio) : puntos;
+        if (encuadre.length > 0) {
+            map.fitBounds(encuadre.map(p => [p.lat, p.lng]), { maxZoom: municipio ? 14 : 13, padding: [40, 40], animate: false });
         }
     }, [municipio, puntos]);
 
@@ -55,8 +56,9 @@ const MapaUbicaciones = ({ proyectos, onProyectoClick, municipioResaltado }) => 
     ), [proyectos]);
 
     return (
-        <div className="dashboard-mapa-container">
-            <MapContainer center={CENTRO_POR_DEFECTO} zoom={ZOOM_POR_DEFECTO} style={{ height: '420px', width: '100%' }}>
+        <div className="tb-mapa-lienzo">
+            {puntos.length === 0 && <p className="tb-mapa-vacio">Sin ubicaciones registradas en esta fase.</p>}
+            <MapContainer center={CENTRO_POR_DEFECTO} zoom={ZOOM_POR_DEFECTO} style={{ height: '100%', width: '100%' }}>
                 <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

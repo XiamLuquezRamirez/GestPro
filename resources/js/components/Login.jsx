@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
-import axios from '../axios';
 import { useNavigate } from 'react-router-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faArrowRight, faCircleExclamation } from '@fortawesome/free-solid-svg-icons';
+import axios from '../axios';
+import CurvasNivel from './CurvasNivel';
 import { getImageUrl } from '../utils/assetHelper';
+import '../../css/Login.css';
 
 const Login = ({ onLogin }) => {
     const navigate = useNavigate();
@@ -16,34 +20,20 @@ const Login = ({ onLogin }) => {
         setIsLoading(true);
 
         try {
-            console.log('Intentando login con:', { email, password: '***' });
-            
-            
             // Enviar login y recibir token + datos del usuario
-            const loginRes = await axios.post('/login', { email, password });
-            
-            console.log('Respuesta del login:', loginRes.data);
-
-            const { token, user } = loginRes.data;
+            const { data } = await axios.post('/login', { email, password });
+            const { token, user } = data;
             localStorage.setItem('token', token);
-            
-            console.log('Token guardado en localStorage');
 
             // Configurar axios con el token
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
             // Usar los datos del usuario que ya recibimos
             onLogin(user);
-            
-            console.log('Usuario establecido, navegando a dashboard');
-
             navigate('/dashboard');
         } catch (error) {
-            console.error('Error en login:', error);
-            console.error('Error response:', error.response);
-            
             if (error.response && error.response.status === 401) {
-                setErrors('Credenciales incorrectas. Verifica tu email y contraseña.');
+                setErrors('Credenciales incorrectas. Verifica tu correo y contraseña.');
             } else if (error.response && error.response.data && error.response.data.error) {
                 setErrors(`Error del servidor: ${error.response.data.error}`);
             } else {
@@ -55,91 +45,65 @@ const Login = ({ onLogin }) => {
     };
 
     return (
-        <div className="login-container">
-            <div className="login-background">
-                <div className="login-overlay"></div>
-            </div>
-            
-            <div className="login-card">
-                <div className="login-header">
-                    <div className="logo-container">
-                        <div className="logo-icon"><img src={getImageUrl('images/logo.png')} width="80" height="80" alt="GestPro" /></div>
-                        <h1 className="logo-text">GestPro</h1>
-                    </div>
-                    <p className="login-subtitle">Sistema de Gestión de Proyectos</p>
+        <div className="lg">
+            <section className="lg-terreno">
+                <CurvasNivel />
+                <img className="lg-logo" src={getImageUrl('images/marca-completa.png')} alt="Es más que ingeniería" />
+                <div className="lg-mensaje">
+                    <span className="gp-etiqueta">Sistema de gestión de proyectos</span>
+                    <h1>Cada proyecto, en su territorio.</h1>
+                    <p>Formulación, licitación y ejecución en un solo tablero.</p>
                 </div>
+            </section>
 
-                <div className="login-form-container">
-                    <h2 className="login-title">Iniciar Sesión</h2>
-                    
+            <section className="lg-acceso">
+                <form onSubmit={handleSubmit} className="lg-formulario">
+                    <div className="lg-marca">
+                        <img src={getImageUrl('images/marca-hexagono.png')} width="44" height="44" alt="" />
+                        <span>GestPro</span>
+                    </div>
+
+                    <h2>Iniciar sesión</h2>
+
                     {errors && (
-                        <div className="error-message">
-                            <span className="error-icon">⚠️</span>
+                        <div className="lg-error" role="alert">
+                            <FontAwesomeIcon icon={faCircleExclamation} />
                             {errors}
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} className="login-form">
-                        <div className="form-group">
-                            <label htmlFor="email" className="form-label">
-                                <span className="label-icon">📧</span>
-                                Correo Electrónico
-                            </label>
-                            <input
-                                type="email"
-                                id="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="form-input"
-                                placeholder="ejemplo@empresa.com"
-                                required
-                                disabled={isLoading}
-                            />
-                        </div>
+                    <label htmlFor="email">Correo electrónico</label>
+                    <input
+                        type="email"
+                        id="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="ejemplo@empresa.com"
+                        autoComplete="username"
+                        autoFocus
+                        required
+                        disabled={isLoading}
+                    />
 
-                        <div className="form-group">
-                            <label htmlFor="password" className="form-label">
-                                <span className="label-icon">🔒</span>
-                                Contraseña
-                            </label>
-                            <input
-                                type="password"
-                                id="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="form-input"
-                                placeholder="Ingrese su contraseña"
-                                required
-                                disabled={isLoading}
-                            />
-                        </div>
+                    <label htmlFor="password">Contraseña</label>
+                    <input
+                        type="password"
+                        id="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Tu contraseña"
+                        autoComplete="current-password"
+                        required
+                        disabled={isLoading}
+                    />
 
-                        <button 
-                            type="submit" 
-                            className={`login-button ${isLoading ? 'loading' : ''}`}
-                            disabled={isLoading}
-                        >
-                            {isLoading ? (
-                                <>
-                                    <span className="loading-spinner"></span>
-                                    Iniciando sesión...
-                                </>
-                            ) : (
-                                <>
-                                    <span className="button-icon">🚀</span>
-                                    Ingresar al Sistema
-                                </>
-                            )}
-                        </button>
-                    </form>
+                    <button type="submit" className="gp-boton gp-boton-primario lg-entrar" disabled={isLoading}>
+                        {isLoading ? 'Ingresando…' : <>Ingresar <FontAwesomeIcon icon={faArrowRight} /></>}
+                    </button>
 
-                    <div className="login-footer">
-                        <p className="footer-text">
-                            ¿Necesita ayuda? Contacte al administrador del sistema
-                        </p>
-                    </div>
-                </div>
-            </div>
+                    <p className="lg-ayuda">¿Necesitas ayuda? Contacta al administrador del sistema.</p>
+                </form>
+            </section>
         </div>
     );
 };

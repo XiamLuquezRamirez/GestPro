@@ -46,6 +46,12 @@ class AuthController extends Controller
         }
     }
 
+    /** Para pantallas que quedan encendidas, como el modo sala: la sesión dura 60 minutos. */
+    public function refrescarToken()
+    {
+        return response()->json(['token' => JWTAuth::parseToken()->refresh()]);
+    }
+
     public function logout()
     {
         Auth::logout();

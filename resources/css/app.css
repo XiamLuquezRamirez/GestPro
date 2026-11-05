@@ -1,28 +1,176 @@
-/* Reset CSS básico */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+/* ==========================================================================
+   GestPro · Sala de situación territorial
+   Sistema de diseño: tokens, base y piezas compartidas. Los componentes traen
+   su propia hoja, pero solo usan los tokens definidos aquí.
+   ========================================================================== */
+
+:root {
+    color-scheme: dark;
+
+    /* Terreno: petróleo profundo, derivado del azul de la marca */
+    --gp-fondo: #07161D;
+    --gp-fondo-2: #0A1D26;
+    --gp-superficie: #0E2631;
+    --gp-superficie-2: #133241;
+    --gp-superficie-3: #1A3F50;
+    --gp-linea: #234858;
+    --gp-linea-fuerte: #35616F;
+
+    /* Texto */
+    --gp-texto: #EEF5F7;
+    --gp-texto-2: #B4C6CE;
+    --gp-texto-3: #8BA2AC;
+
+    /* Marca (logo). Azul: identidad y navegación. Ámbar: acción principal. Verde: avance y logro.
+       El coral no es de la marca: se reserva para el riesgo, para que una alerta nunca se confunda. */
+    --gp-azul: #018EB2;
+    --gp-azul-texto: #38BBDC;
+    --gp-azul-suave: rgba(1, 142, 178, .2);
+    --gp-verde: #3EAB2B;
+    --gp-verde-texto: #62C952;
+    --gp-verde-suave: rgba(62, 171, 43, .18);
+    --gp-ambar: #ECA200;
+    --gp-ambar-suave: rgba(236, 162, 0, .16);
+    --gp-sobre-acento: #06161D; /* el blanco sobre el azul de marca no alcanza 4,5:1 */
+    --gp-franja: linear-gradient(90deg, var(--gp-azul) 0 33.3%, var(--gp-verde) 33.3% 66.6%, var(--gp-ambar) 66.6% 100%);
+    --gp-coral: #FF7A5C;
+    --gp-coral-suave: rgba(255, 122, 92, .14);
+
+    /* Tipografía */
+    --gp-fuente-titulo: 'Bricolage Grotesque', 'Trebuchet MS', sans-serif;
+    --gp-fuente: 'Hanken Grotesk', 'Segoe UI', sans-serif;
+    --gp-fuente-datos: 'JetBrains Mono', Consolas, monospace;
+
+    /* Forma */
+    --gp-radio: 8px;
+    --gp-radio-grande: 14px;
+    --gp-sombra: 0 18px 50px rgba(0, 0, 0, .45);
+    --gp-enfoque: 0 0 0 2px var(--gp-fondo), 0 0 0 4px var(--gp-azul-texto);
+
+    /* Armazón */
+    --gp-riel: 15.5rem;
+    --gp-riel-plegado: 4.5rem;
+    --gp-barra-superior: 3.5rem;
+    --gp-barra-inferior: 4rem;
+    --gp-margen: clamp(1rem, 2.2vw, 2.5rem);
 }
 
-/* Estilos base */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* El texto crece con la pantalla: de un celular a una sala con 4K sin saltos. */
+html {
+    font-size: clamp(15px, .28vw + 12.4px, 24px);
+    -webkit-text-size-adjust: 100%;
+    background: var(--gp-fondo);
+}
+
 body {
-    background-color: #f5f5f5;
-    font-family: Arial, sans-serif;
-    line-height: 1.6;
+    min-height: 100dvh;
+    font-family: var(--gp-fuente);
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--gp-texto);
+    background-color: var(--gp-fondo);
+    /* Curvas de nivel muy tenues: la firma visual del producto */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900' viewBox='0 0 900 900' fill='none' stroke='%2338BBDC' stroke-opacity='.06' stroke-width='1.2'%3E%3Cpath d='M-20 210c120-70 210-40 320 10s190 60 320-10 200-60 300 0'/%3E%3Cpath d='M-20 270c120-60 210-20 320 30s190 50 320-20 200-50 300 10'/%3E%3Cpath d='M-20 340c130-40 200 0 310 50s210 30 330-40 190-30 300 20'/%3E%3Cpath d='M180 620c60-90 180-110 270-60s130 150 60 220-210 80-290 10-100-100-40-170z'/%3E%3Cpath d='M230 630c50-60 140-80 210-40s100 110 50 170-160 60-220 10-80-80-40-140z'/%3E%3Cpath d='M285 645c30-35 90-45 135-20s60 70 30 105-100 40-140 5-55-50-25-90z'/%3E%3Cpath d='M-20 80c150-50 260-30 370 10s220 30 350-20 170-30 240-10'/%3E%3C/svg%3E");
+    background-attachment: fixed;
 }
 
-.container {
-    margin: 50px;
-    padding: 20px;
-    background: white;
-    border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+h1, h2, h3, h4 { font-family: var(--gp-fuente-titulo); font-weight: 650; line-height: 1.15; letter-spacing: -.012em; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: inherit; }
+img { display: block; max-width: 100%; }
+
+:focus-visible { outline: none; box-shadow: var(--gp-enfoque); border-radius: 3px; }
+
+select option { background: var(--gp-superficie-2); color: var(--gp-texto); }
+input[type='date'] { color-scheme: dark; }
+
+/* Barras de desplazamiento discretas */
+* { scrollbar-width: thin; scrollbar-color: var(--gp-linea-fuerte) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
-/* Importar todos los archivos CSS de componentes */
-@import './Dashboard.css';
-@import './Parametros.css';
-@import './Login.css';
-@import './Header.css';
-@import './Navigation.css';
+/* ---------- Piezas compartidas ---------- */
+
+.gp-etiqueta {
+    font-family: var(--gp-fuente-datos);
+    font-size: .68rem;
+    font-weight: 500;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--gp-texto-3);
+}
+
+.gp-cabecera { margin-bottom: 1.5rem; }
+.gp-cabecera h1 { margin-top: .15rem; font-size: clamp(1.6rem, 1.2rem + 1.2vw, 2.4rem); font-weight: 700; }
+.gp-cabecera p { max-width: 62ch; margin-top: .3rem; color: var(--gp-texto-2); }
+
+.gp-panel {
+    position: relative;
+    background: var(--gp-superficie);
+    border: 1px solid var(--gp-linea);
+    border-radius: var(--gp-radio-grande);
+}
+
+.gp-boton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+    padding: .5rem .9rem;
+    font-size: .88rem;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--gp-texto);
+    background: var(--gp-superficie-2);
+    border: 1px solid var(--gp-linea-fuerte);
+    border-radius: var(--gp-radio);
+    transition: background .15s, border-color .15s, transform .1s;
+    text-decoration: none;
+}
+.gp-boton:hover:not(:disabled) { background: var(--gp-superficie-3); border-color: var(--gp-texto-3); }
+.gp-boton:active:not(:disabled) { transform: translateY(1px); }
+.gp-boton:disabled { opacity: .5; cursor: not-allowed; }
+.gp-boton-primario { color: var(--gp-sobre-acento); background: var(--gp-ambar); border-color: var(--gp-ambar); }
+.gp-boton-primario:hover:not(:disabled) { background: #F5B62E; border-color: #F5B62E; }
+
+.gp-vacio { padding: 1.5rem; font-size: .9rem; text-align: center; color: var(--gp-texto-3); }
+
+/* ---------- Diálogos de SweetAlert ---------- */
+.swal2-popup {
+    color: var(--gp-texto) !important;
+    background: var(--gp-superficie-2) !important;
+    border: 1px solid var(--gp-linea-fuerte) !important;
+    border-radius: var(--gp-radio-grande) !important;
+    font-family: var(--gp-fuente) !important;
+}
+.swal2-title { color: var(--gp-texto) !important; font-family: var(--gp-fuente-titulo) !important; }
+.swal2-html-container { color: var(--gp-texto-2) !important; }
+.swal2-styled.swal2-confirm { color: var(--gp-sobre-acento) !important; background: var(--gp-ambar) !important; }
+.swal2-styled.swal2-cancel { color: var(--gp-texto) !important; background: var(--gp-superficie-3) !important; }
+
+/* ---------- Mapas: mosaicos oscurecidos para integrarse con la sala ---------- */
+/* z-index propio: las capas internas de Leaflet llegan a 1000 y taparían las barras y menús */
+.leaflet-container { z-index: 0; background: var(--gp-fondo-2) !important; font-family: var(--gp-fuente) !important; }
+/* Filtro por mosaico, no sobre toda la capa: con escalas no enteras (Windows al 125 %) el
+   borde reescalado de cada mosaico marcaba una cuadrícula visible. El píxel extra los solapa.
+   Va con doble clase porque leaflet.css se carga después y define `filter: inherit` en el mosaico. */
+.leaflet-container .leaflet-tile {
+    width: 257px !important;
+    height: 257px !important;
+    filter: invert(1) hue-rotate(165deg) brightness(.82) contrast(.9) saturate(.55);
+}
+.leaflet-control-attribution { color: var(--gp-texto-3) !important; background: rgba(11, 20, 17, .75) !important; }
+.leaflet-control-attribution a { color: var(--gp-texto-2) !important; }
+.leaflet-bar a { color: var(--gp-texto) !important; background: var(--gp-superficie-2) !important; border-color: var(--gp-linea) !important; }
+.marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background: rgba(236, 162, 0, .28) !important; }
+.marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+    color: var(--gp-sobre-acento) !important;
+    background: var(--gp-ambar) !important;
+    font-family: var(--gp-fuente-datos) !important;
+    font-weight: 700;
+}

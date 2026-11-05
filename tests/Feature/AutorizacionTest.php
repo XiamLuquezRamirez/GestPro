@@ -49,6 +49,23 @@ class AutorizacionTest extends TestCase
         $response->assertStatus(403);
     }
 
+    public function test_una_sesion_activa_puede_renovar_su_token(): void
+    {
+        $token = auth('api')->login(User::factory()->create(['rol' => Rol::Consulta]));
+
+        $nuevo = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/GestPro/refrescar-token')
+            ->assertOk()
+            ->json('token');
+
+        $this->assertIsString($nuevo);
+        $this->assertNotSame($token, $nuevo);
+    }
+
+    public function test_sin_sesion_no_se_puede_renovar_el_token(): void
+    {
+        $this->postJson('/GestPro/refrescar-token')->assertUnauthorized();
+    }
+
     public function test_gestor_can_create_a_proyecto_via_api(): void
     {
         $this->seed(\Database\Seeders\DepartamentosSeeder::class);

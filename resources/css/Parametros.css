@@ -1,1471 +1,302 @@
-/* Estilos para el componente de Parámetros */
-.parametros-container {
-    min-height: 100vh;
-    background: #f4f6fa;
-    font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
-}
+/* Gestión: tablas de proyectos, eventos y catálogos, con sus formularios. */
+.parametros-container { min-width: 0; }
 
-.content-wrapper {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 2rem;
-    padding-top: 6rem;
+/* ---------- Tabla principal ---------- */
+.table-container { min-width: 0; }
+.table-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1rem; margin-bottom: .75rem; }
+.table-acciones { display: flex; flex: 1; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; min-width: min(100%, 20rem); }
+.search-input {
+    flex: 1;
+    min-width: 0;
+    max-width: 24rem;
+    padding: .5rem .75rem;
+    font-size: .9rem;
+    background: var(--gp-superficie);
+    border: 1px solid var(--gp-linea-fuerte);
+    border-radius: var(--gp-radio);
 }
-
-.page-header {
-    text-align: center;
-    margin-bottom: 2rem;
-}
-
-.page-header h1 {
-    color: #222b45;
-    font-size: 2rem;
-    font-weight: 600;
-    margin: 0 0 0.5rem 0;
-}
-
-.page-header p {
-    color: #8f9bb3;
-    font-size: 1.1rem;
-    margin: 0;
-}
-
-/* Tabs */
-.tabs-container {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
-    overflow: hidden;
-}
-
-.tabs-header {
-    display: flex;
-    background: #f8f9fa;
-    border-bottom: 1px solid #e0e6ed;
-    overflow-x: auto;
-}
-
-.tab-button {
-    background: none;
-    border: none;
-    padding: 1rem 1.5rem;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: #8f9bb3;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    white-space: nowrap;
-    border-bottom: 3px solid transparent;
-}
-
-.tab-button:hover {
-    color: #1976d2;
-    background: #e3f2fd;
-}
-
-.tab-button.active {
-    color: #1976d2;
-    background: white;
-    border-bottom-color: #1976d2;
-}
-
-.tab-icon {
-    font-size: 1.1rem;
-}
-
-.tab-content {
-    padding: 2rem;
-}
-
-/* Configuración General */
-.general-config h2 {
-    color: #222b45;
-    font-size: 1.5rem;
-    font-weight: 600;
-    margin-bottom: 1.5rem;
-}
-
-.config-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-}
-
-.config-card {
-    background: #f8f9fa;
-    padding: 1.5rem;
-    border-radius: 8px;
-    border-left: 4px solid #1976d2;
-}
-
-.config-card h3 {
-    color: #222b45;
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin: 0 0 1rem 0;
-}
-
-.config-card p {
-    color: #555e6b;
-    margin: 0.5rem 0;
-    font-size: 0.9rem;
-}
-
-/* Tablas */
-.table-container {
-    margin-top: 1rem;
-}
-
-.table-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-}
-
-.table-header h3 {
-    color: #222b45;
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin: 0;
-}
+.search-input::placeholder { color: var(--gp-texto-3); }
+.search-input:focus { border-color: var(--gp-azul-texto); outline: none; }
 
 .btn-add {
-    background: #1976d2;
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    transition: all 0.2s ease;
+    gap: .4rem;
+    padding: .5rem 1rem;
+    font-size: .9rem;
+    font-weight: 650;
+    white-space: nowrap;
+    color: var(--gp-sobre-acento);
+    background: var(--gp-ambar);
+    border: 0;
+    border-radius: var(--gp-radio);
+    transition: background .15s;
 }
-
-.btn-add:hover {
-    background: #1565c0;
-}
-
-.btn-add span {
-    font-size: 1.1rem;
-    font-weight: bold;
-}
+.btn-add:hover { background: #F5B62E; }
+.btn-add span { font-size: 1.15rem; line-height: 1; }
 
 .table-content {
-    background: white;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 1px 4px rgba(44, 62, 80, 0.05);
+    overflow-x: auto;
+    background: var(--gp-superficie);
+    border: 1px solid var(--gp-linea);
+    border-radius: var(--gp-radio);
 }
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-th {
-    background: #f8f9fa;
-    color: #222b45;
-    font-weight: 600;
-    font-size: 0.9rem;
-    padding: 1rem;
+.table-content > table, .componentes-table table, .contratos-table table, .anexos-table table { width: 100%; font-size: .9rem; border-collapse: collapse; }
+.table-content th, .componentes-table th, .contratos-table th, .anexos-table th {
+    padding: .6rem .85rem;
+    font-family: var(--gp-fuente-datos);
+    font-size: .68rem;
+    font-weight: 500;
+    letter-spacing: .08em;
     text-align: left;
-    border-bottom: 1px solid #e0e6ed;
-}
-
-td {
-    padding: 1rem;
-    border-bottom: 1px solid #f0f2f5;
-    color: #555e6b;
-    font-size: 0.9rem;
-}
-
-tr:hover {
-    background: #f8f9fa;
-}
-
-/* Elementos específicos de la tabla */
-.color-preview {
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
-    border: 1px solid #e0e6ed;
-}
-
-/* Estilos para la pestaña de presupuesto */
-.presupuesto-container {
-    margin-top: 1rem;
-}
-
-.presupuesto-resumen {
-    background: white;
-    border-radius: 8px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 1px 4px rgba(44, 62, 80, 0.05);
-}
-
-.presupuesto-resumen h3 {
-    color: #222b45;
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin: 0 0 1.5rem 0;
-}
-
-.resumen-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1rem;
-}
-
-.resumen-card {
-    background: #f8f9fa;
-    padding: 1.5rem;
-    border-radius: 8px;
-    border-left: 4px solid #1976d2;
-    transition: all 0.2s ease;
-}
-
-.resumen-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(44, 62, 80, 0.1);
-}
-
-.resumen-card h4 {
-    color: #222b45;
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin: 0 0 1rem 0;
-}
-
-.resumen-total {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-}
-
-.total-label {
-    color: #e9edf1;
-    font-size: 0.9rem;
-    font-weight: 500;
-}
-
-.total-value {
-    color: #1976d2;
-    font-size: 1.1rem;
-    font-weight: 700;
-}
-
-.resumen-detalles {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.detalles-label {
-    color: #8f9bb3;
-    font-size: 0.8rem;
-}
-
-/* Estilos para la sección de presupuesto en el modal */
-.presupuesto-modal-section {
-    padding: 1rem 0;
-}
-
-.presupuesto-modal-section h3 {
-    color: #222b45;
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin: 0 0 0.5rem 0;
-}
-
-.presupuesto-info {
-    color: #8f9bb3;
-    font-size: 0.9rem;
-    margin: 0 0 1.5rem 0;
-}
-
-.componente-form {
-    background: #f8f9fa;
-    padding: 1.5rem;
-    border-radius: 8px;
-    margin-bottom: 1.5rem;
-}
-
-.btn-add-componente {
-    background: #1976d2;
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    margin-top: 1rem;
-}
-
-.btn-add-componente:hover:not(:disabled) {
-    background: #1565c0;
-}
-
-.btn-add-componente:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-}
-
-.btn-add-contrato{
-    background: #1976d2;
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    margin-top: 1rem;
-}
-
-.btn-add-contrato:hover {
-    background: #1565c0;
-}
-
-.btn-add-contrato:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-}
-
-.componentes-list {
-    margin-bottom: 1.5rem;
-}
-
-.btn-delete-contrato{
-    background: #ffebee;
-    color: #c62828;
-    border: none;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    transition: all 0.2s ease;
-}
-
-.btn-delete-contrato:hover {
-    background: #ffcdd2;
-    animation: pulse 1s infinite;
-}
-
-@keyframes pulse {
-    0% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.1);
-    }
-    100% {
-        transform: scale(1);
-    }
-}
-
-.componentes-list h4 {
-    color: #222b45;
-    font-size: 1rem;
-    font-weight: 600;
-    margin: 0 0 1rem 0;
-}
-
-.no-componentes {
-    color: #8f9bb3;
-    font-style: italic;
-    text-align: center;
-    padding: 2rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-}
-
-.componentes-table {
-    background: white;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 1px 4px rgba(44, 62, 80, 0.05);
-}
-
-.componentes-table table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.componentes-table th {
-    background: #f8f9fa;
-    color: #222b45;
-    font-weight: 600;
-    font-size: 0.9rem;
-    padding: 0.75rem;
-    text-align: left;
-    border-bottom: 1px solid #e0e6ed;
-}
-
-.componentes-table td {
-    padding: 0.75rem;
-    border-bottom: 1px solid #f0f2f5;
-    color: #555e6b;
-    font-size: 0.9rem;
-}
-
-.btn-delete-componente {
-    background: #ffebee;
-    color: #c62828;
-    border: none;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    transition: all 0.2s ease;
-}
-
-.btn-delete-componente:hover {
-    background: #ffcdd2;
-}
-
-.presupuesto-total {
-    margin-top: 1.5rem;
-}
-
-.total-card {
-    background: linear-gradient(135deg, #1976d2, #1565c0);
-    color: white;
-    padding: 1.5rem;
-    border-radius: 8px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.total-label {
-    font-size: 1rem;
-    font-weight: 500;
-}
-
-.total-amount {
-    font-size: 1.5rem;
-    font-weight: 700;
-}
-
-.status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 600;
     text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--gp-texto-3);
+    background: var(--gp-fondo-2);
+    border-bottom: 1px solid var(--gp-linea-fuerte);
 }
+.table-content td, .componentes-table td, .contratos-table td, .anexos-table td { padding: .6rem .85rem; color: var(--gp-texto-2); vertical-align: middle; border-bottom: 1px solid var(--gp-linea); }
+.table-content td:first-child { font-weight: 600; color: var(--gp-texto); }
+.table-content td.numero { font-family: var(--gp-fuente-datos); font-size: .84rem; white-space: nowrap; }
+.table-content tbody tr:last-child td { border-bottom: 0; }
+.table-content tbody tr { transition: background .1s; }
+.table-content tbody tr:hover, .contratos-table tr:hover, .anexos-table tr:hover { background: var(--gp-superficie-2); }
 
-.status-badge.active {
-    background: #e8f5e8;
-    color: #2e7d32;
-}
+.color-preview { width: 1.4rem; height: 1.4rem; border: 1px solid var(--gp-linea-fuerte); border-radius: 4px; }
+.status-badge { display: inline-block; padding: .1rem .55rem; font-size: .72rem; font-weight: 650; white-space: nowrap; border-radius: 10px; }
+.status-badge.active { color: var(--gp-verde-texto); background: var(--gp-verde-suave); }
+.status-badge.inactive { color: var(--gp-coral); background: var(--gp-coral-suave); }
 
-.status-badge.inactive {
-    background: #ffebee;
-    color: #c62828;
-}
+.action-buttons { display: flex; gap: .3rem; }
+/* Cada acción se reconoce por su color: el botón solo declara --accion y lo demás se deriva.
+   Azul: ver y editar. Coral: eliminar. Ámbar: contrato y desactivar. Verde: expediente y activar.
+   El texto va sobre un tinte y, al pasar el cursor, oscuro sobre el color pleno (contraste ≥ 4,5:1). */
+.btn-edit, .btn-edit-contrato, .btn-view-anexo { --accion: var(--gp-azul-texto); }
+.btn-delete, .btn-delete-componente, .btn-delete-contrato, .btn-delete-anexo { --accion: var(--gp-coral); }
+.btn-add-contrato-list, .btn-toggle.deactivate { --accion: var(--gp-ambar); }
+.btn-add-contrato-list.btn-expediente, .btn-toggle.activate { --accion: var(--gp-verde-texto); }
 
-.action-buttons {
-    display: flex;
-    gap: 0.5rem;
+.btn-toggle, .btn-edit, .btn-add-contrato-list, .btn-delete,
+.btn-delete-componente, .btn-delete-contrato, .btn-delete-anexo, .btn-edit-contrato, .btn-view-anexo {
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    padding: .28rem .55rem;
+    font-size: .76rem;
+    font-weight: 650;
+    white-space: nowrap;
+    color: var(--accion);
+    background: color-mix(in srgb, var(--accion) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accion) 50%, transparent);
+    border-radius: 6px;
+    transition: background .12s, color .12s, border-color .12s, transform .1s;
+}
+.btn-toggle:hover, .btn-edit:hover, .btn-add-contrato-list:hover, .btn-delete:hover,
+.btn-delete-componente:hover, .btn-delete-contrato:hover, .btn-delete-anexo:hover, .btn-edit-contrato:hover, .btn-view-anexo:hover {
+    color: var(--gp-sobre-acento);
+    background: var(--accion);
+    border-color: var(--accion);
+}
+.btn-toggle:active, .btn-edit:active, .btn-add-contrato-list:active, .btn-delete:active,
+.btn-delete-componente:active, .btn-delete-contrato:active, .btn-delete-anexo:active, .btn-edit-contrato:active, .btn-view-anexo:active {
+    transform: translateY(1px);
 }
 
-.btn-toggle,
-.btn-edit,
-.btn-add-contrato-list,
-.btn-delete {
-    padding: 0.25rem 0.5rem;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    transition: all 0.2s ease;
-}
+.pagination-controls { display: flex; align-items: center; justify-content: center; gap: .75rem; padding: .6rem; font-size: .86rem; color: var(--gp-texto-2); border-top: 1px solid var(--gp-linea); }
+.pagination-controls button { width: 2rem; height: 2rem; font-family: var(--gp-fuente-datos); color: var(--gp-texto); background: var(--gp-superficie-2); border: 1px solid var(--gp-linea-fuerte); border-radius: 4px; }
+.pagination-controls button:disabled { color: var(--gp-texto-3); opacity: .5; cursor: not-allowed; }
+.pagination-controls button:not(:disabled):hover { border-color: var(--gp-azul-texto); color: var(--gp-azul-texto); }
 
-.btn-toggle.activate {
-    background: #e8f5e8;
-    color: #2e7d32;
-}
-
-.btn-toggle.deactivate {
-    background: #ffebee;
-    color: #c62828;
-}
-
-.btn-toggle:hover {
-    opacity: 0.8;
-}
-
-.btn-edit {
-    background: #e3f2fd;
-    color: #1976d2;
-}
-
-.btn-edit:hover {
-    background: #bbdefb;
-    animation: pulse 1s infinite;
-}
-
-.btn-add-contrato:hover {
-    background: #1976d2;
-    color: white;
-    animation: pulse 1s infinite;
-}
-
-.btn-delete {
-    background: #ffebee;
-    color: #f44336;
-}
-
-.btn-delete:hover {
-    background: #ffcdd2;
-    animation: pulse 1s infinite;
-}
-
-
-
-/* Modal */
+/* ---------- Ventanas ---------- */
 .modal-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    inset: 0;
+    z-index: 2000;
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
     padding: 1rem;
+    background: rgba(4, 9, 7, .72);
+    backdrop-filter: blur(3px);
+    animation: gp-aparecer .12s ease-out;
 }
-
-.modal-content {
-    background: white;
-    border-radius: 12px;
+.modal-content, .contratos-modal {
     width: 100%;
-    max-width: 1000px;
-    max-height: 90vh;
+    max-height: 92dvh;
     overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    background: var(--gp-superficie);
+    border: 1px solid var(--gp-linea-fuerte);
+    border-radius: var(--gp-radio-grande);
+    box-shadow: var(--gp-sombra);
+    animation: gp-caer .16s cubic-bezier(.2, .8, .2, 1);
 }
-
+.modal-content { max-width: 60rem; }
+.contratos-modal { max-width: 75rem; }
 .modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem;
-    border-bottom: 1px solid #e0e6ed;
-}
-
-.modal-header h2 {
-    color: #222b45;
-    font-size: 1.3rem;
-    font-weight: 600;
-    margin: 0;
-}
-
-.btn-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    color: #8f9bb3;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 50%;
-    transition: all 0.2s ease;
-}
-
-.btn-close:hover {
-    background: #f0f2f5;
-    color: #222b45;
-}
-
-.modal-form {
-    padding: 1.5rem;
-}
-
-/* Pestañas del modal */
-.modal-tabs {
-    display: flex;
-    border-bottom: 1px solid #e0e6ed;
-    margin-bottom: 1.5rem;
-}
-
-.modal-tab {
-    background: none;
-    border: none;
-    padding: 1rem 1.5rem;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: #8f9bb3;
-    transition: all 0.3s ease;
-    border-bottom: 3px solid transparent;
-}
-
-.modal-tab:hover {
-    color: #1976d2;
-    background: #f8f9fa;
-}
-
-.modal-tab.active {
-    color: #1976d2;
-    border-bottom-color: #1976d2;
-    background: #f8f9fa;
-}
-
-.form-group {
-    margin-bottom: 1.5rem;
-}
-
-.form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
     gap: 1rem;
+    padding: .9rem 1.25rem;
+    background: var(--gp-superficie);
+    border-bottom: 1px solid var(--gp-linea);
 }
+.modal-header h2 { font-size: 1.2rem; }
+.btn-close { display: grid; flex-shrink: 0; place-items: center; width: 2rem; height: 2rem; font-size: 1.3rem; line-height: 1; color: var(--gp-texto-2); background: none; border: 0; border-radius: 4px; }
+.btn-close:hover { color: var(--gp-texto); background: var(--gp-superficie-2); }
+.modal-form, .contratos-modal-body { padding: 1rem 1.25rem; }
 
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    color: #222b45;
-    font-weight: 500;
-    font-size: 0.9rem;
+.modal-tabs, .contrato-tabs { display: flex; gap: .2rem; margin-bottom: 1.1rem; overflow-x: auto; border-bottom: 1px solid var(--gp-linea); }
+.modal-tab, .contrato-tab {
+    padding: .55rem .8rem;
+    font-size: .88rem;
+    font-weight: 550;
+    white-space: nowrap;
+    color: var(--gp-texto-3);
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    transition: color .12s;
 }
+.modal-tab:hover, .contrato-tab:hover { color: var(--gp-texto); }
+.modal-tab.active, .contrato-tab.active { color: var(--gp-azul-texto); border-bottom-color: var(--gp-azul-texto); }
 
-.form-group input,
-.form-group select,
-.form-group textarea {
+/* ---------- Formularios ---------- */
+.form-group { margin-bottom: 1rem; min-width: 0; }
+.form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; }
+.form-group label { display: block; margin-bottom: .3rem; font-size: .84rem; font-weight: 550; color: var(--gp-texto-2); }
+.form-group input, .form-group select, .form-group textarea, .anexo-form input, .anexo-form select, .anexo-form textarea {
     width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #e0e6ed;
-    border-radius: 6px;
-    font-size: 1rem;
-    transition: all 0.2s ease;
-    box-sizing: border-box;
+    padding: .55rem .7rem;
+    font-size: .95rem;
+    background: var(--gp-fondo-2);
+    border: 1px solid var(--gp-linea-fuerte);
+    border-radius: var(--gp-radio);
+    transition: border-color .12s, box-shadow .12s;
 }
+.form-group input::placeholder, .form-group textarea::placeholder { color: var(--gp-texto-3); }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--gp-azul-texto); outline: none; box-shadow: 0 0 0 3px var(--gp-azul-suave); }
+.form-group input:disabled, .form-group select:disabled, .form-group textarea:disabled { color: var(--gp-texto-3); background: var(--gp-superficie-2); }
+.form-group textarea { min-height: 5rem; resize: vertical; }
+.form-group input[type='color'] { width: 3.75rem; height: 2.5rem; padding: .15rem; cursor: pointer; }
+.form-group input[type='checkbox'] { width: 1.1rem; height: 1.1rem; accent-color: var(--gp-azul); }
 
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-    outline: none;
-    border-color: #1976d2;
-    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
-}
-
-.form-group textarea {
-    resize: vertical;
-    min-height: 80px;
-}
-
-.form-group input[type="color"] {
-    width: 60px;
-    height: 40px;
-    padding: 0;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-}
-
-.form-group-checkbox label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-}
-
-.form-group-checkbox input[type="checkbox"] {
-    width: auto;
-}
+.anticipo-group { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.checkbox-label { display: flex !important; align-items: center; gap: .5rem; margin: 0 !important; white-space: nowrap; cursor: pointer; }
+.anticipo-porcentaje { display: flex; align-items: center; gap: .5rem; }
+.anticipo-porcentaje label { margin: 0; white-space: nowrap; }
+.anticipo-porcentaje input { width: 5rem; }
 
 .modal-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
     display: flex;
-    gap: 1rem;
+    gap: .6rem;
     justify-content: flex-end;
-    padding: 1rem;
-    border-top: 1px solid #e0e6ed;
+    padding: .75rem 1.25rem;
+    margin: 1rem -1.25rem -1rem;
+    background: var(--gp-superficie);
+    border-top: 1px solid var(--gp-linea);
 }
+.btn-cancel, .btn-save { display: inline-flex; align-items: center; gap: .4rem; padding: .55rem 1.1rem; font-size: .92rem; font-weight: 650; border-radius: var(--gp-radio); transition: background .12s; }
+.btn-cancel { color: var(--gp-texto); background: var(--gp-superficie-2); border: 1px solid var(--gp-linea-fuerte); }
+.btn-cancel:hover { background: var(--gp-superficie-3); }
+.btn-save { color: var(--gp-sobre-acento); background: var(--gp-ambar); border: 1px solid var(--gp-ambar); }
+.btn-save:hover:not(:disabled) { background: #F5B62E; }
+.btn-save:disabled { opacity: .5; cursor: not-allowed; }
 
-.btn-cancel,
-.btn-save {
-    padding: 0.75rem 1.5rem;
-    border: none;
-    border-radius: 6px;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
+/* Selector de icono */
+.icono-selector { display: flex; align-items: center; gap: 1rem; margin-bottom: .5rem; }
+.icono-actual { display: inline-grid; place-items: center; min-width: 3.2rem; min-height: 3.2rem; font-size: 1.8rem; background: var(--gp-fondo-2); border: 1px solid var(--gp-linea-fuerte); border-radius: var(--gp-radio); }
+.modal-header .icono-actual { min-width: 2.2rem; min-height: 2.2rem; margin-left: .4rem; font-size: 1.2rem; vertical-align: middle; }
+.btn-select-emoji { padding: .5rem 1rem; font-weight: 600; color: var(--gp-texto); background: var(--gp-superficie-2); border: 1px solid var(--gp-linea-fuerte); border-radius: var(--gp-radio); }
+.btn-select-emoji:hover { border-color: var(--gp-azul-texto); color: var(--gp-azul-texto); }
+.emoji-fondo { position: fixed; inset: 0; z-index: 2100; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(4, 9, 7, .72); }
+.emoji-ventana { width: min(38rem, 100%); overflow: hidden; background: var(--gp-superficie); border: 1px solid var(--gp-linea-fuerte); border-radius: var(--gp-radio-grande); }
+.emoji-ventana .EmojiPickerReact { --epr-bg-color: var(--gp-superficie); --epr-category-label-bg-color: var(--gp-superficie); border: 0 !important; border-radius: 0 !important; }
 
-.btn-cancel {
-    background: #f0f2f5;
-    color: #8f9bb3;
-}
+/* ---------- Presupuesto, financiación y ubicación ---------- */
+.presupuesto-modal-section, .fuentes-modal-section, .contratos-modal-section { padding-bottom: .5rem; }
+.presupuesto-modal-section h3, .fuentes-modal-section h3, .contratos-modal-section h3, .contratos-list-header h3, .contrato-form-header h3 { font-size: 1.1rem; }
+.presupuesto-info, .contratos-info, .mapa-ubicacion-instrucciones { margin: .25rem 0 1rem; font-size: .86rem; color: var(--gp-texto-3); }
+.componente-form, .fuentes-form, .contrato-form, .anexo-form { padding: 1rem; margin-bottom: 1rem; background: var(--gp-fondo-2); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
+.anexo-form h4, .anexos-list h4, .componentes-list h4, .contratos-list h4 { margin-bottom: .6rem; font-size: 1rem; }
 
-.btn-cancel:hover {
-    background: #e0e6ed;
-    color: #222b45;
-}
-
-.btn-save {
-    background: #1976d2;
-    color: white;
-}
-
-.btn-save:hover {
-    background: #1565c0;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .content-wrapper {
-        padding: 1rem;
-        padding-top: 5rem;
-    }
-    
-    .page-header h1 {
-        font-size: 1.5rem;
-    }
-    
-    .tabs-header {
-        flex-wrap: wrap;
-    }
-    
-    .tab-button {
-        padding: 0.75rem 1rem;
-        font-size: 0.8rem;
-    }
-    
-    .tab-content {
-        padding: 1rem;
-    }
-    
-    .config-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-    
-    .table-header {
-        flex-direction: column;
-        gap: 1rem;
-        align-items: stretch;
-    }
-    
-    .table-content {
-        overflow-x: auto;
-    }
-    
-    table {
-        min-width: 600px;
-    }
-    
-    th, td {
-        padding: 0.75rem 0.5rem;
-        font-size: 0.8rem;
-    }
-    
-    .action-buttons {
-        flex-direction: column;
-        gap: 0.25rem;
-    }
-    
-    .modal-content {
-        margin: 1rem;
-        max-height: calc(100vh - 2rem);
-    }
-    
-    .modal-actions {
-        flex-direction: column;
-    }
-    
-    .form-row {
-        grid-template-columns: 1fr;
-    }
-    
-    .resumen-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .resumen-card {
-        padding: 1rem;
-    }
-    
-    .resumen-total {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.5rem;
-    }
-    
-    .modal-tabs {
-        flex-direction: column;
-    }
-    
-    .modal-tab {
-        padding: 0.75rem 1rem;
-        font-size: 0.8rem;
-    }
-    
-    .componente-form {
-        padding: 1rem;
-    }
-    
-    .componentes-table {
-        overflow-x: auto;
-    }
-    
-    .componentes-table table {
-        min-width: 400px;
-    }
-    
-    .total-card {
-        flex-direction: column;
-        gap: 0.5rem;
-        text-align: center;
-    }
-}
-
-/* Controles de paginación */
-.pagination-controls {
-    display: flex;
-    justify-content: center;
+.btn-add-componente, .btn-add-contrato-header, .btn-add-first-contrato, .btn-add-anexo, .btn-calcular-avance {
+    display: inline-flex;
     align-items: center;
-    gap: 1rem;
-    margin: 1.5rem 0 0.5rem 0;
-    font-size: 1rem;
-}
-
-.pagination-controls button {
-    background: #1976d2;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 0.4rem 1rem;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.pagination-controls button:disabled {
-    background: #e0e6ed;
-    color: #8f9bb3;
-    cursor: not-allowed;
-}
-
-.pagination-controls button:not(:disabled):hover {
-    background: #1565c0;
-}
-
-.pagination-controls span {
-    color: #222b45;
-    font-weight: 500;
-    letter-spacing: 0.5px;
-}
-
-.search-input {
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    border: 1px solid #e0e6ed;
-    font-size: 1rem;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    outline: none;
-    background: #f8f9fa;
-    color: #222b45;
-}
-
-.search-input:focus {
-    outline: none;
-    border-color: #1976d2;
-    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
-}
-
-.anticipo-group{
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    flex-wrap: wrap; /* opcional para móviles */
-}
-
-.checkbox-label{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0;
-    white-space: nowrap;
-}
-
-.checkbox-label input[type="checkbox"]{
-    width: 18px;
-    height: 18px;
-    margin: 0;
-    flex-shrink: 0;
-}
-
-.anticipo-porcentaje{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.anticipo-porcentaje label{
-    margin: 0;
-    white-space: nowrap;
-}
-
-.anticipo-porcentaje input{
-    width: 80px;
-}
-
-/* Estilos para el modal de contratos */
-.contratos-modal {
-    background: white;
-    border-radius: 12px;
-    width: 100%;
-    max-width: 1200px;
-    max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-.contratos-modal-body {
-    padding: 1.5rem;
-}
-
-.contratos-modal-section {
-    margin-bottom: 2rem;
-}
-
-.contratos-modal-section h3 {
-    color: #222b45;
-    font-size: 1.3rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-}
-
-.contratos-info {
-    color: #8f9bb3;
-    font-size: 0.9rem;
-    margin-bottom: 1.5rem;
-    line-height: 1.4;
-}
-
-.contrato-form {
-    background: #f8f9fa;
-    padding: 1.5rem;
-    border-radius: 8px;
-    margin-bottom: 1.5rem;
-}
-
-.contratos-list {
-    background: white;
-    border: 1px solid #e0e6ed;
-    border-radius: 8px;
-    padding: 1.5rem;
-}
-
-.contratos-list h4 {
-    color: #222b45;
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-}
-
-.no-contratos {
-    color: #8f9bb3;
-    text-align: center;
-    font-style: italic;
-    padding: 2rem;
-}
-
-.contratos-table {
-    overflow-x: auto;
-}
-
-.contratos-table table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 1rem;
-}
-
-.contratos-table th {
-    background: #f8f9fa;
-    padding: 0.75rem;
-    text-align: left;
-    font-weight: 600;
-    color: #222b45;
-    border-bottom: 2px solid #e0e6ed;
-}
-
-.contratos-table td {
-    padding: 0.75rem;
-    border-bottom: 1px solid #e0e6ed;
-    vertical-align: middle;
-}
-
-.contratos-table tr:hover {
-    background: #f8f9fa;
-}
-
-.btn-delete-contrato {
-    background: #f44336;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 0.5rem;
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: background-color 0.3s ease;
-}
-
-.btn-delete-contrato:hover {
-    background: #d32f2f;
-}
-
-/* Responsive para el modal de contratos */
-@media (max-width: 768px) {
-    .contratos-modal {
-        width: 95vw;
-        max-height: 95vh;
-    }
-    
-    .contratos-modal-body {
-        padding: 1rem;
-    }
-    
-    .contrato-form {
-        padding: 1rem;
-    }
-    
-    .contratos-table {
-        font-size: 0.9rem;
-    }
-    
-    .contratos-table th,
-    .contratos-table td {
-        padding: 0.5rem;
-    }
-}
-
-/* Estilos para las nuevas funcionalidades del modal de contratos */
-.contratos-list-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid #e0e6ed;
-}
-
-.contratos-list-header h3 {
-    color: #222b45;
-    font-size: 1.3rem;
-    font-weight: 600;
-    margin: 0;
-}
-
-.btn-add-contrato-header {
-    background: #1976d2;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 0.75rem 1.5rem;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.btn-add-contrato-header:hover {
-    background: #1565c0;
-}
-
-.no-contratos-container {
-    text-align: center;
-    padding: 3rem 1rem;
-}
-
-.btn-add-first-contrato {
-    background: #4caf50;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 1rem 2rem;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 1rem auto 0;
-}
-
-.btn-add-first-contrato:hover {
-    background: #45a049;
-}
-
-.contrato-actions {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: center;
-}
-
-.btn-edit-contrato {
-    background: #ff9800;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 0.5rem;
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: background-color 0.3s ease;
-}
-
-.btn-edit-contrato:hover {
-    background: #f57c00;
-}
-
-.contrato-form-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid #e0e6ed;
-}
-
-.contrato-form-header h3 {
-    color: #222b45;
-    font-size: 1.3rem;
-    font-weight: 600;
-    margin: 0;
-}
-
-.btn-back-to-list {
-    background: #757575;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 0.5rem 1rem;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.btn-back-to-list:hover {
-    background: #616161;
-}
-
-/* Estilos para las pestañas del formulario de contrato */
-.contrato-tabs {
-    display: flex;
-    background: #f8f9fa;
-    border-bottom: 1px solid #e0e6ed;
-    margin-bottom: 1rem;
-}
-
-.contrato-tab {
-    background: none;
-    border: none;
-    padding: 1rem 1.5rem;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: #8f9bb3;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    white-space: nowrap;
-    border-bottom: 3px solid transparent;
-}
-
-.contrato-tab:hover {
-    color: #1976d2;
-    background: #e3f2fd;
-}
-
-.contrato-tab.active {
-    color: #1976d2;
-    background: white;
-    border-bottom-color: #1976d2;
-}
-
-/* Estilos para el formulario de anexos */
-.anexo-form {
-    background: #f8f9fa;
-    padding: 1.5rem;
-    border-radius: 8px;
-    margin-bottom: 2rem;
-}
-
-.anexo-form h4 {
-    color: #222b45;
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-}
-
-.btn-add-anexo {
-    background: #4caf50;
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: all 0.3s ease;
-    margin-top: 1.5rem;
-}
-
-.btn-add-anexo:hover:not(:disabled) {
-    background: #45a049;
-    transform: translateY(-1px);
-}
-
-.btn-add-anexo:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-    transform: none;
-}
-
-/* Estilos para la lista de anexos */
-.anexos-list {
-    margin-top: 2rem;
-}
-
-.anexos-list h4 {
-    color: #222b45;
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-}
-
-.no-anexos {
-    text-align: center;
-    padding: 2rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-    border: 2px dashed #dee2e6;
-}
-
-.no-anexos p {
-    color: #8f9bb3;
-    font-size: 1rem;
-    margin: 0;
-}
-
-.anexos-table {
-    background: white;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.anexos-table table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.anexos-table th {
-    background: #f8f9fa;
-    padding: 1rem;
-    text-align: left;
-    font-weight: 600;
-    color: #222b45;
-    border-bottom: 1px solid #e0e6ed;
-}
-
-.anexos-table td {
-    padding: 1rem;
-    border-bottom: 1px solid #f0f0f0;
-    color: #4a5568;
-}
-
-.anexos-table tr:hover {
-    background: #f8f9fa;
-}
-
-.btn-delete-anexo {
-    background: #f44336;
-    color: white;
-    border: none;
-    padding: 0.5rem;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    transition: all 0.3s ease;
-}
-
-.btn-delete-anexo:hover {
-    background: #d32f2f;
-    transform: scale(1.05);
-}
-
-.anexo-actions {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: center;
-}
-
-.btn-view-anexo {
-    background: #2196f3;
-    color: white;
-    border: none;
-    padding: 0.5rem;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    transition: all 0.3s ease;
-}
-
-.btn-view-anexo:hover {
-    background: #1976d2;
-    transform: scale(1.05);
-}
-
-/* Estilo para el contador de anexos en la tabla */
-.anexos-count {
-    background: #e3f2fd;
-    color: #1976d2;
-    padding: 0.25rem 0.5rem;
-    border-radius: 12px;
-    font-size: 0.8rem;
-    font-weight: 500;
-}
-
-/* Responsive para las pestañas de contrato */
-@media (max-width: 768px) {
-    .contrato-tabs {
-        flex-direction: column;
-    }
-    
-    .contrato-tab {
-        border-bottom: 1px solid #e0e6ed;
-        border-right: none;
-    }
-    
-    .anexo-form .form-row {
-        flex-direction: column;
-    }
-    
-    .anexos-table {
-        overflow-x: auto;
-    }
-    
-    .anexos-table table {
-        min-width: 600px;
-    }
-}
-
-.btn-calcular-avance{
-    background: #1976d2;
-    color: white;
-    border: none;
-    padding: 0.5rem;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
-}
-
-.avance-fisico-container{
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.btn-calcular-avance:disabled{
-    background: #ccc;
-    cursor: not-allowed;
-    color: #666;
-    border: 1px solid #ccc;
-    padding: 0.5rem;
-    border-radius: 4px;
-    font-size: 0.8rem;
-    font-weight: 500;
-    cursor: not-allowed;
-    transition: all 0.2s ease;
-    opacity: 0.7;
-}
-
-.mapa-ubicacion-instrucciones {
-    color: #6c757d;
-    font-size: 0.9rem;
-    margin-bottom: 0.75rem;
-}
-
-.mapa-ubicacion-container {
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid #ddd;
-    margin-bottom: 0.75rem;
-}
-
-.mapa-ubicacion-info {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.btn-limpiar-puntos {
-    padding: 0.5rem 1rem;
-    border: 1px solid #f44336;
-    background: #fff;
-    color: #f44336;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    font-weight: 500;
-}
-
-.btn-limpiar-puntos:hover {
-    background: #f44336;
-    color: #fff;
-}
-
-.avance-fisico-resumen {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 1rem;
-    padding: 1rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-    font-weight: 600;
-}
-
-.avance-fisico-suma-pesos {
-    color: #43a047;
-}
-
-.avance-fisico-suma-pesos.advertencia {
-    color: #e53935;
-}
-
-.avance-fisico-total {
-    color: #1976d2;
-    font-size: 1.1rem;
+    gap: .4rem;
+    padding: .5rem 1rem;
+    font-size: .88rem;
+    font-weight: 650;
+    color: var(--gp-sobre-acento);
+    background: var(--gp-ambar);
+    border: 0;
+    border-radius: var(--gp-radio);
+}
+.btn-add-componente:hover:not(:disabled), .btn-add-contrato-header:hover, .btn-add-first-contrato:hover, .btn-add-anexo:hover:not(:disabled), .btn-calcular-avance:hover:not(:disabled) { background: #F5B62E; }
+.btn-add-componente:disabled, .btn-add-anexo:disabled, .btn-calcular-avance:disabled { color: var(--gp-texto-3); background: var(--gp-superficie-3); cursor: not-allowed; }
+.btn-add-first-contrato { margin: 1rem auto 0; }
+.btn-back-to-list { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .9rem; font-size: .86rem; font-weight: 600; color: var(--gp-texto); background: var(--gp-superficie-2); border: 1px solid var(--gp-linea-fuerte); border-radius: var(--gp-radio); }
+
+.componentes-list, .anexos-list { margin-bottom: 1rem; }
+.componentes-table, .contratos-table, .anexos-table { overflow-x: auto; background: var(--gp-superficie); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
+.contratos-list { padding: 1rem; background: var(--gp-fondo-2); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
+.no-componentes, .no-contratos, .no-anexos { padding: 1.5rem; font-size: .9rem; text-align: center; color: var(--gp-texto-3); border: 1px dashed var(--gp-linea-fuerte); border-radius: var(--gp-radio); }
+.no-contratos-container { padding: 2rem 1rem; text-align: center; }
+
+.contrato-actions, .anexo-actions { display: flex; gap: .3rem; }
+.anexos-count { padding: .08rem .45rem; font-size: .74rem; font-weight: 600; color: var(--gp-azul-texto); background: var(--gp-azul-suave); border-radius: 10px; }
+
+.contratos-list-header, .contrato-form-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem; padding-bottom: .75rem; margin-bottom: 1rem; border-bottom: 1px solid var(--gp-linea); }
+
+.presupuesto-total { margin-top: 1rem; }
+.total-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem 1rem; padding: .9rem 1.1rem; background: var(--gp-azul-suave); border: 1px solid rgba(1, 142, 178, .6); border-radius: var(--gp-radio); }
+.total-label { font-size: .9rem; font-weight: 600; color: var(--gp-texto-2); }
+.total-amount { font-family: var(--gp-fuente-datos); font-size: 1.35rem; font-weight: 700; color: var(--gp-azul-texto); }
+
+.avance-fisico-container { display: flex; align-items: center; gap: .5rem; }
+.avance-fisico-resumen { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem 1rem; padding: .75rem 1rem; margin-top: 1rem; font-weight: 600; background: var(--gp-fondo-2); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
+.avance-fisico-suma-pesos { color: var(--gp-verde-texto); }
+.avance-fisico-suma-pesos.advertencia, .texto-alerta { font-weight: 700; color: var(--gp-coral); }
+.avance-fisico-total { font-family: var(--gp-fuente-datos); color: var(--gp-azul-texto); }
+
+.mapa-ubicacion-container { margin-bottom: .75rem; overflow: hidden; border: 1px solid var(--gp-linea-fuerte); border-radius: var(--gp-radio); }
+.mapa-ubicacion-info { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; font-size: .88rem; color: var(--gp-texto-2); }
+.btn-limpiar-puntos { padding: .4rem .85rem; font-size: .84rem; font-weight: 600; color: var(--gp-coral); background: transparent; border: 1px solid rgba(255, 122, 92, .55); border-radius: 4px; }
+.btn-limpiar-puntos:hover { background: var(--gp-coral-suave); }
+
+/* Con la tabla justa, los botones bajan de línea: "Eliminar" no debe quedar oculto tras el desplazamiento lateral. */
+@media (max-width: 1439px) {
+    .action-buttons { flex-wrap: wrap; }
+}
+
+/* ---------- Celular ---------- */
+@media (max-width: 720px) {
+    .table-acciones { justify-content: stretch; }
+    .search-input { max-width: none; }
+
+    /* Cada registro como tarjeta: sin desplazamiento lateral y con botones al alcance */
+    .table-content { overflow: visible; background: none; border: 0; }
+    .table-content > table thead { display: none; }
+    .table-content > table, .table-content > table tbody { display: block; }
+    .table-content > table tr { display: block; padding: .7rem .85rem; margin-bottom: .6rem; background: var(--gp-superficie); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
+    .table-content > table td { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .18rem 0; text-align: right; border: 0; }
+    .table-content > table td[data-etiqueta]::before { flex-shrink: 0; font-family: var(--gp-fuente-datos); font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: var(--gp-texto-3); content: attr(data-etiqueta); }
+    .table-content > table td:first-child { padding-bottom: .35rem; font-size: 1rem; text-align: left; }
+    .table-content > table td:first-child::before { display: none; }
+    .table-content .celda-acciones { display: block; padding-top: .55rem; }
+    .table-content .action-buttons { flex-wrap: wrap; gap: .4rem; }
+    .table-content .action-buttons button { flex: 1 1 calc(50% - .4rem); justify-content: center; padding-block: .5rem; font-size: .84rem; }
+    .pagination-controls { border-top: 0; }
+
+    .modal-overlay { align-items: flex-end; padding: 0; }
+    .modal-content, .contratos-modal { max-height: 94dvh; border-radius: 14px 14px 0 0; }
+    .form-row { grid-template-columns: minmax(0, 1fr); }
+    .modal-actions .btn-cancel, .modal-actions .btn-save { flex: 1; justify-content: center; }
 }

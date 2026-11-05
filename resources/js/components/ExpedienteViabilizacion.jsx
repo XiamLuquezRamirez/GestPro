@@ -5,7 +5,6 @@ import * as XLSX from 'xlsx';
 import { faArrowLeft, faCheck, faFileExcel, faPlus, faPrint, faSliders, faStamp, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
-import Header from './Header';
 import ExpedienteChecklist from './ExpedienteChecklist';
 import ExpedienteConfiguracion from './ExpedienteConfiguracion';
 import {
@@ -25,7 +24,7 @@ const ESPERA_RECALCULO_MS = 350;
 
 const avisarError = (titulo, error) => Swal.fire({ icon: 'error', title: titulo, text: mensajeError(error) });
 
-const ExpedienteViabilizacion = ({ user, onLogout }) => {
+const ExpedienteViabilizacion = ({ user }) => {
     const { proyectoId } = useParams();
     const [searchParams, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
@@ -284,7 +283,6 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
     if (errorCarga) {
         return (
             <div className="exv-pagina">
-                <Header user={user} onLogout={onLogout} />
                 <div className="exv-contenido">
                     <div className="exv-vacio">
                         <b>No se pudo abrir el expediente</b>
@@ -307,8 +305,6 @@ const ExpedienteViabilizacion = ({ user, onLogout }) => {
 
     return (
         <div className="exv-pagina">
-            <Header user={user} onLogout={onLogout} />
-
             <div className="exv-contenido">
                 {!cargado ? (
                     <div className="exv-vacio">Cargando expediente…</div>

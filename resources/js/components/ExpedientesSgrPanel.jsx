@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import '../../css/ExpedientesSgrPanel.css';
 import { faseLegible } from '../utils/expedienteChecklist';
 import { ESTADO, construirFilas, contarPorEstado, filtrarFilas, rutaExpediente } from '../utils/expedientesResumen';
+import { filasEnSala } from '../utils/tablero';
 
 const ETIQUETA_ESTADO = {
     [ESTADO.SIN_CONFIGURAR]: 'Sin configurar',
@@ -19,14 +20,14 @@ const FilaExpediente = ({ fila }) => {
 
     return (
         <tr>
-            <td>
+            <td data-etiqueta="Proyecto">
                 <div className="exs-proyecto">{fila.nombre}</div>
                 <div className="exs-secundario">{fila.municipio} · {fila.faseProyecto}</div>
             </td>
-            <td>
+            <td data-etiqueta="Estado">
                 <span className={`exs-estado exs-estado-${fila.estado}`}>{ETIQUETA_ESTADO[fila.estado]}</span>
             </td>
-            <td>
+            <td data-etiqueta="Expediente">
                 {tieneExpediente ? (
                     <>
                         <div>#{fila.expedienteId}{medible && ` · Fase ${faseLegible(fila.faseSgr)}`}</div>
@@ -34,31 +35,28 @@ const FilaExpediente = ({ fila }) => {
                     </>
                 ) : '—'}
             </td>
-            <td className="exs-col-avance">
+            <td data-etiqueta="Cumplidos" className="exs-col-avance">
                 {medible ? (
                     <>
                         <div className="exs-avance-texto">
                             <span>{fila.cumplidos} de {fila.total}</span>
                             <strong>{fila.porcentaje}%</strong>
                         </div>
-                        <div
-                            className="exs-pista"
+                        <span
+                            className="tb-pista"
                             role="progressbar"
                             aria-valuenow={fila.porcentaje}
                             aria-valuemin={0}
                             aria-valuemax={100}
                             aria-label={`Requisitos cumplidos de ${fila.nombre}`}
                         >
-                            <div
-                                className={`exs-relleno${fila.porcentaje === 100 ? ' completo' : ''}`}
-                                style={{ width: `${fila.porcentaje}%` }}
-                            />
-                        </div>
+                            <span style={{ width: `${fila.porcentaje}%`, background: fila.porcentaje === 100 ? 'var(--gp-verde)' : undefined }} />
+                        </span>
                     </>
                 ) : '—'}
             </td>
-            <td className="exs-col-numero">{medible ? fila.pendientes : '—'}</td>
-            <td>{fila.estado === ESTADO.RADICADO ? fecha(fila.fechaRadicado) : fecha(fila.actualizado)}</td>
+            <td data-etiqueta="Pendientes" className="numero">{medible ? fila.pendientes : '—'}</td>
+            <td data-etiqueta="Actualizado">{fila.estado === ESTADO.RADICADO ? fecha(fila.fechaRadicado) : fecha(fila.actualizado)}</td>
             <td className="exs-col-accion">
                 <Link className="exs-abrir" to={rutaExpediente(fila)}>Abrir</Link>
             </td>
@@ -66,7 +64,7 @@ const FilaExpediente = ({ fila }) => {
     );
 };
 
-const ExpedientesSgrPanel = ({ proyectos, resumenes, error, onReintentar }) => {
+const ExpedientesSgrPanel = ({ proyectos, resumenes, error, onReintentar, compacto = false }) => {
     const [estado, setEstado] = useState('todos');
     const [texto, setTexto] = useState('');
 
@@ -78,7 +76,7 @@ const ExpedientesSgrPanel = ({ proyectos, resumenes, error, onReintentar }) => {
         return (
             <div className="exs-panel exs-mensaje" role="alert">
                 <p>No se pudo cargar el seguimiento de expedientes. {error}</p>
-                <button type="button" className="exs-reintentar" onClick={onReintentar}>Reintentar</button>
+                <button type="button" className="gp-boton exs-reintentar" onClick={onReintentar}>Reintentar</button>
             </div>
         );
     }
@@ -90,6 +88,12 @@ const ExpedientesSgrPanel = ({ proyectos, resumenes, error, onReintentar }) => {
     if (filas.length === 0) {
         return <div className="exs-panel exs-mensaje"><p>No hay proyectos registrados.</p></div>;
     }
+
+    // En la sala importan los proyectos en seguimiento, no los que aún no tienen expediente.
+    const enSeguimiento = compacto ? visibles.filter((f) => f.expedienteId !== null) : visibles;
+    // Se muestran las filas que caben, y el título dice cuántas quedan fuera.
+    const filasTabla = compacto ? enSeguimiento.slice(0, filasEnSala(window.innerHeight, window.innerWidth)) : visibles;
+    const filasOcultas = enSeguimiento.length - filasTabla.length;
 
     const opciones = [
         { valor: 'todos', etiqueta: 'Proyectos', cantidad: conteos.todos },
@@ -113,6 +117,7 @@ const ExpedientesSgrPanel = ({ proyectos, resumenes, error, onReintentar }) => {
                         type="button"
                         className={`exs-tarjeta${estado === o.valor ? ' activa' : ''}`}
                         aria-pressed={estado === o.valor}
+                        disabled={compacto}
                         onClick={() => setEstado(o.valor)}
                     >
                         <span className="exs-tarjeta-etiqueta">{o.etiqueta}</span>
@@ -124,38 +129,41 @@ const ExpedientesSgrPanel = ({ proyectos, resumenes, error, onReintentar }) => {
 
             <div className="exs-tabla-marco">
                 <div className="exs-tabla-encabezado">
-                    <h3>Seguimiento por proyecto</h3>
-                    <input
+                    <h3>
+                        Seguimiento por proyecto
+                        {filasOcultas > 0 && <span className="exs-secundario"> · mostrando {filasTabla.length} de {enSeguimiento.length}</span>}
+                    </h3>
+                    {!compacto && <input
                         type="search"
                         className="exs-buscar"
                         placeholder="Buscar proyecto o municipio"
                         aria-label="Buscar proyecto o municipio"
                         value={texto}
                         onChange={(e) => setTexto(e.target.value)}
-                    />
+                    />}
                 </div>
 
-                {visibles.length === 0 ? (
+                {filasTabla.length === 0 ? (
                     <p className="exs-sin-resultados">Ningún proyecto coincide con el filtro.</p>
                 ) : (
-                    <div className="exs-tabla-scroll">
-                        <table className="exs-tabla">
+                    <>
+                        <table className="tb-tabla tb-tabla-cartas exs-tabla">
                             <thead>
                                 <tr>
                                     <th>Proyecto</th>
                                     <th>Estado</th>
                                     <th>Expediente</th>
                                     <th>Requisitos cumplidos</th>
-                                    <th className="exs-col-numero">Pendientes</th>
+                                    <th className="numero">Pendientes</th>
                                     <th>Actualizado</th>
                                     <th aria-label="Acciones" />
                                 </tr>
                             </thead>
                             <tbody>
-                                {visibles.map((fila) => <FilaExpediente key={fila.proyectoId} fila={fila} />)}
+                                {filasTabla.map((fila) => <FilaExpediente key={fila.proyectoId} fila={fila} />)}
                             </tbody>
                         </table>
-                    </div>
+                    </>
                 )}
             </div>
         </div>

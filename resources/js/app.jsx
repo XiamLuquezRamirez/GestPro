@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
-import Navigation from './components/Navigation';
+import AppShell from './components/AppShell';
 import Dashboard from './components/Dashboard';
 import Parametros from './components/Parametros';
 import ExpedienteViabilizacion from './components/ExpedienteViabilizacion';
 import axios from './axios';
 import '../css/app.css';
+
+const INICIO = '/dashboard';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -18,13 +20,12 @@ function App() {
   const fetchUser = async () => {
     try {
       const token = getToken();
-    
+
       if (!token) {
         // No hay token, usuario no autenticado (normal)
         setUser(null);
         return;
       }
-   
 
       const res = await axios.get('/user');
       setUser(res.data);
@@ -36,7 +37,6 @@ function App() {
     } finally {
       setLoading(false);
     }
-    
   };
 
   useEffect(() => {
@@ -48,32 +48,27 @@ function App() {
     setUser(null);
   };
 
-  if (loading) return <div>Cargando...</div>;
+  if (loading) return <div className="gp-vacio" role="status">Cargando…</div>;
+
+  const privada = (elemento) => (user ? elemento : <Navigate to="/" />);
 
   return (
     <Router basename={window.__ROUTER_BASE__ || ''}>
       <Routes>
-        <Route
-          path="/"
-          element={user ? <Navigate to="/navigation" /> : <Login onLogin={setUser} />}
-        />
-        <Route
-          path="/navigation"
-          element={user ? <Navigation user={user} onLogout={logout} /> : <Navigate to="/" />}
-        />
-        <Route
-          path="/dashboard"
-          element={user ? <Dashboard user={user} onLogout={logout} /> : <Navigate to="/" />}
-        />
-        <Route
-          path="/parametros"
-          element={user ? <Parametros user={user} onLogout={logout} /> : <Navigate to="/" />}
-        />
-        {/* No usar /expedientes/...: bajo /GestPro chocaría con la API del mismo nombre. */}
-        <Route
-          path="/viabilizacion/:proyectoId"
-          element={user ? <ExpedienteViabilizacion user={user} onLogout={logout} /> : <Navigate to="/" />}
-        />
+        <Route path="/" element={user ? <Navigate to={INICIO} /> : <Login onLogin={setUser} />} />
+
+        {/* El modo sala ocupa toda la pantalla: va fuera del armazón con menú. */}
+        <Route path="/sala" element={privada(<Dashboard sala />)} />
+
+        <Route element={privada(<AppShell user={user} onLogout={logout} />)}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/parametros" element={<Navigate to="/parametros/proyectos" replace />} />
+          <Route path="/parametros/:seccion" element={<Parametros />} />
+          {/* No usar /expedientes/...: bajo /GestPro chocaría con la API del mismo nombre. */}
+          <Route path="/viabilizacion/:proyectoId" element={<ExpedienteViabilizacion user={user} />} />
+        </Route>
+
+        <Route path="*" element={<Navigate to={user ? INICIO : '/'} replace />} />
       </Routes>
     </Router>
   );

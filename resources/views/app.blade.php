@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
 @php
     // El subdirectorio real bajo el que viven los archivos ESTÁTICOS compilados
@@ -34,7 +34,16 @@
     $routerBase = str_starts_with($rutaActual, '/GestPro') ? '/GestPro' : '';
 @endphp
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#07161D">
     <title>GestPro - Sistema de Gestión de Proyectos</title>
+    {{-- Fuentes locales: la pantalla de sala debe verse bien aunque la red no tenga internet. --}}
+    <style>
+        @font-face { font-family: 'Bricolage Grotesque'; src: url('{{ $base }}/fonts/bricolage-grotesque.woff2') format('woff2'); font-weight: 200 800; font-display: swap; }
+        @font-face { font-family: 'Hanken Grotesk'; src: url('{{ $base }}/fonts/hanken-grotesk.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+        @font-face { font-family: 'JetBrains Mono'; src: url('{{ $base }}/fonts/jetbrains-mono.woff2') format('woff2'); font-weight: 100 800; font-display: swap; }
+        html { background: #07161D; }
+    </style>
     <link rel="preload" href="{{ $base . mix('css/app.css') }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="{{ $base . mix('css/app.css') }}"></noscript>
     <link rel="icon" href="{{ asset('favicon.ico') }}">

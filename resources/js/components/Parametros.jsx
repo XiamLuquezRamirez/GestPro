@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Header from './Header';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import axios from '../axios';
-import { faPlus, faTrash, faSave, faTimes, faCalculator, faFile, faInfo, faEdit, faClipboardCheck } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faTrash, faSave, faTimes, faCalculator, faFile, faInfo, faEdit, faClipboardCheck, faEye } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
 import EmojiPicker from 'emoji-picker-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../leafletIconFix';
+import '../../css/Parametros.css';
+import { seccionDesdeSlug } from '../utils/navegacion';
 
 // Componente auxiliar: escucha clics en el mapa y reporta la coordenada al padre.
 // Debe vivir dentro de <MapContainer> — el hook useMapEvents solo funciona ahí.
@@ -21,9 +22,12 @@ const CapturadorClicMapa = ({ onAgregarPunto }) => {
     return null;
 };
 
-const Parametros = ({ user, onLogout }) => {
+const Parametros = () => {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState('proyectos');
+    // La sección vive en la URL: se puede enlazar, recargar y volver con el navegador.
+    const { seccion: slugSeccion } = useParams();
+    const seccion = seccionDesdeSlug(slugSeccion);
+    const activeTab = seccion?.tab;
     const [showModal, setShowModal] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
     const [modalType, setModalType] = useState('');
@@ -916,17 +920,6 @@ const Parametros = ({ user, onLogout }) => {
         }
     };
 
-    const tabs = [
-        { id: 'proyectos', label: 'Gestionar Proyectos', icon: '📋' },
-        { id: 'eventos-calendario', label: 'Gestionar Eventos', icon: '📅' },
-        { id: 'municipios', label: 'Municipios', icon: '🏘️' },
-        { id: 'estados', label: 'Estados', icon: '📊' },
-        { id: 'fases', label: 'Fases', icon: '🔄' },
-        { id: 'eventos', label: 'Tipos de Eventos', icon: '📅' },
-        { id: 'prioridades', label: 'Prioridades', icon: '🎯' },
-        { id: 'responsables', label: 'Responsables', icon: '👥' },
-        { id: 'entidades', label: 'Entidades', icon: '🏢' }
-    ];
 
     const handleEmojiClick = (emojiData) => {
         setFormData(prev => ({
@@ -1592,7 +1585,7 @@ const Parametros = ({ user, onLogout }) => {
     const renderTable = (data, type) => {
         // Paginación
         const [currentPage, setCurrentPage] = useState(1);
-        const itemsPerPage = 5;
+        const itemsPerPage = 10;
         // Filtro de búsqueda
         const filteredData = data.filter(item => {
             const value = (item.nombre || item.titulo || "").toLowerCase();
@@ -1608,15 +1601,15 @@ const Parametros = ({ user, onLogout }) => {
         return (
             <div className="table-container">
                 <div className="table-header">
-                    <h3>{tabs.find(tab => tab.id === type)?.label}</h3>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <span className="tb-contador">{filteredData.length} {filteredData.length === 1 ? 'registro' : 'registros'}</span>
+                    <div className="table-acciones">
                         <input
                             type="text"
                             className="search-input"
-                            placeholder="Buscar..."
+                            placeholder={`Buscar en ${seccion.titulo.toLowerCase()}…`}
+                            aria-label={`Buscar en ${seccion.titulo.toLowerCase()}`}
                             value={searchText}
                             onChange={e => setSearchText(e.target.value)}
-                            style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #e0e6ed', fontSize: '1rem' }}
                         />
                         <button onClick={() => handleAddNew(type)} className="btn-add">
                             <span>+</span> Agregar
@@ -1648,45 +1641,45 @@ const Parametros = ({ user, onLogout }) => {
                         <tbody>
                             {paginatedData.map(item => (
                                 <tr key={item.id}>
-                                    <td>{item.nombre || item.titulo}</td>
-                                    {type === 'municipios' && <td>{item.departamento}</td>}
-                                    {type === 'responsables' && <td>{item.email}</td>}
-                                    {type === 'responsables' && <td>{item.cargo}</td>}
+                                    <td data-etiqueta="Nombre">{item.nombre || item.titulo}</td>
+                                    {type === 'municipios' && <td data-etiqueta="Departamento">{item.departamento}</td>}
+                                    {type === 'responsables' && <td data-etiqueta="Email">{item.email}</td>}
+                                    {type === 'responsables' && <td data-etiqueta="Cargo">{item.cargo}</td>}
                                     {(type === 'estados' || type === 'fases' || type === 'prioridades') && (
-                                        <td>
+                                        <td data-etiqueta="Color">
                                             <div className="color-preview" style={{ backgroundColor: item.color }}></div>
                                         </td>
                                     )}
-                                    {type === 'tiposEventos' && <td>{item.icono}</td>}
-                                    {type === 'proyectos' && <td>{item.descripcion_municipio}</td>}
-                                    {type === 'proyectos' && <td>{formatCurrency(item.presupuesto)}</td>}
+                                    {type === 'tiposEventos' && <td data-etiqueta="Icono">{item.icono}</td>}
+                                    {type === 'proyectos' && <td data-etiqueta="Municipio">{item.descripcion_municipio}</td>}
+                                    {type === 'proyectos' && <td data-etiqueta="Presupuesto" className="numero">{formatCurrency(item.presupuesto)}</td>}
                                     {type === 'proyectos' && (
-                                        <td>
+                                        <td data-etiqueta="Estado">
                                             <span className="status-badge" style={{ backgroundColor: item.color_estado, color: 'white' }}>
                                                 {item.descripcion_estado}
                                             </span>
                                         </td>
                                     )}
                                     {type === 'proyectos' && (
-                                        <td>
+                                        <td data-etiqueta="Fase">
                                             <span className="status-badge" style={{ backgroundColor: item.color_fase, color: 'white' }}>
                                                 {item.descripcion_fase}
                                             </span>
                                         </td>
                                     )}
-                                    {type === 'eventos' && <td>{formatDate(item.fecha)}</td>}
-                                    {type === 'eventos' && <td>{item.descripcion_tipo_evento}</td>}
+                                    {type === 'eventos' && <td data-etiqueta="Fecha">{formatDate(item.fecha)}</td>}
+                                    {type === 'eventos' && <td data-etiqueta="Tipo">{item.descripcion_tipo_evento}</td>}
                                     {type === 'eventos' && (
-                                        <td>
+                                        <td data-etiqueta="Prioridad">
                                             <span className="status-badge" style={{ backgroundColor: getPrioridadColor(item.descripcion_prioridad), color: 'white' }}>
                                                 {item.descripcion_prioridad.split(' ')[1].toUpperCase()}
                                             </span>
                                         </td>
                                     )}
-                                    {type === 'eventos' && <td>{item.descripcion_proyecto}</td>}
-                                    {type === 'eventos' && <td>{item.descripcion_responsable}</td>}
+                                    {type === 'eventos' && <td data-etiqueta="Proyecto">{item.descripcion_proyecto}</td>}
+                                    {type === 'eventos' && <td data-etiqueta="Responsable">{item.descripcion_responsable}</td>}
 
-                                    <td>
+                                    <td className="celda-acciones">
                                         <div className="action-buttons">
                                             {type !== 'proyectos' && type !== 'eventos' && (
                                                 <button
@@ -1718,7 +1711,7 @@ const Parametros = ({ user, onLogout }) => {
                                             {type === 'proyectos' && (
                                                 <button
                                                     onClick={() => navigate(`/viabilizacion/${item.id}`)}
-                                                    className="btn-add-contrato-list"
+                                                    className="btn-add-contrato-list btn-expediente"
                                                     title="Expediente de viabilización SGR"
                                                 >
                                                     <FontAwesomeIcon icon={faClipboardCheck} /> Expediente SGR
@@ -1748,9 +1741,9 @@ const Parametros = ({ user, onLogout }) => {
                     {/* Controles de paginación */}
                     {totalPages > 1 && (
                         <div className="pagination-controls">
-                            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>&lt;</button>
+                            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} aria-label="Página anterior">&lt;</button>
                             <span>Página {currentPage} de {totalPages}</span>
-                            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>&gt;</button>
+                            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} aria-label="Página siguiente">&gt;</button>
                         </div>
                     )}
                 </div>
@@ -1761,56 +1754,17 @@ const Parametros = ({ user, onLogout }) => {
     const openEmojiModal = () => setShowEmojiModal(true);
     const closeEmojiModal = () => setShowEmojiModal(false);
 
+    if (!seccion) return <Navigate to="/parametros/proyectos" replace />;
+
     return (
         <div className="parametros-container">
-            <Header user={user} onLogout={onLogout} />
+            <header className="gp-cabecera">
+                <span className="gp-etiqueta">{seccion.grupo}</span>
+                <h1>{seccion.titulo}</h1>
+                <p>{seccion.descripcion}</p>
+            </header>
 
-            <div className="content-wrapper">
-                <div className="page-header">
-                    <h1>Gestión de Parámetros</h1>
-                    <p>Configure los parámetros del sistema</p>
-                </div>
-
-                <div className="tabs-container">
-                    <div className="tabs-header">
-                        {tabs.map(tab => (
-                            <button
-                                key={tab.id}
-                                className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
-                                onClick={() => setActiveTab(tab.id)}
-                            >
-                                <span className="tab-icon">{tab.icon}</span>
-                                {tab.label}
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="tab-content">
-                        {activeTab === 'general' && (
-                            <div className="general-config">
-                                <h2>Configuración General del Sistema</h2>
-                                <div className="config-grid">
-                                    <div className="config-card">
-                                        <h3>Información del Sistema</h3>
-                                        <p><strong>Versión:</strong> 1.0.0</p>
-                                        <p><strong>Última actualización:</strong> {new Date().toLocaleDateString()}</p>
-                                        <p><strong>Total de parámetros:</strong> {
-                                            Object.values(parametros).reduce((total, array) => total + array.length, 0)
-                                        }</p>
-                                    </div>
-                                    <div className="config-card">
-                                        <h3>Estadísticas</h3>
-                                        <p><strong>Municipios activos:</strong> {municipios.filter(m => m.activo).length}</p>
-                                        <p><strong>Estados configurados:</strong> {estados.filter(e => e.activo).length}</p>
-                                        <p><strong>Responsables activos:</strong> {responsables.filter(r => r.activo).length}</p>
-                                        <p><strong>Proyectos activos:</strong> {proyectos.length}</p>
-                                        <p><strong>Eventos pendientes:</strong> {eventos.filter(e => e.estado === 'pendiente').length}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {activeTab === 'proyectos' && renderTable(proyectos, 'proyectos')}
+            {activeTab === 'proyectos' && renderTable(proyectos, 'proyectos')}
                         {activeTab === 'eventos-calendario' && renderTable(eventos, 'eventos')}
                         {activeTab === 'municipios' && renderTable(municipios, 'municipios')}
                         {activeTab === 'estados' && renderTable(estados, 'estados')}
@@ -1819,9 +1773,6 @@ const Parametros = ({ user, onLogout }) => {
                         {activeTab === 'prioridades' && renderTable(prioridades, 'prioridades')}
                         {activeTab === 'responsables' && renderTable(responsables, 'responsables')}
                         {activeTab === 'entidades' && renderTable(entidades, 'entidades')}
-                    </div>
-                </div>
-            </div>
 
             {/* Modal para agregar/editar */}
             {showModal && (
@@ -1841,7 +1792,7 @@ const Parametros = ({ user, onLogout }) => {
                                         className={`modal-tab ${modalActiveTab === 'datos' ? 'active' : ''}`}
                                         onClick={() => setModalActiveTab('datos')}
                                     >
-                                        📋 Datos del Proyecto
+                                        Datos del Proyecto
                                     </button>
 
                                     <button
@@ -1849,21 +1800,21 @@ const Parametros = ({ user, onLogout }) => {
                                         className={`modal-tab ${modalActiveTab === 'presupuesto' ? 'active' : ''}`}
                                         onClick={() => setModalActiveTab('presupuesto')}
                                     >
-                                        💰 Presupuesto
+                                        Presupuesto
                                     </button>
                                     <button
                                         type="button"
                                         className={`modal-tab ${modalActiveTab === 'fuentes' ? 'active' : ''}`}
                                         onClick={() => setModalActiveTab('fuentes')}
                                     >
-                                        💰 Financiación
+                                        Financiación
                                     </button>
                                     <button
                                         type="button"
                                         className={`modal-tab ${modalActiveTab === 'ubicacion' ? 'active' : ''}`}
                                         onClick={() => setModalActiveTab('ubicacion')}
                                     >
-                                        📍 Ubicación
+                                        Ubicación
                                     </button>
 
                                 </div>
@@ -1942,22 +1893,11 @@ const Parametros = ({ user, onLogout }) => {
                                 <>
                                     <div className="form-group">
                                         <label htmlFor="icono">Icono *</label>
-                                        <div style={{ fontSize: '2rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                            <span style={{ fontSize: '2.5rem', border: '1px solid #ccc', borderRadius: '8px', padding: '0.2em 0.5em', background: '#fff' }}>{formData.icono}</span>
+                                        <div className="icono-selector">
+                                            <span className="icono-actual">{formData.icono}</span>
                                             <button
                                                 type="button"
                                                 className="btn-select-emoji"
-                                                style={{
-                                                    background: '#1976d2',
-                                                    color: '#fff',
-                                                    border: 'none',
-                                                    borderRadius: '6px',
-                                                    padding: '0.5em 1.2em',
-                                                    fontSize: '1.1rem',
-                                                    cursor: 'pointer',
-                                                    fontWeight: 'bold',
-                                                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-                                                }}
                                                 onClick={openEmojiModal}
                                             >
                                                 Seleccionar icono
@@ -2766,7 +2706,7 @@ const Parametros = ({ user, onLogout }) => {
                                                                                     className="btn-view-anexo"
                                                                                     title="Ver anexo"
                                                                                 >
-                                                                                    👁️
+                                                                                    <FontAwesomeIcon icon={faEye} />
                                                                                 </button>
                                                                                 <button
                                                                                     type="button"
@@ -2902,7 +2842,7 @@ const Parametros = ({ user, onLogout }) => {
                                                                         <td>
                                                                             {acta.anexo ? (
                                                                                 <button type="button" onClick={() => window.open('/' + acta.anexo, '_blank')} className="btn-view-anexo" title="Ver archivo">
-                                                                                    👁️
+                                                                                    <FontAwesomeIcon icon={faEye} />
                                                                                 </button>
                                                                             ) : '-'}
                                                                         </td>
@@ -3081,8 +3021,8 @@ const Parametros = ({ user, onLogout }) => {
                                                         </div>
                                                     </div>
                                                     {resumenModificacion.supera_limite && (
-                                                        <p className="texto-alerta" style={{ color: '#d32f2f', fontWeight: 'bold' }}>
-                                                            ⚠ La suma de adiciones supera el 50% legal del valor inicial.
+                                                        <p className="texto-alerta">
+                                                            La suma de adiciones supera el 50% legal del valor inicial.
                                                         </p>
                                                     )}
                                                 </div>
@@ -3222,75 +3162,24 @@ const Parametros = ({ user, onLogout }) => {
 
             {/* Modal para seleccionar emoji (global) */}
             {showEmojiModal && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    width: '100vw',
-                    height: '100vh',
-                    background: 'rgba(0,0,0,0.35)',
-                    zIndex: 9999,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                }}
-                    onClick={closeEmojiModal}
-                >
-                    <div
-                        style={{
-                            background: '#fff',
-                            borderRadius: '12px',
-                            boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
-                            maxWidth: 600,
-                            width: '90vw',
-                            padding: '2rem 1.5rem 1.5rem 1.5rem',
-                            position: 'relative',
-                            textAlign: 'center',
-                        }}
-                        onClick={e => e.stopPropagation()}
-                    >
-                        <button
-                            type="button"
-                            onClick={closeEmojiModal}
-                            style={{
-                                position: 'absolute',
-                                top: 10,
-                                right: 15,
-                                background: 'transparent',
-                                border: 'none',
-                                fontSize: '2rem',
-                                color: '#888',
-                                cursor: 'pointer',
+                <div className="emoji-fondo" onClick={closeEmojiModal}>
+                    <div className="emoji-ventana" role="dialog" aria-modal="true" aria-label="Selecciona un icono" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2>Selecciona un icono <span className="icono-actual">{formData.icono}</span></h2>
+                            <button type="button" onClick={closeEmojiModal} className="btn-close" aria-label="Cerrar">×</button>
+                        </div>
+                        <EmojiPicker
+                            onEmojiClick={(emojiData) => {
+                                handleEmojiClick(emojiData);
+                                closeEmojiModal();
                             }}
-                            aria-label="Cerrar"
-                        >
-                            ×
-                        </button>
-                        <h3 style={{ marginBottom: '1rem' }}>Selecciona un icono</h3>
-                        <div style={{ fontSize: '3rem', marginBottom: '1rem', border: '1px solid #eee', borderRadius: '8px', display: 'inline-block', padding: '0.3em 0.7em', background: '#f9f9f9' }}>
-                            {formData.icono}
-                        </div>
-                        <div style={{ margin: '0 auto', width: '100%', maxWidth: 600 }}>
-                            <EmojiPicker
-                                onEmojiClick={(emojiData) => {
-                                    handleEmojiClick(emojiData);
-                                    closeEmojiModal();
-                                }}
-                                disableSkinTones
-                                disableSearchBar
-                                disableAutoFocus
-                                disablePreview
-                                width={600}
-                                style={{
-                                    width: '100%',
-                                    overflowY: 'auto',
-                                    border: '1px solid #ccc',
-                                    borderRadius: '5px',
-                                    padding: '10px',
-                                    background: '#fff',
-                                }}
-                            />
-                        </div>
+                            theme="dark"
+                            disableSkinTones
+                            disableSearchBar
+                            disableAutoFocus
+                            disablePreview
+                            width="100%"
+                        />
                     </div>
                 </div>
             )}
