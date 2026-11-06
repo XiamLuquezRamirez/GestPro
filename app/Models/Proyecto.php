@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Proyecto extends Model
@@ -56,6 +57,11 @@ class Proyecto extends Model
     public function entidadFinancia(): BelongsTo
     {
         return $this->belongsTo(Entidad::class, 'entidad_financia');
+    }
+
+    public function fuentes(): BelongsToMany
+    {
+        return $this->belongsToMany(FuenteFinanciacion::class, 'proyecto_fuentes', 'proyecto_id', 'fuente_id');
     }
 
     public function presupuestoComponentes(): HasMany
