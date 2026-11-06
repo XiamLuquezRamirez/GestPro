@@ -13,13 +13,15 @@ class Proyecto extends Model
 
     protected $fillable = [
         'municipio', 'nombre', 'descripcion', 'fecha_inicio', 'estado', 'fase',
-        'presupuesto', 'entidad_presenta', 'entidad_financia', 'fuente_financiacion', 'progreso', 'sector',
+        'presupuesto', 'entidad_presenta', 'entidad_financia', 'fuente_financiacion', 'financiacion_por_definir',
+        'fuente_financiacion_original', 'progreso', 'sector',
     ];
 
     protected $casts = [
         'fecha_inicio' => 'date',
         'presupuesto' => 'decimal:2',
         'progreso' => 'integer',
+        'financiacion_por_definir' => 'boolean',
     ];
 
     // These four are named *Rel() (not municipio()/estado()/fase()/sector()) because each FK
