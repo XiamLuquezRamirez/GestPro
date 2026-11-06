@@ -23,7 +23,7 @@ describe('DESTINOS', () => {
     it('lleva a cada catálogo con una sola ruta directa', () => {
         const rutas = DESTINOS.map((d) => d.ruta);
 
-        ['municipios', 'estados', 'fases', 'tipos-evento', 'prioridades', 'responsables', 'entidades'].forEach((slug) => {
+        ['municipios', 'estados', 'fases', 'tipos-evento', 'prioridades', 'responsables', 'entidades', 'fuentes-financiacion', 'sectores'].forEach((slug) => {
             expect(rutas).toContain(`/parametros/${slug}`);
         });
     });

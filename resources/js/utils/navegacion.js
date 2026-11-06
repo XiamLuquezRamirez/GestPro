@@ -18,6 +18,8 @@ export const SECCIONES_PARAMETROS = [
     { slug: 'prioridades', tab: 'prioridades', titulo: 'Prioridades', descripcion: 'Niveles de urgencia de los eventos.', grupo: GRUPO.CATALOGOS, icono: 'faFlag', palabras: 'urgencia catalogo' },
     { slug: 'responsables', tab: 'responsables', titulo: 'Responsables', descripcion: 'Personas a cargo de los eventos.', grupo: GRUPO.CATALOGOS, icono: 'faUsers', palabras: 'personas equipo catalogo' },
     { slug: 'entidades', tab: 'entidades', titulo: 'Entidades', descripcion: 'Quienes presentan y financian los proyectos.', grupo: GRUPO.CATALOGOS, icono: 'faLandmark', palabras: 'alcaldia gobernacion ministerio catalogo' },
+    { slug: 'fuentes-financiacion', tab: 'fuentes-financiacion', titulo: 'Fuentes de financiación', descripcion: 'De dónde provienen los recursos de los proyectos.', grupo: GRUPO.CATALOGOS, icono: 'faCoins', palabras: 'regalias sgr recursos propios cofinanciacion catalogo' },
+    { slug: 'sectores', tab: 'sectores', titulo: 'Sectores', descripcion: 'Sectores de inversión de los proyectos.', grupo: GRUPO.CATALOGOS, icono: 'faLayerGroup', palabras: 'educacion salud transporte vivienda catalogo' },
 ];
 
 export const DESTINOS = [
