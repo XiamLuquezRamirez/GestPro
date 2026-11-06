@@ -65,7 +65,8 @@ class FuentesFinanciacionApiTest extends TestCase
         $admin->postJson('/GestPro/guardarFuenteFinanciacion', ['accion' => 'Agregar', 'nombre' => ''])
             ->assertStatus(422)->assertJsonValidationErrors('nombre');
         $admin->postJson('/GestPro/guardarFuenteFinanciacion', ['accion' => 'Agregar', 'nombre' => 'Recursos propios'])
-            ->assertStatus(422)->assertJsonValidationErrors('nombre');
+            ->assertStatus(422)->assertJsonValidationErrors('nombre')
+            ->assertJsonPath('errors.nombre.0', 'Ya existe una fuente con ese nombre.');
     }
 
     public function test_editar_sin_cambiar_el_nombre_no_choca_consigo_mismo(): void
@@ -97,5 +98,45 @@ class FuentesFinanciacionApiTest extends TestCase
             $this->como($rol)->postJson('/GestPro/guardarFuenteFinanciacion', ['accion' => 'Agregar', 'nombre' => 'Nueva'])->assertForbidden();
             $this->como($rol)->postJson('/GestPro/activarFuenteFinanciacion', ['id' => $fuente->id])->assertForbidden();
         }
+    }
+
+    public function test_rechaza_acciones_e_ids_invalidos(): void
+    {
+        $admin = $this->como(Rol::Administrador);
+        $url = '/GestPro/guardarFuenteFinanciacion';
+
+        $admin->postJson($url, ['nombre' => 'Nueva'])->assertStatus(422);
+        $admin->postJson($url, ['accion' => 'Borrar', 'nombre' => 'Nueva'])->assertStatus(422);
+        $this->assertDatabaseCount('fuentes_financiacion', 10);
+
+        $admin->postJson($url, ['accion' => 'Editar', 'nombre' => 'Nueva'])->assertStatus(422);
+        $admin->postJson($url, ['accion' => 'Editar', 'id' => [1], 'nombre' => 'Nueva'])->assertStatus(422);
+        $admin->postJson('/GestPro/activarFuenteFinanciacion', ['id' => [1]])->assertStatus(422);
+        $admin->postJson('/GestPro/activarFuenteFinanciacion', ['id' => 999999])->assertNotFound();
+    }
+
+    public function test_no_se_puede_renombrar_con_el_nombre_de_otra_fuente(): void
+    {
+        $fuente = FuenteFinanciacion::where('clave', 'pgn')->firstOrFail();
+        $nombre = $fuente->nombre;
+
+        $this->como(Rol::Administrador)->postJson('/GestPro/guardarFuenteFinanciacion', [
+            'accion' => 'Editar', 'id' => $fuente->id, 'nombre' => 'Recursos propios',
+        ])->assertStatus(422);
+
+        $this->assertSame($nombre, $fuente->fresh()->nombre);
+    }
+
+    public function test_el_listado_incluye_las_fuentes_inactivas(): void
+    {
+        FuenteFinanciacion::where('clave', 'otras')->update(['activo' => false]);
+
+        $this->como(Rol::Consulta)->getJson('/GestPro/fuentesFinanciacion')
+            ->assertOk()->assertJsonCount(10);
+    }
+
+    public function test_exige_autenticacion(): void
+    {
+        $this->getJson('/GestPro/fuentesFinanciacion')->assertUnauthorized();
     }
 }
