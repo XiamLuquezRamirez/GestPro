@@ -140,4 +140,13 @@ class PlantillasVersionesTest extends TestCase
 
         $this->assertSame($admin->id, $borrador->fresh()->usuario_publico_id);
     }
+
+    public function test_si_falta_la_plantilla_sgr_responde_con_un_mensaje_de_negocio(): void
+    {
+        DB::table('plantillas_checklist')->where('clave', 'sgr')->update(['clave' => null]);
+
+        $this->comoAdmin()->getJson('/GestPro/catalogo-requisitos/vigente')
+            ->assertStatus(422)
+            ->assertJsonPath('mensaje', 'Falta la plantilla SGR: ejecute las migraciones.');
+    }
 }

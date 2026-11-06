@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Exceptions\ReglaNegocioException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -26,7 +27,8 @@ class PlantillaChecklist extends Model
     /** La plantilla del checklist de regalías. La crea una migración, así que siempre existe. */
     public static function sgr(): self
     {
-        return self::where('clave', self::CLAVE_SGR)->firstOrFail();
+        return self::where('clave', self::CLAVE_SGR)->first()
+            ?? throw new ReglaNegocioException('Falta la plantilla SGR: ejecute las migraciones.');
     }
 
     public function versiones(): HasMany

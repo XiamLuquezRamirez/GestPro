@@ -214,6 +214,15 @@ class PlantillasChecklistTest extends TestCase
         $this->assertTrue(Schema::hasColumn('catalogo_versiones', 'usuario_publico_id'));
     }
 
+    public function test_el_rollback_avanza_si_las_versiones_no_registran_quien_publico(): void
+    {
+        $this->version(PlantillaChecklist::sgr()->id);
+
+        $this->migracionVersiones()->down();
+
+        $this->assertFalse(Schema::hasColumn('catalogo_versiones', 'plantilla_id'));
+    }
+
     public function test_borrar_un_usuario_conserva_la_version_que_publico(): void
     {
         $version = $this->version(PlantillaChecklist::sgr()->id);
