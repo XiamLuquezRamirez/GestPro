@@ -59,11 +59,15 @@ return new class extends Migration
                 ->whereNotNull('fuente_financiacion_original')
                 ->eachById(function (object $proyecto) use ($catalogo) {
                     $original = $proyecto->fuente_financiacion_original;
-                    $convertido = $this->textoConvertido($original, $this->reconocidas($original, $catalogo));
+                    $reconocidas = $this->reconocidas($original, $catalogo);
+                    $convertido = $this->textoConvertido($original, $reconocidas);
 
                     // Si el texto ya no es el que dejo la conversion, alguien lo edito despues: ese texto
                     // ya nombra las fuentes del proyecto, asi que se deja tal cual y no se pierde nada.
-                    if ($proyecto->fuente_financiacion === $convertido) {
+                    // Excepcion: guardar un proyecto "por definir" escribe 'Por definir' sin que el usuario
+                    // decida nada, asi que no cuenta como edicion y se restaura el original sin reconocer.
+                    if ($proyecto->fuente_financiacion === $convertido
+                        || ($reconocidas->isEmpty() && $proyecto->fuente_financiacion === 'Por definir')) {
                         DB::table('proyectos')->where('id', $proyecto->id)->update(['fuente_financiacion' => $original]);
                     }
                 });

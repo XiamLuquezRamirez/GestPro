@@ -152,4 +152,19 @@ class MigracionFuentesProyectosTest extends TestCase
         $this->assertSame('Crédito público', $texto($nuevo));
         $this->assertSame('Recursos propios y regalías', $texto($intacto));
     }
+
+    public function test_el_rollback_restaura_el_texto_sin_reconocer_aunque_diga_por_definir(): void
+    {
+        $sinReconocer = $this->convertir('Convenio con la gobernación');
+        DB::table('proyectos')->where('id', $sinReconocer->id)->update(['fuente_financiacion' => 'Por definir']);
+
+        $migracion = $this->migracion();
+        $decidido = DB::table('proyectos')->insertGetId(['nombre' => 'Decidido', 'fuente_financiacion' => 'Por definir', 'fuente_financiacion_original' => 'Regalías']);
+
+        $migracion->down();
+
+        $texto = fn (int $id) => DB::table('proyectos')->where('id', $id)->value('fuente_financiacion');
+        $this->assertSame('Convenio con la gobernación', $texto($sinReconocer->id));
+        $this->assertSame('Por definir', $texto($decidido));
+    }
 }
