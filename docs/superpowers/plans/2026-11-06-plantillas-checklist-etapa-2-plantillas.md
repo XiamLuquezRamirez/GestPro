@@ -33,7 +33,7 @@
 
 ## Lo que ya se ensayó
 
-Este plan se ensayó antes de escribirlo, y luego se retiró todo. Las 268 pruebas pasaron con este código. En una copia de `gest_pro`, migrar, repetir la migración, reintentar tras un fallo parcial y hacer rollback funcionaron, y la foto de los expedientes salió idéntica. Las pruebas de la versión vigente, la publicación, el seeder, la lista de versiones y el registro del expediente se comprobaron rompiendo a propósito el código que protegen.
+Este plan se ensayó antes de escribirlo, y luego se retiró todo. Las pruebas pasaron con este código; la revisión de la tarea 2 agregó después cuatro más y cambió cómo se reintentan las migraciones 100003 y 100005. En una copia de `gest_pro`, migrar, repetir la migración, reintentar tras un fallo parcial y hacer rollback funcionaron, y la foto de los expedientes salió idéntica. Las pruebas de la versión vigente, la publicación, el seeder, la lista de versiones y el registro del expediente se comprobaron rompiendo a propósito el código que protegen.
 
 **Cuidado con SQLite.** Cambiar una columna reconstruye la tabla y, dentro de la transacción de `RefreshDatabase`, eso borra en cascada las filas hijas: en el ensayo, los 207 requisitos pasaron a 0. Por eso las pruebas que bajan y suben la migración de versiones no crean requisitos ni expedientes. En MariaDB no ocurre: la tarea 6 lo comprueba con datos reales, y sus cifras son las que cuentan.
 
@@ -92,8 +92,11 @@ namespace Tests\Feature\Schema;
 use App\Models\FuenteFinanciacion;
 use App\Models\PlantillaChecklist;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 use Tests\TestCase;
 
 class PlantillasChecklistTest extends TestCase
@@ -103,6 +106,11 @@ class PlantillasChecklistTest extends TestCase
     private function otraPlantilla(): int
     {
         return PlantillaChecklist::create(['nombre' => 'Otra', 'motor' => PlantillaChecklist::MOTOR_SIMPLE])->id;
+    }
+
+    private function migracionPlantillas(): object
+    {
+        return require database_path('migrations/2026_11_06_100003_create_plantillas_checklist_tables.php');
     }
 
     // ------------------------------------------------------------- plantillas
@@ -133,6 +141,59 @@ class PlantillasChecklistTest extends TestCase
         $this->expectException(QueryException::class);
         DB::table('sectores')->where('id', $sector)->delete();
     }
+
+    public function test_borrar_una_plantilla_borra_sus_asociaciones(): void
+    {
+        $plantilla = $this->otraPlantilla();
+        $sector = DB::table('sectores')->insertGetId(['nombre' => 'Agua', 'activo' => true]);
+        $fuente = DB::table('fuentes_financiacion')->where('clave', FuenteFinanciacion::SGR)->value('id');
+        DB::table('plantilla_sectores')->insert(['plantilla_id' => $plantilla, 'sector_id' => $sector]);
+        DB::table('plantilla_fuentes')->insert(['plantilla_id' => $plantilla, 'fuente_id' => $fuente]);
+
+        DB::table('plantillas_checklist')->where('id', $plantilla)->delete();
+
+        $this->assertSame(0, DB::table('plantilla_sectores')->where('plantilla_id', $plantilla)->count());
+        $this->assertSame(0, DB::table('plantilla_fuentes')->where('plantilla_id', $plantilla)->count());
+    }
+
+    public function test_la_clave_de_una_plantilla_no_se_repite(): void
+    {
+        $this->expectException(QueryException::class);
+        PlantillaChecklist::create(['clave' => PlantillaChecklist::CLAVE_SGR, 'nombre' => 'Otra']);
+    }
+
+    public function test_reintentar_la_migracion_rehace_lo_que_quedo_a_medias(): void
+    {
+        $migracion = $this->migracionPlantillas();
+        $migracion->down();
+        $this->assertFalse(Schema::hasTable('plantillas_checklist'));
+
+        // Lo que dejaría un fallo entre el CREATE y el índice único.
+        Schema::create('plantillas_checklist', function (Blueprint $table) {
+            $table->id();
+            $table->string('clave', 40)->nullable();
+        });
+
+        $migracion->up();
+
+        $this->assertSame(PlantillaChecklist::MOTOR_SGR, PlantillaChecklist::sgr()->motor);
+        $this->expectException(QueryException::class);
+        DB::table('plantillas_checklist')->insert(['clave' => 'sgr', 'nombre' => 'Repetida']);
+    }
+
+    public function test_el_rollback_se_detiene_si_hay_otras_plantillas(): void
+    {
+        $this->otraPlantilla();
+
+        try {
+            $this->migracionPlantillas()->down();
+            $this->fail('El rollback debía detenerse.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('plantillas distintas de SGR', $e->getMessage());
+        }
+
+        $this->assertTrue(Schema::hasTable('plantillas_checklist'));
+    }
 }
 ```
 
@@ -143,7 +204,7 @@ Expected: FALLAN porque la clase `App\Models\PlantillaChecklist` no existe. `tes
 
 - [ ] **Paso 3: Crear la migración**
 
-Crear `database/migrations/2026_11_06_100003_create_plantillas_checklist_tables.php`. La fuente se busca antes de crear las tablas, para fallar sin dejar nada a medias. Las guardas permiten reintentar, porque en MariaDB el DDL no es transaccional.
+Crear `database/migrations/2026_11_06_100003_create_plantillas_checklist_tables.php`. La fuente se busca antes de crear las tablas, para fallar sin dejar nada a medias. Al reintentar se eliminan los restos: en MariaDB cada tabla son varias sentencias y el DDL no es transaccional, así que una guarda `hasTable` aceptaría una tabla sin sus claves foráneas.
 
 `alcance` queda vacío: no se inventa, lo redacta la entidad responsable. `plantilla_sectores` queda sin filas porque `todos_sectores` ya cubre todos.
 
@@ -162,43 +223,38 @@ return new class extends Migration
         $fuenteSgr = DB::table('fuentes_financiacion')->where('clave', 'sgr')->value('id')
             ?? throw new RuntimeException('Falta la fuente con clave sgr en fuentes_financiacion.');
 
-        if (! Schema::hasTable('plantillas_checklist')) {
-            Schema::create('plantillas_checklist', function (Blueprint $table) {
-                $table->id();
-                $table->string('clave', 40)->nullable()->unique();
-                $table->string('nombre', 199);
-                $table->text('descripcion')->nullable();
-                $table->text('alcance')->nullable();
-                $table->boolean('todas_fuentes')->default(false);
-                $table->boolean('todos_sectores')->default(false);
-                $table->string('motor', 20)->default('simple');
-                $table->boolean('activo')->default(true);
-                $table->foreignId('usuario_creo_id')->nullable()->constrained('users')->nullOnDelete();
-                $table->timestamps();
-            });
-        }
+        // up() solo corre si la migración no quedó registrada, así que estas tablas solo pueden ser
+        // restos de un intento fallido. En MariaDB cada tabla son varias sentencias: una guarda
+        // hasTable aceptaría una tabla sin sus claves foráneas o sin su índice único.
+        $this->eliminarTablas();
 
-        if (! Schema::hasTable('plantilla_fuentes')) {
-            Schema::create('plantilla_fuentes', function (Blueprint $table) {
-                $table->foreignId('plantilla_id')->constrained('plantillas_checklist')->cascadeOnDelete();
-                $table->foreignId('fuente_id')->constrained('fuentes_financiacion')->restrictOnDelete();
-                $table->primary(['plantilla_id', 'fuente_id']);
-            });
-        }
+        Schema::create('plantillas_checklist', function (Blueprint $table) {
+            $table->id();
+            $table->string('clave', 40)->nullable()->unique();
+            $table->string('nombre', 199);
+            $table->text('descripcion')->nullable();
+            $table->text('alcance')->nullable();
+            $table->boolean('todas_fuentes')->default(false);
+            $table->boolean('todos_sectores')->default(false);
+            $table->string('motor', 20)->default('simple');
+            $table->boolean('activo')->default(true);
+            $table->foreignId('usuario_creo_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamps();
+        });
 
-        if (! Schema::hasTable('plantilla_sectores')) {
-            Schema::create('plantilla_sectores', function (Blueprint $table) {
-                $table->foreignId('plantilla_id')->constrained('plantillas_checklist')->cascadeOnDelete();
-                $table->foreignId('sector_id')->constrained('sectores')->restrictOnDelete();
-                $table->primary(['plantilla_id', 'sector_id']);
-            });
-        }
+        Schema::create('plantilla_fuentes', function (Blueprint $table) {
+            $table->foreignId('plantilla_id')->constrained('plantillas_checklist')->cascadeOnDelete();
+            $table->foreignId('fuente_id')->constrained('fuentes_financiacion')->restrictOnDelete();
+            $table->primary(['plantilla_id', 'fuente_id']);
+        });
+
+        Schema::create('plantilla_sectores', function (Blueprint $table) {
+            $table->foreignId('plantilla_id')->constrained('plantillas_checklist')->cascadeOnDelete();
+            $table->foreignId('sector_id')->constrained('sectores')->restrictOnDelete();
+            $table->primary(['plantilla_id', 'sector_id']);
+        });
 
         DB::transaction(function () use ($fuenteSgr) {
-            if (DB::table('plantillas_checklist')->where('clave', 'sgr')->exists()) {
-                return;
-            }
-
             $plantilla = DB::table('plantillas_checklist')->insertGetId([
                 'clave' => 'sgr',
                 'nombre' => 'SGR',
@@ -216,6 +272,18 @@ return new class extends Migration
     }
 
     public function down(): void
+    {
+        $otras = Schema::hasTable('plantillas_checklist')
+            && DB::table('plantillas_checklist')->where('clave', '!=', 'sgr')->orWhereNull('clave')->exists();
+
+        if ($otras) {
+            throw new RuntimeException('No se puede revertir: hay plantillas distintas de SGR. Elimínelas o restaure un respaldo.');
+        }
+
+        $this->eliminarTablas();
+    }
+
+    private function eliminarTablas(): void
     {
         Schema::dropIfExists('plantilla_sectores');
         Schema::dropIfExists('plantilla_fuentes');
@@ -285,7 +353,7 @@ class PlantillaChecklist extends Model
 - [ ] **Paso 5: Comprobar que pasan**
 
 Run: `php artisan test tests/Feature/Schema/PlantillasChecklistTest.php`
-Expected: 3 pruebas pasan.
+Expected: 7 pruebas pasan.
 
 Run: `php artisan test`
 Expected: pasan todas. Esta migración no toca lo existente.
@@ -318,14 +386,7 @@ La migración hace obligatorio `plantilla_id`, así que el seeder y `crearBorrad
 
 - [ ] **Paso 1: Agregar las pruebas de esquema**
 
-En `tests/Feature/Schema/PlantillasChecklistTest.php`, agregar estos dos `use`, junto a los demás:
-
-```php
-use Illuminate\Support\Facades\Schema;
-use RuntimeException;
-```
-
-Agregar estos métodos auxiliares después de `otraPlantilla`:
+En `tests/Feature/Schema/PlantillasChecklistTest.php`, agregar estos métodos auxiliares después de `migracionPlantillas`:
 
 ```php
     private function migracionVersiones(): object
@@ -541,8 +602,12 @@ return new class extends Migration
         }
         if (! Schema::hasColumn('catalogo_versiones', 'usuario_publico_id')) {
             Schema::table('catalogo_versiones', function (Blueprint $table) {
-                $table->foreignId('usuario_publico_id')->nullable()->after('fecha_publicacion')
-                    ->constrained('users')->nullOnDelete();
+                $table->foreignId('usuario_publico_id')->nullable()->after('fecha_publicacion');
+            });
+        }
+        if (! $this->tieneForanea('usuario_publico_id')) {
+            Schema::table('catalogo_versiones', function (Blueprint $table) {
+                $table->foreign('usuario_publico_id')->references('id')->on('users')->nullOnDelete();
             });
         }
 
@@ -562,7 +627,7 @@ return new class extends Migration
                 $table->unique(['plantilla_id', 'numero'], self::UNICO_NUEVO);
             });
         }
-        if (! collect(Schema::getForeignKeys('catalogo_versiones'))->contains(fn ($f) => $f['columns'] === ['plantilla_id'])) {
+        if (! $this->tieneForanea('plantilla_id')) {
             Schema::table('catalogo_versiones', function (Blueprint $table) {
                 $table->foreign('plantilla_id')->references('id')->on('plantillas_checklist')->restrictOnDelete();
             });
@@ -590,6 +655,11 @@ return new class extends Migration
         Schema::table('catalogo_versiones', function (Blueprint $table) {
             $table->unique('numero');
         });
+    }
+
+    private function tieneForanea(string $columna): bool
+    {
+        return collect(Schema::getForeignKeys('catalogo_versiones'))->contains(fn ($f) => $f['columns'] === [$columna]);
     }
 
     private function plantillaSgr(): int
@@ -1130,16 +1200,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('expediente_plantillas')) {
-            Schema::create('expediente_plantillas', function (Blueprint $table) {
-                $table->foreignId('expediente_id')->constrained('proyectos_expedientes')->cascadeOnDelete();
-                $table->foreignId('catalogo_version_id')->constrained('catalogo_versiones')->restrictOnDelete();
-                $table->boolean('es_principal')->default(false);
-                $table->primary(['expediente_id', 'catalogo_version_id']);
-            });
-        }
+        // up() solo corre si la migración no quedó registrada: si la tabla existe, es un resto de
+        // un intento fallido, quizá sin sus claves foráneas. Sus filas se reconstruyen abajo.
+        Schema::dropIfExists('expediente_plantillas');
 
-        DB::table('expediente_plantillas')->insertOrIgnoreUsing(
+        Schema::create('expediente_plantillas', function (Blueprint $table) {
+            $table->foreignId('expediente_id')->constrained('proyectos_expedientes')->cascadeOnDelete();
+            $table->foreignId('catalogo_version_id')->constrained('catalogo_versiones')->restrictOnDelete();
+            $table->boolean('es_principal')->default(false);
+            $table->primary(['expediente_id', 'catalogo_version_id']);
+        });
+
+        DB::table('expediente_plantillas')->insertUsing(
             ['expediente_id', 'catalogo_version_id', 'es_principal'],
             DB::table('proyectos_expedientes')->select('id', 'catalogo_version_id', DB::raw('1'))
         );
@@ -1202,10 +1274,10 @@ No cambiar `sincronizar`, `presentar` ni nada que lea el checklist.
 - [ ] **Paso 7: Comprobar que pasan**
 
 Run: `php artisan test tests/Feature/Schema/PlantillasChecklistTest.php tests/Feature/Viabilizacion/PlantillasVersionesTest.php`
-Expected: 11 y 9 pruebas pasan.
+Expected: 15 y 9 pruebas pasan.
 
 Run: `php artisan test`
-Expected: pasan todas: el total de la tarea 1 más 20. Con 248 de partida, son 268.
+Expected: pasan todas: el total de la tarea 1 más 24. Con 248 de partida, son 272.
 
 Run: `npm test`
 Expected: pasan todas. No se tocó JavaScript, así que el total no cambia.
