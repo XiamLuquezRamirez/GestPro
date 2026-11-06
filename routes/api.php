@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FuenteFinanciacionController;
 use App\Http\Controllers\ProyectoController;
+use App\Http\Controllers\SectorController;
 use App\Http\Controllers\AuthController;
 
 // 🔓 Rutas públicas
@@ -94,9 +95,8 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/activarFaseDashboard', [ProyectoController::class, 'activarFaseDashboard']);
         Route::post('/guardarFuenteFinanciacion', [FuenteFinanciacionController::class, 'guardar']);
         Route::post('/activarFuenteFinanciacion', [FuenteFinanciacionController::class, 'activar']);
-        Route::post('/guardarSector', [ProyectoController::class, 'guardarSector']);
-        Route::post('/eliminarSector', [ProyectoController::class, 'eliminarSector']);
-        Route::post('/activarSector', [ProyectoController::class, 'activarSector']);
+        Route::post('/guardarSector', [SectorController::class, 'guardar']);
+        Route::post('/activarSector', [SectorController::class, 'activar']);
         Route::post('/guardarTipoProceso', [ProyectoController::class, 'guardarTipoProceso']);
         Route::post('/eliminarTipoProceso', [ProyectoController::class, 'eliminarTipoProceso']);
         Route::post('/activarTipoProceso', [ProyectoController::class, 'activarTipoProceso']);
