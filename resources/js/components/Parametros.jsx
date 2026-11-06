@@ -1143,8 +1143,10 @@ const Parametros = () => {
             }
         } else if (modalType === 'fuentes') {
             await guardarCatalogo('/guardarFuenteFinanciacion', listFuentes, 'Fuente de financiación guardada correctamente');
+            return;
         } else if (modalType === 'sectores') {
             await guardarCatalogo('/guardarSector', listSectores, 'Sector guardado correctamente');
+            return;
         } else if (modalType === 'entidades') {
             const newEntidad = {
                 ...formData,

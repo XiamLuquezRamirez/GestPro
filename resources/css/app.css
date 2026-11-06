@@ -152,6 +152,7 @@ input[type='date'] { color-scheme: dark; }
 .swal2-html-container { color: var(--gp-texto-2) !important; }
 .swal2-styled.swal2-confirm { color: var(--gp-sobre-acento) !important; background: var(--gp-ambar) !important; }
 .swal2-styled.swal2-cancel { color: var(--gp-texto) !important; background: var(--gp-superficie-3) !important; }
+.swal2-container { z-index: 2100; }
 
 /* ---------- Mapas: claros, con los mosaicos y controles propios de Leaflet ---------- */
 /* z-index propio: las capas internas de Leaflet llegan a 1000 y taparían las barras y menús */
