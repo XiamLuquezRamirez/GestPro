@@ -202,7 +202,7 @@ Una migración por paso, cada una con `down()` y ensayada de subida y bajada en 
 |---|---|---|---|---|
 | 1 | 1 | `create_fuentes_financiacion_table` | `id`, `clave` (única y opcional; `sgr` para regalías), `nombre`, `descripcion`, `orden`, `activo`. Inserta las 10 fuentes de la propuesta. | Elimina la tabla |
 | 2 | 1 | `create_proyecto_fuentes_table` | `proyecto_id`, `fuente_id`; PK compuesta; cascada desde proyecto, restricción desde fuente | Elimina la tabla |
-| 3 | 1 | `add_financiacion_a_proyectos` | `financiacion_por_definir` (bool), `fuente_financiacion_original` (text). Convierte el texto actual (sección 7). | Restaura el texto original y elimina las columnas |
+| 3 | 1 | `add_financiacion_a_proyectos` | `financiacion_por_definir` (bool), `fuente_financiacion_original` (text). Convierte el texto actual (sección 7). | Restaura el texto original de los proyectos no editados, conserva lo editado y elimina las columnas |
 | 4 | 2 | `create_plantillas_checklist_tables` | `plantillas_checklist` (`clave` única y opcional, `nombre`, `descripcion`, `alcance`, `todas_fuentes`, `todos_sectores`, `motor`, `activo`, `usuario_creo_id`, timestamps), `plantilla_fuentes`, `plantilla_sectores`. Siempre crea la plantilla SGR (`clave = 'sgr'`), asociada a la fuente SGR y a todos los sectores. | Elimina las tablas |
 | 5 | 2 | `add_plantilla_a_catalogo_versiones` | `plantilla_id`, `usuario_publico_id`. Asigna la plantilla SGR a las versiones existentes. Cambia `unique(numero)` por `unique(plantilla_id, numero)`. | Falla con mensaje claro si hay versiones de otras plantillas; si no, restaura |
 | 6 | 2 | `create_expediente_plantillas_table` | `expediente_id`, `catalogo_version_id`, `es_principal`. Registra la versión actual de cada expediente. | Elimina la tabla |
@@ -294,10 +294,10 @@ Con el armazón, los tokens `--gp-*` y los patrones del rediseño. Se registran 
 3. Valores por defecto en los 207 requisitos: `caracter = obligatorio`, `codigo_comun = clave`, `categoria` vacía. La categoría no se inventa: la define la entidad responsable en una versión nueva.
 4. Filas de los expedientes: `estado_aplicabilidad = aplica`, `caracter = obligatorio`, y un origen por fila.
 5. Convertir el texto de la fuente:
-   - Contiene `regalia` o `sgr` → SGR.
+   - Contiene `regalia` o la palabra completa `sgr` → SGR.
    - Contiene `recursos propios` → Recursos propios.
    - Ambos → las dos fuentes.
-   - Vacío o sin reconocer → `financiacion_por_definir`, con un informe de los casos. Nada se asigna a "Otras" por adivinar.
+   - Vacío o sin reconocer → `financiacion_por_definir`, con un informe que muestra cada texto distinto y su resultado, para revisar también negaciones como "Sin regalías". Nada se asigna a "Otras" por adivinar.
    - El texto original queda en `fuente_financiacion_original`, y `fuente_financiacion` guarda los nombres unidos para las vistas que ya lo muestran.
 
 **Verificación de que nada cambió.** En base temporal copiada de `gest_pro`, se guarda antes de migrar y se compara después, por cada expediente: filas que aplican con su requisito, cumplidos, porcentaje, estado y fecha de radicación. Cualquier diferencia detiene la etapa.
@@ -320,7 +320,7 @@ Con el armazón, los tokens `--gp-*` y los patrones del rediseño. Se registran 
 | Solo Administrador puede aprobar lo propio | Se reduce el control de doble revisión | Queda registrado en el historial; se puede restringir cuando haya más usuarios |
 | Crece el almacenamiento por soportes conservados | Más disco | Aceptado; los archivos siguen siendo privados y se pueden limpiar con un proceso futuro |
 | Más expedientes sin configurar tras generalizar la creación | Tablero con más pendientes | Ejecución con `--simular` y autorización explícita |
-| Rollback imposible con datos nuevos | No se puede revertir sin perderlos | `down()` falla con mensaje claro en vez de borrar datos; respaldo antes de migrar |
+| Rollback imposible con datos nuevos | No se puede revertir sin perderlos | `down()` conserva lo ingresado o, si no puede, falla con mensaje claro en vez de borrar datos; respaldo antes de migrar |
 | La rama base aún no está en `main` | Conflictos al integrar | Trabajar en `feature/plantillas-checklist` desde `feature/rediseno-interfaz`, e integrar primero `feature/expediente-viabilizacion` |
 | Lotes de migración mezclados en `gest_pro` | `migrate:rollback` no es seguro | No usarlo en `gest_pro`; restaurar el respaldo si hace falta |
 

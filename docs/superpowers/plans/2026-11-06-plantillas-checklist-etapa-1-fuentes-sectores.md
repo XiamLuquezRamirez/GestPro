@@ -1104,6 +1104,22 @@ class ProyectoFuentesTest extends TestCase
         $this->assertStringContainsString('Convenio con la gobernación', $salida);
         $this->assertStringContainsString('Proyectos por definir: 1', $salida);
     }
+
+    public function test_el_informe_muestra_cada_texto_original_con_el_resultado_de_la_conversion(): void
+    {
+        $proyecto = Proyecto::create([
+            'nombre' => 'Convertido',
+            'fuente_financiacion' => 'Recursos propios',
+            'fuente_financiacion_original' => 'Sin regalías, recursos propios',
+        ]);
+        $proyecto->fuentes()->sync([$this->propios]);
+
+        $this->assertSame(0, Artisan::call('proyectos:informe-fuentes'));
+        $salida = Artisan::output();
+
+        $this->assertStringContainsString('Sin regalías, recursos propios', $salida);
+        $this->assertStringContainsString('Recursos propios', $salida);
+    }
 }
 ```
 
@@ -1341,6 +1357,17 @@ Artisan::command('proyectos:informe-fuentes', function () {
         ->orderBy('f.orden')
         ->get();
     $this->table(['Fuente', 'Proyectos'], $porFuente->map(fn ($f) => [$f->nombre, $f->proyectos])->all());
+
+    // Cada texto distinto una vez: las coincidencias por palabra no detectan una negación
+    // ("Sin regalías") ni una fuente omitida, y eso solo se ve revisando el resultado.
+    $conversiones = Proyecto::query()->whereNotNull('fuente_financiacion_original')->with('fuentes:id,nombre')->get()
+        ->groupBy('fuente_financiacion_original')
+        ->map(fn ($grupo, $texto) => [
+            $texto,
+            $grupo->first()->fuentes->pluck('nombre')->implode(', ') ?: 'Por definir',
+            $grupo->count(),
+        ]);
+    $this->table(['Texto original', 'Resultado', 'Proyectos'], $conversiones->values()->all());
 
     $pendientes = Proyecto::query()->where('financiacion_por_definir', true)->orderBy('id')->get();
     $this->table(
@@ -2334,7 +2361,7 @@ DB_DATABASE=gestpro_verif_tmp php artisan migrate:rollback --step=3 --force
 /c/xampp/mysql/bin/mysql -u root gestpro_verif_tmp -e "SELECT fuente_financiacion, COUNT(*) FROM proyectos GROUP BY fuente_financiacion;"
 ```
 
-Expected: `Recursos propios y regalías` con 30 proyectos y `NULL` con 1, como antes de migrar. Los proyectos creados en el paso 7 siguen en la copia con los nombres unidos, porque antes no existían.
+Expected: los proyectos no tocados vuelven a `Recursos propios y regalías` y el que no tenía texto vuelve a `NULL`, como antes de migrar. Los proyectos creados o editados en el paso 7 conservan los nombres de sus fuentes, porque el rollback no descarta lo ingresado después de migrar.
 
 - [ ] **Paso 9: Limpiar**
 
