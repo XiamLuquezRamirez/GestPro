@@ -1378,6 +1378,14 @@ Expected: `diff` sin salida. Cualquier diferencia detiene la etapa.
 
 Expected: toda versión con la plantilla SGR, 207 requisitos, un registro principal por expediente y `distintos` en 0.
 
+SQLite no comprueba las claves foráneas ni los índices que MariaDB crea por separado, así que se revisan aquí:
+
+```bash
+/c/xampp/mysql/bin/mysql -u root gestpro_verif_tmp -e "SHOW CREATE TABLE plantillas_checklist\G SHOW CREATE TABLE plantilla_fuentes\G SHOW CREATE TABLE plantilla_sectores\G SHOW CREATE TABLE catalogo_versiones\G SHOW CREATE TABLE expediente_plantillas\G"
+```
+
+Expected: `plantillas_checklist` con el único de `clave` y la clave foránea de `usuario_creo_id` (`SET NULL`). `plantilla_fuentes` y `plantilla_sectores` con `CASCADE` desde la plantilla y restricción hacia la fuente o el sector. `catalogo_versiones` con `plantilla_id` `NOT NULL`, el único compuesto, restricción hacia la plantilla y `SET NULL` en `usuario_publico_id`. `expediente_plantillas` con `CASCADE` desde el expediente y restricción hacia la versión.
+
 - [ ] **Paso 6: Probar el rollback y volver a comparar**
 
 ```bash
