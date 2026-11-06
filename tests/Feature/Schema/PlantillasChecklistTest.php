@@ -120,6 +120,14 @@ class PlantillasChecklistTest extends TestCase
         $this->assertTrue(Schema::hasTable('plantillas_checklist'));
     }
 
+    public function test_el_rollback_tambien_se_detiene_con_una_plantilla_sin_clave(): void
+    {
+        $this->otraPlantilla();
+
+        $this->expectException(RuntimeException::class);
+        $this->migracionPlantillas()->down();
+    }
+
     public function test_una_plantilla_con_versiones_no_se_puede_borrar(): void
     {
         $plantilla = $this->otraPlantilla();
