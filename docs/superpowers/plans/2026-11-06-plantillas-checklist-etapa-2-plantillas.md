@@ -37,6 +37,17 @@ Este plan se ensayó antes de escribirlo, y luego se retiró todo. Las pruebas p
 
 **Cuidado con SQLite.** Cambiar una columna reconstruye la tabla y, dentro de la transacción de `RefreshDatabase`, eso borra en cascada las filas hijas: en el ensayo, los 207 requisitos pasaron a 0. Por eso las pruebas que bajan y suben la migración de versiones no crean requisitos ni expedientes. En MariaDB no ocurre: la tarea 6 lo comprueba con datos reales, y sus cifras son las que cuentan.
 
+## Cambios de las revisiones
+
+Las tareas 2 a 5 ya se ejecutaron. Las revisiones agregaron lo siguiente, que no aparece en los bloques de código de este plan: el código comiteado manda.
+
+- `down()` de la migración de plantillas se detiene si `catalogo_versiones` todavía depende de ellas.
+- `down()` de la migración de versiones se detiene si alguna versión registra quién la publicó.
+- `PlantillaChecklist::sgr()` lanza `ReglaNegocioException` si falta la plantilla, en lugar de responder 404.
+- Pruebas nuevas de reintento, rollback, `SET NULL` del publicador y registro del fallo en `crearAutomatico`.
+
+Totales finales: `PlantillasChecklistTest` 21, `PlantillasVersionesTest` 10, suite PHP 280.
+
 ## Archivos
 
 | Archivo | Responsabilidad |
@@ -1274,10 +1285,10 @@ No cambiar `sincronizar`, `presentar` ni nada que lea el checklist.
 - [ ] **Paso 7: Comprobar que pasan**
 
 Run: `php artisan test tests/Feature/Schema/PlantillasChecklistTest.php tests/Feature/Viabilizacion/PlantillasVersionesTest.php`
-Expected: 15 y 9 pruebas pasan.
+Expected: 21 y 10 pruebas pasan, contando los cambios de las revisiones.
 
 Run: `php artisan test`
-Expected: pasan todas: el total de la tarea 1 más 24. Con 248 de partida, son 272.
+Expected: pasan todas: el total de la tarea 1 más 32. Con 248 de partida, son 280.
 
 Run: `npm test`
 Expected: pasan todas. No se tocó JavaScript, así que el total no cambia.
@@ -1373,10 +1384,10 @@ Expected: `diff` sin salida. Cualquier diferencia detiene la etapa.
 - [ ] **Paso 5: Revisar lo migrado**
 
 ```bash
-/c/xampp/mysql/bin/mysql -u root gestpro_verif_tmp -e "SELECT id, numero, plantilla_id, vigente FROM catalogo_versiones; SELECT COUNT(*) AS requisitos FROM requisitos_catalogo; SELECT COUNT(*) AS registros, SUM(es_principal) AS principales FROM expediente_plantillas; SELECT COUNT(*) AS expedientes FROM proyectos_expedientes; SELECT COUNT(*) AS distintos FROM expediente_plantillas p JOIN proyectos_expedientes e ON e.id = p.expediente_id WHERE e.catalogo_version_id <> p.catalogo_version_id;"
+/c/xampp/mysql/bin/mysql -u root gestpro_verif_tmp -e "SELECT id, numero, plantilla_id, vigente FROM catalogo_versiones; SELECT COUNT(*) AS requisitos FROM requisitos_catalogo; SELECT COUNT(*) AS registros, SUM(es_principal) AS principales FROM expediente_plantillas; SELECT COUNT(*) AS expedientes FROM proyectos_expedientes; SELECT COUNT(*) AS distintos FROM expediente_plantillas p JOIN proyectos_expedientes e ON e.id = p.expediente_id WHERE e.catalogo_version_id <> p.catalogo_version_id; SELECT COUNT(*) AS sin_registro FROM proyectos_expedientes e LEFT JOIN expediente_plantillas p ON p.expediente_id = e.id WHERE p.expediente_id IS NULL;"
 ```
 
-Expected: toda versión con la plantilla SGR, 207 requisitos, un registro principal por expediente y `distintos` en 0.
+Expected: toda versión con la plantilla SGR, 207 requisitos, un registro principal por expediente, y `distintos` y `sin_registro` en 0.
 
 SQLite no comprueba las claves foráneas ni los índices que MariaDB crea por separado, así que se revisan aquí:
 

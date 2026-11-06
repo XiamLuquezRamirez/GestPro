@@ -352,6 +352,13 @@ Reglas para este cambio:
 
 **Pendientes externos que este trabajo no resuelve:** la fase de los 153 requisitos de la sección C, que irá en una versión nueva de la plantilla SGR cuando se aporte; y los requisitos reales de cada financiador, que define la entidad responsable.
 
+**Notas de la etapa 2 para los planes siguientes:**
+
+- **Etapa 3:** `CatalogoService::crearBorrador` copia una lista fija de columnas. Hay que agregar las de la migración 7, o cada borrador las perderá.
+- **Etapa 4:** `crearBorrador` exige una versión vigente que copiar, así que hace falta un camino para la primera versión de una plantilla nueva. También hay que decidir qué hace el rollback con lo editado en la plantilla SGR, porque hoy `down()` lo borraría.
+- **Etapa 5:** la base no impide dos `es_principal` por expediente ni dos versiones de una misma plantilla, así que el servicio debe validarlo. La migración 10 debe fallar si algún expediente tiene más de una plantilla: al revertir, `expediente_plantillas` se reconstruye solo con la versión de `catalogo_version_id`, y las complementarias se perderían sin aviso.
+- **Etapa 6:** antes de retirar `catalogo_version_id`, la migración 11 debe comprobar que todo expediente tiene su fila en `expediente_plantillas`. Una rama anterior que cree expedientes sobre la base ya migrada no la escribiría.
+
 ---
 
 ## Etapas de entrega
