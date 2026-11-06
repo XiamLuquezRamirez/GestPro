@@ -341,7 +341,7 @@ Reglas para este cambio:
 | Cambian los porcentajes o el checklist de un expediente SGR | Pérdida de confianza en el seguimiento | Comparación antes y después, pruebas actuales y paridad del evaluador en cada etapa |
 | La conversión del texto de la fuente clasifica mal | Plantillas ofrecidas de forma incorrecta | Reglas conservadoras, "Por definir" ante la duda, original conservado e informe |
 | Cambiar el `unique` de `numero` o `vigente` rompe supuestos | Dos versiones vigentes o seeder incorrecto | Búsqueda de vigente siempre por plantilla, y prueba de que publicar no afecta a otras plantillas |
-| Pruebas actuales crean versiones sin plantilla | Fallos masivos ajenos a la funcionalidad | La plantilla SGR siempre existe por migración, y el modelo la asigna si no se indica otra |
+| Pruebas actuales crean versiones sin plantilla | Fallos masivos ajenos a la funcionalidad | La plantilla SGR siempre existe por migración, y el seeder la asigna. Las pruebas actuales crean versiones solo por el seeder y el servicio, así que el modelo no asigna una plantilla por defecto: `plantilla_id` es obligatorio |
 | Reglas de avance dispersas | Cifras distintas en tablero, modal y expediente | Una sola definición en el servicio, y el frontend no la recalcula |
 | Solo Administrador puede aprobar lo propio | Se reduce el control de doble revisión | Queda registrado en el historial; se puede restringir cuando haya más usuarios |
 | Crece el almacenamiento por soportes conservados | Más disco | Aceptado; los archivos siguen siendo privados y se pueden limpiar con un proceso futuro |
