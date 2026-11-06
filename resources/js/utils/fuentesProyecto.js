@@ -22,3 +22,12 @@ export const datosFinanciacionDe = (proyecto) => ({
     fuenteIds: proyecto.fuente_ids ?? [],
     financiacionPorDefinir: Boolean(proyecto.financiacion_por_definir),
 });
+
+/** Texto en español para mostrar al usuario cuando falla una petición. */
+export const mensajeDeError = (error, porDefecto = 'Inténtelo de nuevo.') => {
+    if (error?.response?.status === 403) {
+        return 'No tiene permiso para realizar esta acción.';
+    }
+    const datos = error?.response?.data;
+    return [datos?.mensaje ?? datos?.message ?? porDefecto, ...(datos?.errores ?? [])].join(' ');
+};

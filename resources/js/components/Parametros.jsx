@@ -10,7 +10,7 @@ import 'leaflet/dist/leaflet.css';
 import '../leafletIconFix';
 import '../../css/Parametros.css';
 import { seccionDesdeSlug } from '../utils/navegacion';
-import { alternarFuente, datosFinanciacionDe, financiacionCompleta, fuentesDisponibles } from '../utils/fuentesProyecto';
+import { alternarFuente, datosFinanciacionDe, financiacionCompleta, fuentesDisponibles, mensajeDeError } from '../utils/fuentesProyecto';
 
 // Componente auxiliar: escucha clics en el mapa y reporta la coordenada al padre.
 // Debe vivir dentro de <MapContainer> — el hook useMapEvents solo funciona ahí.
@@ -957,7 +957,7 @@ const Parametros = () => {
         } catch (error) {
             Swal.fire({
                 title: 'No se pudo guardar',
-                text: error.response?.data?.message ?? 'Inténtelo de nuevo.',
+                text: mensajeDeError(error),
                 icon: 'error'
             });
         }
@@ -992,10 +992,9 @@ const Parametros = () => {
             try {
                 response = await axios.post('/guardarProyecto', newProyecto);
             } catch (error) {
-                const datos = error.response?.data;
                 Swal.fire({
                     title: 'No se pudo guardar el proyecto',
-                    text: [datos?.mensaje ?? datos?.message ?? 'Inténtelo de nuevo.', ...(datos?.errores ?? [])].join(' '),
+                    text: mensajeDeError(error),
                     icon: 'error'
                 });
                 return;
@@ -1505,11 +1504,19 @@ const Parametros = () => {
                 listEntidades();
             }
         } else if (type === 'fuentes') {
-            await axios.post('/activarFuenteFinanciacion', { id: id });
-            listFuentes();
+            try {
+                await axios.post('/activarFuenteFinanciacion', { id: id });
+                listFuentes();
+            } catch (error) {
+                Swal.fire({ title: 'No se pudo actualizar', text: mensajeDeError(error), icon: 'error' });
+            }
         } else if (type === 'sectores') {
-            await axios.post('/activarSector', { id: id });
-            listSectores();
+            try {
+                await axios.post('/activarSector', { id: id });
+                listSectores();
+            } catch (error) {
+                Swal.fire({ title: 'No se pudo actualizar', text: mensajeDeError(error), icon: 'error' });
+            }
         }
     };
 

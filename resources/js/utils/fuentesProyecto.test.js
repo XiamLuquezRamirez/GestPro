@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { alternarFuente, datosFinanciacionDe, financiacionCompleta, fuentesDisponibles } from './fuentesProyecto';
+import { alternarFuente, datosFinanciacionDe, financiacionCompleta, fuentesDisponibles, mensajeDeError } from './fuentesProyecto';
 
 const fuentes = [
     { id: 1, nombre: 'SGR', activo: true },
@@ -47,5 +47,27 @@ describe('datosFinanciacionDe', () => {
 
     it('tolera un elemento sin esos campos', () => {
         expect(datosFinanciacionDe({})).toEqual({ fuenteIds: [], financiacionPorDefinir: false });
+    });
+});
+
+describe('mensajeDeError', () => {
+    it('traduce el 403', () => {
+        expect(mensajeDeError({ response: { status: 403, data: { message: 'This action is unauthorized.' } } }))
+            .toBe('No tiene permiso para realizar esta acción.');
+    });
+
+    it('une el mensaje con los errores', () => {
+        const error = { response: { status: 422, data: { mensaje: 'No válido.', errores: ['Uno.', 'Dos.'] } } };
+        expect(mensajeDeError(error)).toBe('No válido. Uno. Dos.');
+    });
+
+    it('usa el message de Laravel', () => {
+        expect(mensajeDeError({ response: { status: 422, data: { message: 'Ya existe una fuente con ese nombre.' } } }))
+            .toBe('Ya existe una fuente con ese nombre.');
+    });
+
+    it('usa el texto por defecto sin respuesta', () => {
+        expect(mensajeDeError(new Error('Network Error'))).toBe('Inténtelo de nuevo.');
+        expect(mensajeDeError({}, 'Falló.')).toBe('Falló.');
     });
 });
