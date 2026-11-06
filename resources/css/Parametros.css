@@ -225,6 +225,11 @@
 .presupuesto-modal-section h3, .fuentes-modal-section h3, .contratos-modal-section h3, .contratos-list-header h3, .contrato-form-header h3 { font-size: 1.1rem; }
 .presupuesto-info, .contratos-info, .mapa-ubicacion-instrucciones { margin: .25rem 0 1rem; font-size: .86rem; color: var(--gp-texto-3); }
 .componente-form, .fuentes-form, .contrato-form, .anexo-form { padding: 1rem; margin-bottom: 1rem; background: var(--gp-fondo-2); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
+.fuentes-seleccion { padding: 0; border: 0; }
+.fuentes-seleccion legend { margin-bottom: .5rem; padding: 0; font-size: .84rem; font-weight: 550; color: var(--gp-texto-2); }
+.fuentes-seleccion-lista { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: .5rem 1rem; }
+.fuentes-seleccion .checkbox-label { white-space: normal; font-weight: 400; }
+.fuentes-seleccion-pendiente { margin-top: .75rem !important; padding-top: .75rem; border-top: 1px solid var(--gp-linea); color: var(--gp-texto-2); }
 .anexo-form h4, .anexos-list h4, .componentes-list h4, .contratos-list h4 { margin-bottom: .6rem; font-size: 1rem; }
 
 .btn-add-componente, .btn-add-contrato-header, .btn-add-first-contrato, .btn-add-anexo, .btn-calcular-avance {

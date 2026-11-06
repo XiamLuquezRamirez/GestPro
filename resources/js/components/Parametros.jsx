@@ -10,6 +10,7 @@ import 'leaflet/dist/leaflet.css';
 import '../leafletIconFix';
 import '../../css/Parametros.css';
 import { seccionDesdeSlug } from '../utils/navegacion';
+import { alternarFuente, datosFinanciacionDe, financiacionCompleta, fuentesDisponibles } from '../utils/fuentesProyecto';
 
 // Componente auxiliar: escucha clics en el mapa y reporta la coordenada al padre.
 // Debe vivir dentro de <MapContainer> — el hook useMapEvents solo funciona ahí.
@@ -49,6 +50,7 @@ const Parametros = () => {
     const [fases, setFases] = useState([]);
     const [entidades, setEntidades] = useState([]);
     const [sectores, setSectores] = useState([]);
+    const [fuentes, setFuentes] = useState([]);
     const [eventos, setEventos] = useState([]);
     const [tipos, setTiposEventos] = useState([]);
     const [prioridades, setPrioridades] = useState([]);
@@ -107,7 +109,9 @@ const Parametros = () => {
             { id: 2, nombre: 'Empresa 2', activo: true },
             { id: 3, nombre: 'Empresa 3', activo: true },
             { id: 4, nombre: 'Empresa 4', activo: false }
-        ]
+        ],
+        fuentes: [],
+        sectores: []
     });
 
     // Datos de proyectos y eventos
@@ -119,6 +123,7 @@ const Parametros = () => {
         listFases();
         listEntidades();
         listSectores();
+        listFuentes();
         ///
         listEventos();
         listTiposEventos();
@@ -157,6 +162,11 @@ const Parametros = () => {
     const listSectores = async () => {
         const response = await axios.get('/sectores');
         setSectores(response.data);
+    }
+
+    const listFuentes = async () => {
+        const response = await axios.get('/fuentesFinanciacion');
+        setFuentes(response.data);
     }
 
     const listEntidades = async () => {
@@ -209,7 +219,8 @@ const Parametros = () => {
         sector: '',
         entidadPresenta: '',
         entidadFinancia: '',
-        fuenteFinanciamiento: '',
+        fuenteIds: [],
+            financiacionPorDefinir: false,
         // Campos para eventos
         titulo: '',
         fecha: '',
@@ -936,10 +947,36 @@ const Parametros = () => {
         }));
     };
 
+    // Fuentes y sectores: el backend rechaza nombres repetidos con un 422.
+    const guardarCatalogo = async (ruta, listar, titulo) => {
+        try {
+            await axios.post(ruta, { ...formData, id: editingItem ? editingItem.id : undefined });
+            listar();
+            handleCloseModal();
+            Swal.fire({ title: titulo, icon: 'success' });
+        } catch (error) {
+            Swal.fire({
+                title: 'No se pudo guardar',
+                text: error.response?.data?.message ?? 'Inténtelo de nuevo.',
+                icon: 'error'
+            });
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
         if (modalType === 'proyectos') {
+            if (!financiacionCompleta(formData)) {
+                setModalActiveTab('fuentes');
+                Swal.fire({
+                    title: 'Falta la fuente de financiación',
+                    text: 'Seleccione al menos una fuente o marque que está por definir.',
+                    icon: 'warning'
+                });
+                return;
+            }
+
             // Calcular el presupuesto total de los componentes
             const presupuestoTotal = detallesPresupuesto.reduce((sum, comp) => sum + comp.valor, 0);
 
@@ -951,7 +988,18 @@ const Parametros = () => {
                 contratos: contratos,
                 puntosUbicacion: puntosUbicacion,
             };
-            const response = await axios.post('/guardarProyecto', newProyecto);
+            let response;
+            try {
+                response = await axios.post('/guardarProyecto', newProyecto);
+            } catch (error) {
+                const datos = error.response?.data;
+                Swal.fire({
+                    title: 'No se pudo guardar el proyecto',
+                    text: [datos?.mensaje ?? datos?.message ?? 'Inténtelo de nuevo.', ...(datos?.errores ?? [])].join(' '),
+                    icon: 'error'
+                });
+                return;
+            }
             if (response.status === 200) {
                 listProyectos();
                 handleCloseModal();
@@ -1093,7 +1141,11 @@ const Parametros = () => {
                     handleCloseModal();
                 });
             }
-        } else if (type === 'entidades') {
+        } else if (modalType === 'fuentes') {
+            await guardarCatalogo('/guardarFuenteFinanciacion', listFuentes, 'Fuente de financiación guardada correctamente');
+        } else if (modalType === 'sectores') {
+            await guardarCatalogo('/guardarSector', listSectores, 'Sector guardado correctamente');
+        } else if (modalType === 'entidades') {
             const newEntidad = {
                 ...formData,
                 id: editingItem ? editingItem.id : Date.now(),
@@ -1153,7 +1205,7 @@ const Parametros = () => {
             sector: item.sector || '',
             entidadPresenta: item.entidad_presenta || '',
             entidadFinancia: item.entidad_financia || '',
-            fuenteFinanciamiento: item.fuente_financiacion || '',
+            ...datosFinanciacionDe(item),
             // Campos para eventos
             titulo: item.titulo || '',
             fecha: item.fecha || '',
@@ -1339,7 +1391,8 @@ const Parametros = () => {
             sector: '',
             entidadPresenta: '',
             entidadFinancia: '',
-            fuenteFinanciamiento: '',
+            fuenteIds: [],
+            financiacionPorDefinir: false,
             accion: 'Agregar'
         });
         setDetallesPresupuesto([]);
@@ -1379,7 +1432,8 @@ const Parametros = () => {
             sector: '',
             entidadPresenta: '',
             entidadFinancia: '',
-            fuenteFinanciamiento: '',
+            fuenteIds: [],
+            financiacionPorDefinir: false,
             accion: 'Agregar'
         });
         setDetallesPresupuesto([]);
@@ -1448,6 +1502,12 @@ const Parametros = () => {
             if (response.status === 200) {
                 listEntidades();
             }
+        } else if (type === 'fuentes') {
+            await axios.post('/activarFuenteFinanciacion', { id: id });
+            listFuentes();
+        } else if (type === 'sectores') {
+            await axios.post('/activarSector', { id: id });
+            listSectores();
         }
     };
 
@@ -1459,6 +1519,9 @@ const Parametros = () => {
             tiposEventos: 'Tipo de Evento',
             prioridades: 'Prioridad',
             responsables: 'Responsable',
+            entidades: 'Entidad',
+            fuentes: 'Fuente de financiación',
+            sectores: 'Sector',
             proyectos: 'Proyecto',
             eventos: 'Evento'
         };
@@ -1725,13 +1788,16 @@ const Parametros = () => {
                                             >
                                                 <FontAwesomeIcon icon={faEdit} /> Editar
                                             </button>
-                                            <button
-                                                onClick={() => handleDelete(item.id, type)}
-                                                className="btn-delete"
-                                                title="Eliminar"
-                                            >
-                                                <FontAwesomeIcon icon={faTrash} /> Eliminar
-                                            </button>
+                                            {/* Fuentes y sectores se desactivan: los proyectos los referencian. */}
+                                            {type !== 'fuentes' && type !== 'sectores' && (
+                                                <button
+                                                    onClick={() => handleDelete(item.id, type)}
+                                                    className="btn-delete"
+                                                    title="Eliminar"
+                                                >
+                                                    <FontAwesomeIcon icon={faTrash} /> Eliminar
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -1773,6 +1839,8 @@ const Parametros = () => {
                         {activeTab === 'prioridades' && renderTable(prioridades, 'prioridades')}
                         {activeTab === 'responsables' && renderTable(responsables, 'responsables')}
                         {activeTab === 'entidades' && renderTable(entidades, 'entidades')}
+                        {activeTab === 'fuentes-financiacion' && renderTable(fuentes, 'fuentes')}
+                        {activeTab === 'sectores' && renderTable(sectores, 'sectores')}
 
             {/* Modal para agregar/editar */}
             {showModal && (
@@ -1821,7 +1889,7 @@ const Parametros = () => {
                             )}
 
                             {/* Campos comunes */}
-                            {(modalType === 'municipios' || modalType === 'estados' || modalType === 'fases' || modalType === 'tiposEventos' || modalType === 'prioridades' || modalType === 'responsables' || modalType === 'entidades') && (
+                            {(modalType === 'municipios' || modalType === 'estados' || modalType === 'fases' || modalType === 'tiposEventos' || modalType === 'prioridades' || modalType === 'responsables' || modalType === 'entidades' || modalType === 'fuentes' || modalType === 'sectores') && (
                                 <div className="form-group">
                                     <label htmlFor="nombre">Nombre *</label>
                                     <input
@@ -1832,6 +1900,20 @@ const Parametros = () => {
                                         onChange={handleInputChange}
                                         required
                                         placeholder="Ingrese el nombre"
+                                    />
+                                </div>
+                            )}
+
+                            {modalType === 'fuentes' && (
+                                <div className="form-group">
+                                    <label htmlFor="descripcion">Descripción</label>
+                                    <textarea
+                                        id="descripcion"
+                                        name="descripcion"
+                                        value={formData.descripcion}
+                                        onChange={handleInputChange}
+                                        rows="3"
+                                        placeholder="Opcional"
                                     />
                                 </div>
                             )}
@@ -2069,18 +2151,33 @@ const Parametros = () => {
                                                     </select>
                                                 </div>
                                             </div>
-                                            <div className="form-group">
-                                                <label htmlFor="fuente">Fuente de Financiamiento *</label>
-                                                <textarea
-                                                    type="text"
-                                                    id="fuenteFinanciamiento"
-                                                    name="fuenteFinanciamiento"
-                                                    value={formData.fuenteFinanciamiento}
-                                                    onChange={handleInputChange}
-                                                    rows="4"
-                                                    placeholder="Ingrese la fuente de financiamiento"
-                                                />
-                                            </div>
+                                            <fieldset className="form-group fuentes-seleccion">
+                                                <legend>Fuentes de financiación *</legend>
+                                                <div className="fuentes-seleccion-lista">
+                                                    {fuentesDisponibles(fuentes, formData.fuenteIds).map(fuente => (
+                                                        <label key={fuente.id} className="checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={formData.fuenteIds.some(id => String(id) === String(fuente.id))}
+                                                                onChange={() => setFormData(prev => ({ ...prev, ...alternarFuente(prev, fuente.id) }))}
+                                                            />
+                                                            <span>{fuente.nombre}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                                <label className="checkbox-label fuentes-seleccion-pendiente">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.financiacionPorDefinir}
+                                                        onChange={(e) => setFormData(prev => ({
+                                                            ...prev,
+                                                            financiacionPorDefinir: e.target.checked,
+                                                            fuenteIds: e.target.checked ? [] : prev.fuenteIds
+                                                        }))}
+                                                    />
+                                                    <span>Por definir (etapa de estructuración)</span>
+                                                </label>
+                                            </fieldset>
                                         </div>
                                     </div>
                                 </>
