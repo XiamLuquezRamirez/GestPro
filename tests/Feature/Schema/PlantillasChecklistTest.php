@@ -105,6 +105,8 @@ class PlantillasChecklistTest extends TestCase
 
     public function test_reintentar_la_migracion_rehace_lo_que_quedo_a_medias(): void
     {
+        $this->migracionExpedientes()->down();
+        $this->migracionVersiones()->down();
         $migracion = $this->migracionPlantillas();
         $migracion->down();
         $this->assertFalse(Schema::hasTable('plantillas_checklist'));
@@ -143,6 +145,18 @@ class PlantillasChecklistTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('plantillas distintas de SGR');
         $this->migracionPlantillas()->down();
+    }
+
+    public function test_el_rollback_de_plantillas_exige_revertir_antes_las_versiones(): void
+    {
+        try {
+            $this->migracionPlantillas()->down();
+            $this->fail('El rollback debía detenerse.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('catalogo_versiones todavía depende', $e->getMessage());
+        }
+
+        $this->assertSame(1, DB::table('plantilla_fuentes')->count());
     }
 
     public function test_una_plantilla_con_versiones_no_se_puede_borrar(): void
@@ -278,6 +292,27 @@ class PlantillasChecklistTest extends TestCase
 
         DB::table('proyectos_expedientes')->where('id', $expediente)->delete();
 
+        $this->assertDatabaseCount('expediente_plantillas', 0);
+    }
+
+    public function test_reintentar_la_migracion_de_expedientes_rehace_lo_que_quedo_a_medias(): void
+    {
+        $expediente = $this->expediente($this->version(PlantillaChecklist::sgr()->id));
+        $migracion = $this->migracionExpedientes();
+        $migracion->down();
+
+        // Lo que dejaría un fallo antes de las claves foráneas, con una fila que no corresponde.
+        Schema::create('expediente_plantillas', function (Blueprint $table) {
+            $table->unsignedBigInteger('expediente_id');
+            $table->unsignedBigInteger('catalogo_version_id');
+            $table->boolean('es_principal')->default(false);
+        });
+        DB::table('expediente_plantillas')->insert(['expediente_id' => 999, 'catalogo_version_id' => 999]);
+
+        $migracion->up();
+
+        $this->assertEquals([$expediente], DB::table('expediente_plantillas')->pluck('expediente_id')->all());
+        DB::table('proyectos_expedientes')->where('id', $expediente)->delete();
         $this->assertDatabaseCount('expediente_plantillas', 0);
     }
 }

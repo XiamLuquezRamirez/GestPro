@@ -3,6 +3,7 @@
 namespace Tests\Feature\Viabilizacion;
 
 use App\Enums\Rol;
+use App\Exceptions\ReglaNegocioException;
 use App\Models\FuenteFinanciacion;
 use App\Models\Municipio;
 use App\Models\Proyecto;
@@ -13,6 +14,7 @@ use Database\Seeders\CatalogoRequisitosSgrSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -153,6 +155,16 @@ class ExpedienteAutomaticoTest extends TestCase
 
         $this->assertDatabaseHas('proyectos', ['nombre' => 'Acueducto veredal']);
         $this->assertDatabaseCount('proyectos_expedientes', 0);
+    }
+
+    public function test_un_fallo_de_la_creacion_queda_registrado(): void
+    {
+        Exceptions::fake();
+        DB::table('catalogo_versiones')->update(['vigente' => false]);
+
+        $this->guardar()->assertOk();
+
+        Exceptions::assertReported(ReglaNegocioException::class);
     }
 
     public function test_preselecciona_el_sector_sugerido_del_proyecto(): void

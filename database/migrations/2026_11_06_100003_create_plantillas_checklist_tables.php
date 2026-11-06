@@ -69,6 +69,11 @@ return new class extends Migration
             throw new RuntimeException('No se puede revertir: hay plantillas distintas de SGR. Elimínelas o restaure un respaldo.');
         }
 
+        // Sin esto, se borrarían las asociaciones antes de que falle la clave foránea de las versiones.
+        if (Schema::hasColumn('catalogo_versiones', 'plantilla_id')) {
+            throw new RuntimeException('No se puede revertir: catalogo_versiones todavía depende de las plantillas. Revierta primero la migración de versiones.');
+        }
+
         $this->eliminarTablas();
     }
 

@@ -24,7 +24,7 @@ class PlantillaChecklist extends Model
         'activo' => 'boolean',
     ];
 
-    /** La plantilla del checklist de regalías. La crea una migración, así que siempre existe. */
+    /** La plantilla del checklist de regalías. La crea una migración; sin ella, el módulo no funciona. */
     public static function sgr(): self
     {
         return self::where('clave', self::CLAVE_SGR)->first()
