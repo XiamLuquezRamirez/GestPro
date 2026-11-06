@@ -22,7 +22,7 @@ Artisan::command('expedientes:crear-faltantes {--simular : Solo lista los proyec
 
     $creados = $proyectos->filter(fn (Proyecto $p) => $servicio->crearAutomatico($p, null) !== null)->count();
     $this->info("Expedientes creados: {$creados} de {$proyectos->count()}.");
-})->purpose('Crea el expediente SGR, sin configurar, a los proyectos en Formulación con regalías que no tienen');
+})->purpose('Crea el expediente SGR, sin configurar, a los proyectos en Formulación con la fuente SGR que no tienen');
 
 Artisan::command('proyectos:informe-fuentes', function () {
     $porFuente = DB::table('fuentes_financiacion as f')

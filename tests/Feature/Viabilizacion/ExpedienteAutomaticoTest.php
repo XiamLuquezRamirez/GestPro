@@ -3,6 +3,7 @@
 namespace Tests\Feature\Viabilizacion;
 
 use App\Enums\Rol;
+use App\Models\FuenteFinanciacion;
 use App\Models\Municipio;
 use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
@@ -23,8 +24,8 @@ class ExpedienteAutomaticoTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const FUENTE_SGR = 'Recursos propios y regalías';
-
+    private int $fuenteSgr;
+    private int $fuentePropios;
     private int $formulacion;
     private int $licitacion;
     private string $municipio;
@@ -38,6 +39,8 @@ class ExpedienteAutomaticoTest extends TestCase
         $this->formulacion = DB::table('fases')->insertGetId(['nombre' => 'Formulación']);
         $this->licitacion = DB::table('fases')->insertGetId(['nombre' => 'Licitación']);
         Storage::fake('local');
+        $this->fuenteSgr = FuenteFinanciacion::where('clave', FuenteFinanciacion::SGR)->value('id');
+        $this->fuentePropios = FuenteFinanciacion::where('clave', FuenteFinanciacion::RECURSOS_PROPIOS)->value('id');
     }
 
     private function como(Rol $rol): static
@@ -58,7 +61,7 @@ class ExpedienteAutomaticoTest extends TestCase
             'presupuesto' => null,
             'entidadPresenta' => null,
             'entidadFinancia' => null,
-            'fuenteFinanciamiento' => self::FUENTE_SGR,
+            'fuenteIds' => [$this->fuenteSgr],
             ...$cambios,
         ];
     }
@@ -68,15 +71,17 @@ class ExpedienteAutomaticoTest extends TestCase
         return $this->como(Rol::Gestor)->postJson('/GestPro/guardarProyecto', $this->formulario($cambios));
     }
 
-    private function proyecto(array $cambios = []): Proyecto
+    private function proyecto(array $cambios = [], ?array $fuentes = null): Proyecto
     {
-        return Proyecto::create([
+        $proyecto = Proyecto::create([
             'municipio' => $this->municipio,
             'nombre' => 'Proyecto',
             'fase' => $this->formulacion,
-            'fuente_financiacion' => self::FUENTE_SGR,
             ...$cambios,
         ]);
+        $proyecto->fuentes()->sync($fuentes ?? [$this->fuenteSgr]);
+
+        return $proyecto;
     }
 
     private function expedienteSinConfigurar(?Proyecto $proyecto = null): ProyectoExpediente
@@ -106,19 +111,25 @@ class ExpedienteAutomaticoTest extends TestCase
             ->assertJsonPath('configurado', false);
     }
 
-    public function test_reconoce_la_fuente_sin_importar_tildes_ni_mayusculas(): void
+    public function test_reconoce_la_fuente_sgr_junto_a_otras(): void
     {
-        foreach (['REGALÍAS', 'regalias directas', 'Sistema General de Regalias', 'Recursos SGR'] as $i => $fuente) {
-            $this->guardar(['nombre' => "Fuente {$i}", 'fuenteFinanciamiento' => $fuente])->assertOk();
-            $this->assertSame(1, Proyecto::where('nombre', "Fuente {$i}")->firstOrFail()->expedientes()->count(), $fuente);
-        }
+        $this->guardar(['nombre' => 'Mixto', 'fuenteIds' => [$this->fuentePropios, $this->fuenteSgr]])->assertOk();
+
+        $this->assertSame(1, Proyecto::where('nombre', 'Mixto')->firstOrFail()->expedientes()->count());
+    }
+
+    public function test_detecta_regalias_por_el_catalogo_y_no_por_el_texto(): void
+    {
+        $proyecto = $this->proyecto(['nombre' => 'Texto engañoso', 'fuente_financiacion' => 'Sin regalías'], [$this->fuentePropios]);
+
+        $this->assertFalse(app(ExpedienteService::class)->correspondeAutomatico($proyecto));
     }
 
     public function test_no_se_crea_si_no_corresponde(): void
     {
         $this->guardar(['nombre' => 'En licitacion', 'fase' => $this->licitacion])->assertOk();
-        $this->guardar(['nombre' => 'Recursos propios', 'fuenteFinanciamiento' => 'Recursos propios'])->assertOk();
-        $this->guardar(['nombre' => 'Sin fuente', 'fuenteFinanciamiento' => null])->assertOk();
+        $this->guardar(['nombre' => 'Recursos propios', 'fuenteIds' => [$this->fuentePropios]])->assertOk();
+        $this->guardar(['nombre' => 'Por definir', 'fuenteIds' => [], 'financiacionPorDefinir' => true])->assertOk();
         $this->guardar(['nombre' => 'Sin fase', 'fase' => null])->assertOk();
 
         $this->assertDatabaseCount('proyectos', 4);
@@ -364,7 +375,7 @@ class ExpedienteAutomaticoTest extends TestCase
         $tiene = $this->proyecto(['nombre' => 'Ya tiene']);
         $previo = $this->expedienteSinConfigurar($tiene);
         $this->proyecto(['nombre' => 'Otra fase', 'fase' => $this->licitacion]);
-        $this->proyecto(['nombre' => 'Sin regalías', 'fuente_financiacion' => 'Recursos propios']);
+        $this->proyecto(['nombre' => 'Sin regalías'], [$this->fuentePropios]);
 
         $this->artisan('expedientes:crear-faltantes')->assertSuccessful();
 

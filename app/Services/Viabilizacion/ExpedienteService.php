@@ -5,6 +5,7 @@ namespace App\Services\Viabilizacion;
 use App\Exceptions\ReglaNegocioException;
 use App\Models\CatalogoVersion;
 use App\Models\Fase;
+use App\Models\FuenteFinanciacion;
 use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
 use App\Models\ProyectoRequisito;
@@ -94,11 +95,11 @@ final class ExpedienteService
         }
     }
 
-    /** Proyecto en Formulación, financiado con regalías y todavía sin expediente. */
+    /** Proyecto en Formulación, con la fuente SGR y todavía sin expediente. */
     public function correspondeAutomatico(Proyecto $proyecto): bool
     {
         return $this->esFormulacion($proyecto->fase)
-            && $this->financiadoConRegalias($proyecto)
+            && $proyecto->fuentes()->where('clave', FuenteFinanciacion::SGR)->exists()
             && ! $proyecto->expedientes()->exists();
     }
 
@@ -522,13 +523,6 @@ final class ExpedienteService
         }
 
         return $this->normalizar(Fase::query()->whereKey($faseId)->value('nombre')) === 'formulacion';
-    }
-
-    // La fuente es texto libre: se reconoce por palabra clave. Si no se detecta, el
-    // expediente se puede crear a mano desde la página del proyecto.
-    private function financiadoConRegalias(Proyecto $proyecto): bool
-    {
-        return Str::contains($this->normalizar($proyecto->fuente_financiacion), ['regalia', 'sgr']);
     }
 
     private function normalizar(?string $texto): string
