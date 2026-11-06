@@ -149,4 +149,17 @@ class PlantillasVersionesTest extends TestCase
             ->assertStatus(422)
             ->assertJsonPath('mensaje', 'Falta la plantilla SGR: ejecute las migraciones.');
     }
+
+    public function test_un_expediente_nuevo_registra_su_version_como_principal(): void
+    {
+        $servicio = app(ExpedienteService::class);
+        $expediente = $servicio->crear(Proyecto::create(['nombre' => 'Acueducto']), ['fase_sgr' => 3], null);
+
+        $version = $expediente->versionesPlantilla()->sole();
+        $this->assertSame($expediente->catalogo_version_id, $version->id);
+        $this->assertEquals(1, $version->pivot->es_principal);
+
+        $servicio->eliminar($expediente);
+        $this->assertDatabaseCount('expediente_plantillas', 0);
+    }
 }

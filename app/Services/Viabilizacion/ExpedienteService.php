@@ -66,6 +66,7 @@ final class ExpedienteService
                 'usuario_creo_id' => $usuario?->id,
             ]);
 
+            $expediente->versionesPlantilla()->attach($version->id, ['es_principal' => true]);
             $this->guardarSeleccion($expediente, $seleccion);
             $this->sincronizar($expediente);
 

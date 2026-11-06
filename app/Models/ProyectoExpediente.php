@@ -40,6 +40,13 @@ class ProyectoExpediente extends Model
         return $this->belongsTo(CatalogoVersion::class, 'catalogo_version_id');
     }
 
+    /** Versiones de plantilla que usa el expediente. La etapa 5 permite más de una. */
+    public function versionesPlantilla(): BelongsToMany
+    {
+        return $this->belongsToMany(CatalogoVersion::class, 'expediente_plantillas', 'expediente_id', 'catalogo_version_id')
+            ->withPivot('es_principal');
+    }
+
     public function sectores(): BelongsToMany
     {
         return $this->belongsToMany(RequisitoSector::class, 'expediente_sectores', 'expediente_id', 'sector_id');

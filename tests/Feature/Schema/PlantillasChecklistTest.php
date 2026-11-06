@@ -39,6 +39,21 @@ class PlantillasChecklistTest extends TestCase
         ]);
     }
 
+    private function migracionExpedientes(): object
+    {
+        return require database_path('migrations/2026_11_06_100005_create_expediente_plantillas_table.php');
+    }
+
+    private function expediente(int $version): int
+    {
+        return DB::table('proyectos_expedientes')->insertGetId([
+            'proyecto_id' => DB::table('proyectos')->insertGetId(['nombre' => 'Prueba']),
+            'catalogo_version_id' => $version,
+            'fase_sgr' => 3,
+            'estado' => 'borrador',
+        ]);
+    }
+
     // ------------------------------------------------------------- plantillas
 
     public function test_la_plantilla_sgr_existe_al_migrar_y_solo_se_asocia_a_la_fuente_sgr(): void
@@ -232,5 +247,37 @@ class PlantillasChecklistTest extends TestCase
         DB::table('users')->where('id', $usuario->id)->delete();
 
         $this->assertNull(DB::table('catalogo_versiones')->where('id', $version)->value('usuario_publico_id'));
+    }
+
+    // ------------------------------------------------------------ expedientes
+
+    public function test_migrar_registra_la_version_de_cada_expediente_como_principal(): void
+    {
+        $version = $this->version(PlantillaChecklist::sgr()->id);
+        $expediente = $this->expediente($version);
+        $migracion = $this->migracionExpedientes();
+        $migracion->down();
+
+        $migracion->up();
+        $migracion->up(); // repetirla no duplica
+
+        $filas = DB::table('expediente_plantillas')->get();
+        $this->assertCount(1, $filas);
+        $this->assertEquals($expediente, $filas[0]->expediente_id);
+        $this->assertEquals($version, $filas[0]->catalogo_version_id);
+        $this->assertEquals(1, $filas[0]->es_principal);
+    }
+
+    public function test_borrar_un_expediente_borra_su_registro_de_plantillas(): void
+    {
+        $version = $this->version(PlantillaChecklist::sgr()->id);
+        $expediente = $this->expediente($version);
+        DB::table('expediente_plantillas')->insert([
+            'expediente_id' => $expediente, 'catalogo_version_id' => $version, 'es_principal' => true,
+        ]);
+
+        DB::table('proyectos_expedientes')->where('id', $expediente)->delete();
+
+        $this->assertDatabaseCount('expediente_plantillas', 0);
     }
 }
