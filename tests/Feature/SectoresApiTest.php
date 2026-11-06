@@ -6,7 +6,9 @@ use App\Enums\Rol;
 use App\Models\Proyecto;
 use App\Models\Sector;
 use App\Models\User;
+use Database\Seeders\CatalogoRequisitosSgrSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class SectoresApiTest extends TestCase
@@ -100,5 +102,48 @@ class SectoresApiTest extends TestCase
 
         $this->assertContains($respuesta->status(), [404, 405]);
         $this->assertNotNull($sector->fresh());
+    }
+
+    public function test_editar_sin_cambiar_el_nombre_no_choca_consigo_mismo(): void
+    {
+        $sector = Sector::create(['nombre' => 'Salud', 'activo' => true]);
+
+        $this->como(Rol::Administrador)->postJson('/GestPro/guardarSector', [
+            'accion' => 'Editar', 'id' => $sector->id, 'nombre' => 'Salud',
+        ])->assertOk();
+    }
+
+    public function test_activar_alterna_el_estado_segun_la_base_de_datos(): void
+    {
+        $sector = Sector::create(['nombre' => 'Vías', 'activo' => true]);
+        $admin = $this->como(Rol::Administrador);
+
+        $admin->postJson('/GestPro/activarSector', ['id' => $sector->id])->assertOk();
+        $this->assertFalse($sector->fresh()->activo);
+
+        $admin->postJson('/GestPro/activarSector', ['id' => $sector->id])->assertOk();
+        $this->assertTrue($sector->fresh()->activo);
+    }
+
+    public function test_guardar_no_modifica_el_mapeo_ni_el_estado(): void
+    {
+        $this->seed(CatalogoRequisitosSgrSeeder::class);
+        [$primero, $otro] = DB::table('requisitos_sectores')->orderBy('id')->limit(2)->pluck('id')->all();
+        $sector = Sector::create(['nombre' => 'Salud', 'activo' => true, 'requisitos_sector_id' => $primero]);
+
+        $this->como(Rol::Administrador)->postJson('/GestPro/guardarSector', [
+            'accion' => 'Editar', 'id' => $sector->id, 'nombre' => 'Salud pública',
+            'requisitos_sector_id' => $otro, 'activo' => false,
+        ])->assertOk();
+
+        $sector->refresh();
+        $this->assertSame('Salud pública', $sector->nombre);
+        $this->assertSame($primero, (int) $sector->requisitos_sector_id);
+        $this->assertTrue($sector->activo);
+    }
+
+    public function test_exige_autenticacion(): void
+    {
+        $this->postJson('/GestPro/guardarSector', ['accion' => 'Agregar', 'nombre' => 'Nuevo'])->assertUnauthorized();
     }
 }
