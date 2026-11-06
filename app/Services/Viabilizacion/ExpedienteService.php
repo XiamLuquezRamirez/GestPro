@@ -3,9 +3,9 @@
 namespace App\Services\Viabilizacion;
 
 use App\Exceptions\ReglaNegocioException;
-use App\Models\CatalogoVersion;
 use App\Models\Fase;
 use App\Models\FuenteFinanciacion;
+use App\Models\PlantillaChecklist;
 use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
 use App\Models\ProyectoRequisito;
@@ -48,7 +48,7 @@ final class ExpedienteService
 
     public function crear(Proyecto $proyecto, array $datos, ?User $usuario): ProyectoExpediente
     {
-        $version = CatalogoVersion::vigente()->first()
+        $version = PlantillaChecklist::sgr()->versionVigente()
             ?? throw new ReglaNegocioException('No hay una versión vigente del catálogo de requisitos.');
 
         $seleccion = $this->validarSeleccion($datos, null);

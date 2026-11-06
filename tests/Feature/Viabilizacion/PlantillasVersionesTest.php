@@ -5,8 +5,10 @@ namespace Tests\Feature\Viabilizacion;
 use App\Enums\Rol;
 use App\Models\CatalogoVersion;
 use App\Models\PlantillaChecklist;
+use App\Models\Proyecto;
 use App\Models\User;
 use App\Services\Viabilizacion\CatalogoService;
+use App\Services\Viabilizacion\ExpedienteService;
 use Database\Seeders\CatalogoRequisitosSgrSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -39,6 +41,13 @@ class PlantillasVersionesTest extends TestCase
         $plantilla->versiones()->create(['numero' => 1, 'estado' => CatalogoVersion::PUBLICADA, 'vigente' => true]);
 
         return $plantilla;
+    }
+
+    private function publicarNuevaSgr(): CatalogoVersion
+    {
+        $servicio = app(CatalogoService::class);
+
+        return $servicio->publicar($servicio->crearBorrador('Ajustes'));
     }
 
     public function test_la_version_sembrada_pertenece_a_la_plantilla_sgr(): void
@@ -82,5 +91,53 @@ class PlantillasVersionesTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('plantilla_id', PlantillaChecklist::sgr()->id)
             ->assertJsonPath('numero', 2);
+    }
+
+    public function test_publicar_no_afecta_la_version_vigente_de_otra_plantilla(): void
+    {
+        $otra = $this->otraPlantilla();
+        $anterior = PlantillaChecklist::sgr()->versionVigente();
+
+        $nueva = $this->publicarNuevaSgr();
+
+        $this->assertSame($nueva->id, PlantillaChecklist::sgr()->versionVigente()->id);
+        $this->assertFalse($anterior->fresh()->vigente);
+        $this->assertSame(1, $otra->versionVigente()->numero);
+    }
+
+    public function test_el_catalogo_vigente_y_los_expedientes_nuevos_usan_la_version_sgr(): void
+    {
+        // La otra plantilla queda con un id menor que la nueva vigente de SGR: sin filtrar
+        // por plantilla, tomar la primera vigente daría la versión equivocada.
+        $this->otraPlantilla();
+        $sgr = $this->publicarNuevaSgr();
+
+        $this->comoAdmin()->getJson('/GestPro/catalogo-requisitos/vigente')
+            ->assertOk()->assertJsonPath('version.id', $sgr->id);
+
+        $expediente = app(ExpedienteService::class)
+            ->crear(Proyecto::create(['nombre' => 'Acueducto']), ['fase_sgr' => 3], null);
+
+        $this->assertSame($sgr->id, $expediente->catalogo_version_id);
+    }
+
+    public function test_la_lista_de_versiones_solo_muestra_las_de_sgr(): void
+    {
+        $this->otraPlantilla();
+
+        $versiones = $this->comoAdmin()->getJson('/GestPro/catalogo-requisitos/versiones')->assertOk()->json();
+
+        $this->assertCount(1, $versiones);
+        $this->assertSame(207, $versiones[0]['requisitos']);
+    }
+
+    public function test_publicar_registra_quien_publico(): void
+    {
+        $admin = $this->admin();
+        $borrador = app(CatalogoService::class)->crearBorrador(null);
+
+        $this->comoAdmin($admin)->postJson("/GestPro/catalogo-requisitos/versiones/{$borrador->id}/publicar")->assertOk();
+
+        $this->assertSame($admin->id, $borrador->fresh()->usuario_publico_id);
     }
 }

@@ -10,6 +10,7 @@ use App\Models\RequisitoComponente;
 use App\Models\RequisitoSector;
 use App\Models\RequisitoTipo;
 use App\Models\RequisitoTipologia;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
@@ -42,10 +43,10 @@ final class CatalogoService
 
     // --------------------------------------------------------------- lectura
 
-    /** Catálogo vigente para armar la configuración de un expediente. */
+    /** Catálogo SGR vigente para armar la configuración de un expediente. */
     public function vigente(bool $incluirInactivos = false): array
     {
-        $version = CatalogoVersion::vigente()->first()
+        $version = PlantillaChecklist::sgr()->versionVigente()
             ?? throw new ReglaNegocioException('No hay una versión vigente del catálogo de requisitos.');
 
         $filtrar = fn ($q) => $incluirInactivos ? $q : $q->where('activo', true);
@@ -94,7 +95,7 @@ final class CatalogoService
         });
     }
 
-    public function publicar(CatalogoVersion $version): CatalogoVersion
+    public function publicar(CatalogoVersion $version, ?User $usuario = null): CatalogoVersion
     {
         $this->exigirBorrador($version);
 
@@ -114,9 +115,16 @@ final class CatalogoService
             throw new ReglaNegocioException('La versión tiene condiciones inválidas y no puede publicarse.', $errores);
         }
 
-        return DB::transaction(function () use ($version) {
-            CatalogoVersion::where('id', '!=', $version->id)->update(['vigente' => false]);
-            $version->update(['estado' => CatalogoVersion::PUBLICADA, 'fecha_publicacion' => now(), 'vigente' => true]);
+        return DB::transaction(function () use ($version, $usuario) {
+            CatalogoVersion::where('plantilla_id', $version->plantilla_id)
+                ->where('id', '!=', $version->id)
+                ->update(['vigente' => false]);
+            $version->update([
+                'estado' => CatalogoVersion::PUBLICADA,
+                'fecha_publicacion' => now(),
+                'usuario_publico_id' => $usuario?->id,
+                'vigente' => true,
+            ]);
 
             return $version;
         });

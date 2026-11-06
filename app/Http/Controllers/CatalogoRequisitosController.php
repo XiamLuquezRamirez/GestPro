@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CatalogoVersion;
+use App\Models\PlantillaChecklist;
 use App\Models\RequisitoCatalogo;
 use App\Models\RequisitoComponente;
 use App\Models\RequisitoTipologia;
@@ -36,7 +37,7 @@ class CatalogoRequisitosController extends Controller
     public function versiones(): JsonResponse
     {
         return response()->json(
-            CatalogoVersion::query()->withCount(['requisitos', 'expedientes'])->orderByDesc('numero')->get()
+            PlantillaChecklist::sgr()->versiones()->withCount(['requisitos', 'expedientes'])->orderByDesc('numero')->get()
                 ->map(fn (CatalogoVersion $v) => [
                     'id' => $v->id,
                     'numero' => $v->numero,
@@ -57,9 +58,9 @@ class CatalogoRequisitosController extends Controller
         return response()->json($this->servicio->crearBorrador($datos['descripcion'] ?? null), 201);
     }
 
-    public function publicarVersion(CatalogoVersion $version): JsonResponse
+    public function publicarVersion(Request $request, CatalogoVersion $version): JsonResponse
     {
-        return response()->json($this->servicio->publicar($version));
+        return response()->json($this->servicio->publicar($version, $request->user()));
     }
 
     public function eliminarVersion(CatalogoVersion $version): JsonResponse
