@@ -87,7 +87,8 @@ class AutorizacionTest extends TestCase
                 'presupuesto' => null,
                 'entidadPresenta' => null,
                 'entidadFinancia' => null,
-                'fuenteFinanciamiento' => null,
+                'fuenteIds' => [],
+                'financiacionPorDefinir' => true,
                 'sector' => null,
             ]);
 

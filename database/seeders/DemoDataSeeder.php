@@ -7,6 +7,7 @@ use App\Models\Entidad;
 use App\Models\Estado;
 use App\Models\Evento;
 use App\Models\Fase;
+use App\Models\FuenteFinanciacion;
 use App\Models\PresupuestoProyecto;
 use App\Models\Prioridad;
 use App\Models\Proyecto;
@@ -143,10 +144,14 @@ class DemoDataSeeder extends Seeder
                         'presupuesto' => rand(80, 950) * 1_000_000,
                         'entidad_presenta' => $entidadPresenta->id,
                         'entidad_financia' => $entidadFinancia->id,
-                        'fuente_financiacion' => 'Recursos propios y regalías',
+                        'fuente_financiacion' => 'Sistema General de Regalías (SGR), Recursos propios',
                         'progreso' => min(100, $progresoBase + rand(-5, 5)),
                         'sector' => $sector->id,
                     ]
+                );
+
+                $proyecto->fuentes()->sync(
+                    FuenteFinanciacion::whereIn('clave', [FuenteFinanciacion::SGR, FuenteFinanciacion::RECURSOS_PROPIOS])->pluck('id')
                 );
 
                 $proyectos[] = ['proyecto' => $proyecto, 'fase' => $faseNombre];

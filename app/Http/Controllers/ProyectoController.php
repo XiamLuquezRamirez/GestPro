@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Proyecto;
+use App\Services\Financiacion\FuentesProyecto;
 use App\Services\Viabilizacion\ExpedienteService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -30,6 +31,7 @@ class ProyectoController extends Controller
                 'proyectos.entidad_presenta',
                 'proyectos.entidad_financia',
                 'proyectos.fuente_financiacion',
+                'proyectos.financiacion_por_definir',
                 'proyectos.sector',
                 'fase.color as color_fase',
                 'fase.dashboard as dashboard_fase',
@@ -45,8 +47,14 @@ class ProyectoController extends Controller
 
         
 
+        $fuentesPorProyecto = DB::table('proyecto_fuentes')->get()->groupBy('proyecto_id');
+
         $totalPresupuesto = 0;
         foreach ($proyectos as $proyecto) {
+            $proyecto->fuente_ids = $fuentesPorProyecto->get($proyecto->id, collect())
+                ->map(fn ($fila) => (int) $fila->fuente_id)
+                ->values();
+
             $componentesPresupuesto = DB::table('presupuesto_proyecto')
                 ->select('componente', 'valor', 'id',)
                 ->where('proyecto', $proyecto->id)
@@ -277,11 +285,19 @@ class ProyectoController extends Controller
         return response()->json(['success' => 'Fase activada correctamente']);
     }
 
-    public function guardarProyecto(Request $request, ExpedienteService $expedientes)
+    public function guardarProyecto(Request $request, ExpedienteService $expedientes, FuentesProyecto $fuentes)
     {
         $proyecto = $request->all();
         $proyectoId = $proyecto['id'] ?? null;
         $faseAnterior = null;
+
+        // Antes de la transacción: su catch convertiría una regla incumplida en un 500.
+        // Al editar sin enviar fuentes se conservan las que tiene.
+        $esNuevo = $proyecto['accion'] == 'Agregar';
+        $financiacion = $esNuevo || array_key_exists('fuenteIds', $proyecto) || array_key_exists('financiacionPorDefinir', $proyecto)
+            ? $fuentes->validar($proyecto, $esNuevo ? null : (int) $proyectoId)
+            : null;
+
         DB::beginTransaction();
 
 
@@ -297,9 +313,10 @@ class ProyectoController extends Controller
                     'presupuesto' => $proyecto['presupuesto'],
                     'entidad_presenta' => $proyecto['entidadPresenta'],
                     'entidad_financia' => $proyecto['entidadFinancia'],
-                    'fuente_financiacion' => $proyecto['fuenteFinanciamiento'],
                     'sector' => ($proyecto['sector'] ?? null) ?: null
                 ]);
+
+                $fuentes->guardar($proyectoId, $financiacion);
 
                 if (isset($proyecto['componentesPresupuesto']) && count($proyecto['componentesPresupuesto']) > 0) {
                     foreach ($proyecto['componentesPresupuesto'] as $presupuesto) {
@@ -333,9 +350,12 @@ class ProyectoController extends Controller
                     'fase' => $proyecto['fase'],
                     'presupuesto' => $proyecto['presupuesto'],
                     'entidad_presenta' => $proyecto['entidadPresenta'],
-                    'entidad_financia' => $proyecto['entidadFinancia'],
-                    'fuente_financiacion' => $proyecto['fuenteFinanciamiento']
+                    'entidad_financia' => $proyecto['entidadFinancia']
                 ]);
+
+                if ($financiacion !== null) {
+                    $fuentes->guardar((int) $proyecto['id'], $financiacion);
+                }
 
                 // Solo si viene en la petición: quien no lo envía no debe borrarlo.
                 if (array_key_exists('sector', $proyecto)) {
