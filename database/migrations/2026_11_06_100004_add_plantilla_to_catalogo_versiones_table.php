@@ -59,6 +59,9 @@ return new class extends Migration
         if (DB::table('catalogo_versiones')->where('plantilla_id', '!=', $this->plantillaSgr())->exists()) {
             throw new RuntimeException('No se puede revertir: hay versiones de plantillas distintas de SGR. Elimínelas o restaure un respaldo.');
         }
+        if (DB::table('catalogo_versiones')->whereNotNull('usuario_publico_id')->exists()) {
+            throw new RuntimeException('No se puede revertir: hay versiones que registran quién las publicó y ese dato se perdería. Restaure un respaldo.');
+        }
 
         Schema::table('catalogo_versiones', function (Blueprint $table) {
             $table->dropForeign(['plantilla_id']);

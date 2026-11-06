@@ -4,6 +4,7 @@ namespace Tests\Feature\Schema;
 
 use App\Models\FuenteFinanciacion;
 use App\Models\PlantillaChecklist;
+use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -125,6 +126,7 @@ class PlantillasChecklistTest extends TestCase
         $this->otraPlantilla();
 
         $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('plantillas distintas de SGR');
         $this->migracionPlantillas()->down();
     }
 
@@ -195,5 +197,31 @@ class PlantillasChecklistTest extends TestCase
         }
 
         $this->assertTrue(Schema::hasColumn('catalogo_versiones', 'plantilla_id'));
+    }
+
+    public function test_el_rollback_se_detiene_si_una_version_registra_quien_publico(): void
+    {
+        $version = $this->version(PlantillaChecklist::sgr()->id);
+        DB::table('catalogo_versiones')->where('id', $version)->update(['usuario_publico_id' => User::factory()->create()->id]);
+
+        try {
+            $this->migracionVersiones()->down();
+            $this->fail('El rollback debía detenerse.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('quién las publicó', $e->getMessage());
+        }
+
+        $this->assertTrue(Schema::hasColumn('catalogo_versiones', 'usuario_publico_id'));
+    }
+
+    public function test_borrar_un_usuario_conserva_la_version_que_publico(): void
+    {
+        $version = $this->version(PlantillaChecklist::sgr()->id);
+        $usuario = User::factory()->create();
+        DB::table('catalogo_versiones')->where('id', $version)->update(['usuario_publico_id' => $usuario->id]);
+
+        DB::table('users')->where('id', $usuario->id)->delete();
+
+        $this->assertNull(DB::table('catalogo_versiones')->where('id', $version)->value('usuario_publico_id'));
     }
 }
