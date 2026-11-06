@@ -22,7 +22,7 @@ Cada etapa tiene su propio plan, que se escribe al validar la anterior, porque c
 | 2. Plantillas sobre versiones | Plan propio | Se escribe al validar la etapa 1 |
 | 3. Seguimiento del requisito | Plan propio | Se escribe al validar la etapa 2 |
 | 4. Administración de plantillas | Plan propio | Se escribe al validar la etapa 3 |
-| 5. Composición en el expediente | Plan propio | Se escribe al validar la etapa 4 |
+| 5. Composición en el expediente | Plan propio | Se escribe al validar la etapa 4. Debe incluir el cambio de nombre a "Expediente", según "Textos en pantalla" en la sección 6 del diseño |
 | 6. Versiones y cierre | Plan propio | Se escribe al validar la etapa 5 |
 
 ## Reglas de ejecución

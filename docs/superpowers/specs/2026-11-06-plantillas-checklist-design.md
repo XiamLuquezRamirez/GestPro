@@ -21,6 +21,7 @@ Convertir el checklist de viabilización SGR en un sistema de plantillas configu
 | Requisito condicionado | En plantillas nuevas, la condición es un texto y una persona decide si aplica. La plantilla SGR conserva sus reglas automáticas. |
 | Duplicados | Código común definido por el administrador; una sola fila con varios orígenes. Los textos parecidos solo generan un aviso. |
 | Creación del expediente | Automática para todo proyecto en Formulación con al menos una fuente definida. |
+| Nombre en pantalla | "Expediente", sin "SGR" ni "de viabilización", junto a las plantillas que lleva. El cambio se hace en la etapa 5. |
 
 **Fuera de alcance:** montos por fuente, preguntas configurables para automatizar condicionados, revisión de cada requisito cumplido, varios soportes vigentes por requisito, y definir qué requisitos aplican a cada financiador. Esto último lo aporta la entidad responsable; por eso solo se siembra la plantilla SGR.
 
@@ -281,7 +282,32 @@ Con el armazón, los tokens `--gp-*` y los patrones del rediseño. Se registran 
 | `ExpedienteConfiguracion.jsx` | Paso de plantillas, avisos de duplicados y panel SGR solo si corresponde |
 | `ExpedienteChecklist.jsx` | Estado, responsable, "No aplica", aprobación, "Agregar requisito propio" e historial por requisito. Las filas SGR se agrupan por sección; las demás, por plantilla y categoría |
 | `ExpedienteViabilizacion.jsx` | Plantillas aplicadas con su versión y acción "Aplicar versión nueva" con vista previa |
-| `ExpedientesSgrPanel.jsx` | Pasa a llamarse "Expedientes" en pantalla, con filtros por fuente y responsable. Rutas sin cambios |
+| `ExpedientesSgrPanel.jsx` | Filtros por fuente y responsable. Rutas sin cambios. Su título está en "Textos en pantalla" |
+
+**Textos en pantalla**
+
+Hasta la etapa 4 todos los expedientes son de regalías, así que los textos actuales siguen siendo correctos. La etapa 5 crea expedientes de otras fuentes, y por eso estos textos cambian en esa etapa:
+
+| Archivo | Hoy | Pasa a |
+|---|---|---|
+| `utils/navegacion.js`, `Dashboard.jsx`, `ModoSala.jsx` | Expedientes SGR | Expedientes |
+| `ExpedienteViabilizacion.jsx`, antetítulo | Viabilización de proyectos · Sistema General de Regalías | Seguimiento de proyectos |
+| `ExpedienteViabilizacion.jsx`, título | Expediente de viabilización SGR #12 | Expediente #12, y al lado `Plantillas: SGR, Obras de agua`, o `Sin plantillas` si aún no tiene |
+| `ExpedienteViabilizacion.jsx`, sin expediente | Este proyecto aún no tiene expediente de viabilización | Este proyecto aún no tiene expediente |
+| `ExpedienteViabilizacion.jsx`, sin expediente | Crea uno para armar su checklist de requisitos del SGR. | Crea uno para armar su checklist de requisitos. |
+| `ModalProyecto.jsx`, botón | Abrir expediente de viabilización SGR | Abrir expediente |
+| `ModalProyecto.jsx`, dato | Requisitos SGR cumplidos | Requisitos cumplidos |
+| `Parametros.jsx`, botón y su `title` | Expediente SGR / Expediente de viabilización SGR | Expediente |
+| `utils/tablero.js`, etiqueta | Requisitos SGR | Requisitos |
+| Descripción de `expedientes:crear-faltantes` en `routes/console.php` | Crea el expediente SGR… con la fuente SGR | Crea el expediente, sin configurar, a los proyectos en Formulación con al menos una fuente definida que no tienen |
+
+Reglas para este cambio:
+
+- **El nombre sale de las plantillas, no de las fuentes.** Las plantillas definen el checklist; un proyecto puede tener una fuente sin plantilla, como los 30 que tienen SGR y Recursos propios.
+- **Lo propio de regalías conserva la sigla,** y solo se muestra si el expediente tiene una plantilla con motor `sgr`: "Fase SGR" en `utils/expedienteChecklist.js`, la instrucción "Revisa en el panel la fase SGR…" en `ExpedienteViabilizacion.jsx` y el panel SGR de la configuración.
+- **La búsqueda sigue encontrando "SGR".** Al quitarlo del título de `utils/navegacion.js`, se agrega `sgr` a sus `palabras`.
+- **Los nombres internos no cambian:** la ruta `/viabilizacion/:proyectoId`, `routes/viabilizacion.php`, `ExpedienteViabilizacion`, `ExpedientesSgrPanel`, `VISTA.EXPEDIENTES` y las tablas. Así los enlaces guardados siguen funcionando.
+- **Pruebas:** se actualizan los textos que comprueban `navegacion.test.js` y `tablero.test.js`, y se agrega una prueba de que la búsqueda encuentra "SGR" y de que un expediente sin plantilla `sgr` no muestra "Fase SGR".
 
 ---
 
@@ -338,5 +364,5 @@ Cada etapa se valida con el usuario antes de seguir, y todas exigen que las prue
 | 2 | Plantillas sobre versiones | 4-6 | El SGR es una plantilla, la comparación de los 10 expedientes no muestra diferencias y nada cambia en pantalla |
 | 3 | Seguimiento del requisito | 7-9 | Estados, responsables, "no aplica" con aprobación e historial funcionan sobre expedientes SGR |
 | 4 | Administración de plantillas | — | Un administrador crea, duplica, asocia, configura y publica una plantilla sin desarrollador |
-| 5 | Composición en el expediente | 10 | Se eligen varias plantillas, se combinan duplicados, se agregan requisitos propios, el expediente automático cubre todas las fuentes y se cumple el criterio de aceptación principal |
+| 5 | Composición en el expediente | 10 | Se eligen varias plantillas, se combinan duplicados, se agregan requisitos propios, el expediente automático cubre todas las fuentes, los textos en pantalla dicen "Expediente" y se cumple el criterio de aceptación principal |
 | 6 | Versiones en expedientes y cierre | 11 | Actualización con vista previa, pantalla de historial, tablero generalizado y filtros |
