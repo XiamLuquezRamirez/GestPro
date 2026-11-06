@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\FuenteFinanciacionController;
 use App\Http\Controllers\ProyectoController;
 use App\Http\Controllers\AuthController;
 
@@ -43,6 +44,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/eventosListar', [ProyectoController::class, 'eventosListar']);
     Route::get('/listarContratos', [ProyectoController::class, 'listarContratos']);
     Route::get('/sectores', [ProyectoController::class, 'sectores']);
+    Route::get('/fuentesFinanciacion', [FuenteFinanciacionController::class, 'index']);
     Route::get('/tiposProcesos', [ProyectoController::class, 'tiposProcesos']);
     Route::get('/modalidades', [ProyectoController::class, 'modalidades']);
 
@@ -90,6 +92,8 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/eliminarEntidad', [ProyectoController::class, 'eliminarEntidad']);
         Route::post('/activarEntidad', [ProyectoController::class, 'activarEntidad']);
         Route::post('/activarFaseDashboard', [ProyectoController::class, 'activarFaseDashboard']);
+        Route::post('/guardarFuenteFinanciacion', [FuenteFinanciacionController::class, 'guardar']);
+        Route::post('/activarFuenteFinanciacion', [FuenteFinanciacionController::class, 'activar']);
         Route::post('/guardarSector', [ProyectoController::class, 'guardarSector']);
         Route::post('/eliminarSector', [ProyectoController::class, 'eliminarSector']);
         Route::post('/activarSector', [ProyectoController::class, 'activarSector']);
