@@ -26,6 +26,18 @@ class PlantillasChecklistTest extends TestCase
         return require database_path('migrations/2026_11_06_100003_create_plantillas_checklist_tables.php');
     }
 
+    private function migracionVersiones(): object
+    {
+        return require database_path('migrations/2026_11_06_100004_add_plantilla_to_catalogo_versiones_table.php');
+    }
+
+    private function version(int $plantilla, int $numero = 1): int
+    {
+        return DB::table('catalogo_versiones')->insertGetId([
+            'plantilla_id' => $plantilla, 'numero' => $numero, 'estado' => 'publicada', 'vigente' => true,
+        ]);
+    }
+
     // ------------------------------------------------------------- plantillas
 
     public function test_la_plantilla_sgr_existe_al_migrar_y_solo_se_asocia_a_la_fuente_sgr(): void
@@ -96,7 +108,7 @@ class PlantillasChecklistTest extends TestCase
 
     public function test_el_rollback_se_detiene_si_hay_otras_plantillas(): void
     {
-        $this->otraPlantilla();
+        PlantillaChecklist::create(['clave' => 'otra', 'nombre' => 'Otra con clave']);
 
         try {
             $this->migracionPlantillas()->down();
@@ -106,5 +118,74 @@ class PlantillasChecklistTest extends TestCase
         }
 
         $this->assertTrue(Schema::hasTable('plantillas_checklist'));
+    }
+
+    public function test_una_plantilla_con_versiones_no_se_puede_borrar(): void
+    {
+        $plantilla = $this->otraPlantilla();
+        $this->version($plantilla);
+
+        $this->expectException(QueryException::class);
+        DB::table('plantillas_checklist')->where('id', $plantilla)->delete();
+    }
+
+    // -------------------------------------------------------------- versiones
+
+    public function test_el_numero_de_version_se_repite_entre_plantillas_pero_no_dentro_de_una(): void
+    {
+        $this->version(PlantillaChecklist::sgr()->id);
+        $otra = $this->otraPlantilla();
+        $this->version($otra);
+
+        $this->expectException(QueryException::class);
+        $this->version($otra);
+    }
+
+    public function test_toda_version_exige_plantilla(): void
+    {
+        $this->expectException(QueryException::class);
+        DB::table('catalogo_versiones')->insert(['numero' => 9, 'estado' => 'borrador']);
+    }
+
+    /*
+     * Estas pruebas no crean requisitos ni expedientes a propósito. En SQLite, cambiar una
+     * columna reconstruye la tabla y, dentro de la transacción de RefreshDatabase, eso borra
+     * en cascada las filas hijas. En MariaDB no pasa: se comprueba en la copia descartable.
+     */
+    public function test_migrar_asigna_la_plantilla_sgr_a_las_versiones_existentes(): void
+    {
+        $migracion = $this->migracionVersiones();
+        $migracion->down();
+        $this->assertFalse(Schema::hasColumn('catalogo_versiones', 'plantilla_id'));
+        $this->assertTrue(Schema::hasIndex('catalogo_versiones', 'catalogo_versiones_numero_unique'));
+        $id = DB::table('catalogo_versiones')->insertGetId(['numero' => 1, 'estado' => 'publicada', 'vigente' => true]);
+
+        $migracion->up();
+
+        $this->assertEquals(PlantillaChecklist::sgr()->id, DB::table('catalogo_versiones')->where('id', $id)->value('plantilla_id'));
+        $this->assertFalse(Schema::hasIndex('catalogo_versiones', 'catalogo_versiones_numero_unique'));
+    }
+
+    public function test_la_migracion_de_versiones_se_puede_repetir(): void
+    {
+        $id = $this->version(PlantillaChecklist::sgr()->id);
+
+        $this->migracionVersiones()->up();
+
+        $this->assertEquals(PlantillaChecklist::sgr()->id, DB::table('catalogo_versiones')->where('id', $id)->value('plantilla_id'));
+    }
+
+    public function test_el_rollback_se_detiene_si_hay_versiones_de_otras_plantillas(): void
+    {
+        $this->version($this->otraPlantilla());
+
+        try {
+            $this->migracionVersiones()->down();
+            $this->fail('El rollback debía detenerse.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('plantillas distintas de SGR', $e->getMessage());
+        }
+
+        $this->assertTrue(Schema::hasColumn('catalogo_versiones', 'plantilla_id'));
     }
 }

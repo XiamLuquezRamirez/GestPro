@@ -55,7 +55,13 @@ class CatalogoRequisitosSgrSeeder extends Seeder
                 'nombre' => $c['nombre'], 'orden' => $c['orden'],
             ]);
 
-            $versionId = DB::table('catalogo_versiones')->where('numero', self::VERSION)->value('id');
+            $plantillaId = DB::table('plantillas_checklist')->where('clave', 'sgr')->value('id')
+                ?? throw new RuntimeException('Falta la plantilla SGR: ejecute las migraciones.');
+
+            $versionId = DB::table('catalogo_versiones')
+                ->where('plantilla_id', $plantillaId)
+                ->where('numero', self::VERSION)
+                ->value('id');
 
             if ($versionId && DB::table('requisitos_catalogo')->where('catalogo_version_id', $versionId)->exists()) {
                 return; // versión ya sembrada: inmutable
@@ -64,6 +70,7 @@ class CatalogoRequisitosSgrSeeder extends Seeder
             // Una versión sin requisitos (rollback parcial) se completa en lugar de crearse.
             if (! $versionId) {
                 $versionId = DB::table('catalogo_versiones')->insertGetId([
+                    'plantilla_id' => $plantillaId,
                     'numero' => self::VERSION,
                     'estado' => 'publicada',
                     'descripcion' => 'Orientaciones Transitorias + Acuerdo 12 de 2024 (carga inicial desde el prototipo)',
@@ -73,8 +80,11 @@ class CatalogoRequisitosSgrSeeder extends Seeder
                     'updated_at' => now(),
                 ]);
 
-                // Solo puede haber una versión vigente.
-                DB::table('catalogo_versiones')->where('id', '!=', $versionId)->update(['vigente' => false]);
+                // Solo puede haber una versión vigente por plantilla.
+                DB::table('catalogo_versiones')
+                    ->where('plantilla_id', $plantillaId)
+                    ->where('id', '!=', $versionId)
+                    ->update(['vigente' => false]);
             }
 
             $filas = array_map(function ($r) use ($versionId, $sectores, $tipos) {

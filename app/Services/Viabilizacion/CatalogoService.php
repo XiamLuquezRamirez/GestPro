@@ -4,6 +4,7 @@ namespace App\Services\Viabilizacion;
 
 use App\Exceptions\ReglaNegocioException;
 use App\Models\CatalogoVersion;
+use App\Models\PlantillaChecklist;
 use App\Models\RequisitoCatalogo;
 use App\Models\RequisitoComponente;
 use App\Models\RequisitoSector;
@@ -14,6 +15,9 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Administración del catálogo maestro (rol Administrador).
+ *
+ * Cada plantilla tiene sus versiones, con su propia numeración, un borrador y una
+ * vigente como máximo. Sin indicar plantilla, se trabaja sobre la SGR.
  *
  * Una versión publicada es inmutable: de eso depende que los expedientes ya
  * evaluados no cambien. Para modificar requisitos se crea un borrador (copia de
@@ -62,17 +66,19 @@ final class CatalogoService
 
     // ------------------------------------------------------------- versiones
 
-    public function crearBorrador(?string $descripcion): CatalogoVersion
+    public function crearBorrador(?string $descripcion, ?PlantillaChecklist $plantilla = null): CatalogoVersion
     {
-        if (CatalogoVersion::where('estado', CatalogoVersion::BORRADOR)->exists()) {
+        $plantilla ??= PlantillaChecklist::sgr();
+
+        if ($plantilla->versiones()->where('estado', CatalogoVersion::BORRADOR)->exists()) {
             throw new ReglaNegocioException('Ya existe una versión en borrador; publíquela o elimínela antes de crear otra.');
         }
-        $vigente = CatalogoVersion::vigente()->first()
+        $vigente = $plantilla->versionVigente()
             ?? throw new ReglaNegocioException('No hay una versión vigente que copiar.');
 
-        return DB::transaction(function () use ($vigente, $descripcion) {
-            $borrador = CatalogoVersion::create([
-                'numero' => (int) CatalogoVersion::max('numero') + 1,
+        return DB::transaction(function () use ($plantilla, $vigente, $descripcion) {
+            $borrador = $plantilla->versiones()->create([
+                'numero' => (int) $plantilla->versiones()->max('numero') + 1,
                 'estado' => CatalogoVersion::BORRADOR,
                 'descripcion' => $descripcion,
                 'vigente' => false,

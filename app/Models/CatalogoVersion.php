@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CatalogoVersion extends Model
@@ -12,12 +13,19 @@ class CatalogoVersion extends Model
     public const PUBLICADA = 'publicada';
 
     protected $table = 'catalogo_versiones';
-    protected $fillable = ['numero', 'estado', 'descripcion', 'fecha_publicacion', 'vigente'];
+    protected $fillable = ['plantilla_id', 'numero', 'estado', 'descripcion', 'fecha_publicacion', 'usuario_publico_id', 'vigente'];
     protected $casts = [
+        'plantilla_id' => 'integer',
         'numero' => 'integer',
+        'usuario_publico_id' => 'integer',
         'vigente' => 'boolean',
         'fecha_publicacion' => 'datetime',
     ];
+
+    public function plantilla(): BelongsTo
+    {
+        return $this->belongsTo(PlantillaChecklist::class, 'plantilla_id');
+    }
 
     public function requisitos(): HasMany
     {
