@@ -37,7 +37,26 @@ final class FuentesProyecto
         $fuentes = FuenteFinanciacion::query()->whereIn('id', $ids)->orderBy('orden')->orderBy('nombre')->get();
         $this->exigirValidas($ids, $fuentes, $proyectoId);
 
-        return ['ids' => $ids, 'por_definir' => false, 'texto' => $fuentes->pluck('nombre')->implode(', ')];
+        return ['ids' => $ids, 'por_definir' => false, 'texto' => $this->textoDe($fuentes)];
+    }
+
+    /** Recalcula el texto de los proyectos que tienen la fuente, p. ej. tras renombrarla. */
+    public function refrescarTextos(FuenteFinanciacion $fuente): void
+    {
+        $proyectos = DB::table('proyecto_fuentes')->where('fuente_id', $fuente->id)->pluck('proyecto_id');
+
+        foreach ($proyectos as $proyectoId) {
+            $fuentes = FuenteFinanciacion::query()
+                ->whereIn('id', DB::table('proyecto_fuentes')->where('proyecto_id', $proyectoId)->select('fuente_id'))
+                ->orderBy('orden')->orderBy('nombre')->get();
+
+            DB::table('proyectos')->where('id', $proyectoId)->update(['fuente_financiacion' => $this->textoDe($fuentes)]);
+        }
+    }
+
+    private function textoDe($fuentes): string
+    {
+        return $fuentes->pluck('nombre')->implode(', ');
     }
 
     /** @param array{ids: list<int>, por_definir: bool, texto: string} $financiacion */

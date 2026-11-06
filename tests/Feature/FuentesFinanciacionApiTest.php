@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Enums\Rol;
 use App\Models\FuenteFinanciacion;
 use App\Models\User;
+use App\Services\Financiacion\FuentesProyecto;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -125,6 +127,35 @@ class FuentesFinanciacionApiTest extends TestCase
         ])->assertStatus(422);
 
         $this->assertSame($nombre, $fuente->fresh()->nombre);
+    }
+
+    public function test_renombrar_actualiza_el_texto_de_sus_proyectos(): void
+    {
+        $sgr = FuenteFinanciacion::where('clave', 'sgr')->firstOrFail();
+        $pgn = FuenteFinanciacion::where('clave', 'pgn')->firstOrFail();
+        $propios = FuenteFinanciacion::where('nombre', 'Recursos propios')->firstOrFail();
+        $servicio = app(FuentesProyecto::class);
+
+        $a = DB::table('proyectos')->insertGetId(['nombre' => 'A']);
+        $b = DB::table('proyectos')->insertGetId(['nombre' => 'B']);
+        $c = DB::table('proyectos')->insertGetId(['nombre' => 'C']);
+        $servicio->guardar($a, $servicio->validar(['fuenteIds' => [$pgn->id, $sgr->id]]));
+        $servicio->guardar($b, $servicio->validar(['fuenteIds' => [$propios->id]]));
+        $servicio->guardar($c, $servicio->validar(['fuenteIds' => [$pgn->id]]));
+        DB::table('proyectos')->where('id', $c)->update(['fuente_financiacion' => 'Texto manual']);
+
+        $texto = fn (int $id) => DB::table('proyectos')->where('id', $id)->value('fuente_financiacion');
+        $admin = $this->como(Rol::Administrador);
+        $url = '/GestPro/guardarFuenteFinanciacion';
+
+        // Solo cambia la descripción: no se reescribe ningún texto.
+        $admin->postJson($url, ['accion' => 'Editar', 'id' => $pgn->id, 'nombre' => $pgn->nombre, 'descripcion' => 'Otra'])->assertOk();
+        $this->assertSame('Texto manual', $texto($c));
+
+        $admin->postJson($url, ['accion' => 'Editar', 'id' => $pgn->id, 'nombre' => 'Nacion PGN'])->assertOk();
+
+        $this->assertSame('Sistema General de Regalías (SGR), Nacion PGN', $texto($a));
+        $this->assertSame('Recursos propios', $texto($b));
     }
 
     public function test_el_listado_incluye_las_fuentes_inactivas(): void

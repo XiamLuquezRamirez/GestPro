@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\FuenteFinanciacion;
+use App\Services\Financiacion\FuentesProyecto;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -20,7 +22,7 @@ class FuenteFinanciacionController extends Controller
         );
     }
 
-    public function guardar(Request $request): JsonResponse
+    public function guardar(Request $request, FuentesProyecto $fuentesProyecto): JsonResponse
     {
         $request->validate([
             'accion' => ['required', Rule::in(['Agregar', 'Editar'])],
@@ -41,7 +43,15 @@ class FuenteFinanciacionController extends Controller
             'descripcion.max' => 'La descripción admite hasta 5000 caracteres.',
         ]);
 
-        $fuente->fill($datos)->save();
+        DB::transaction(function () use ($fuente, $datos, $fuentesProyecto) {
+            $fuente->fill($datos);
+            $renombrada = $fuente->exists && $fuente->isDirty('nombre');
+            $fuente->save();
+
+            if ($renombrada) {
+                $fuentesProyecto->refrescarTextos($fuente);
+            }
+        });
 
         return response()->json(['success' => 'Fuente de financiación guardada correctamente']);
     }
