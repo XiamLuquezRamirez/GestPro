@@ -167,7 +167,74 @@ class ProyectoFuentesTest extends TestCase
         $this->assertSame(0, Artisan::call('proyectos:informe-fuentes'));
         $salida = Artisan::output();
 
-        $this->assertStringContainsString('Sin regalías, recursos propios', $salida);
-        $this->assertStringContainsString('Recursos propios', $salida);
+        $this->assertMatchesRegularExpression('/Sin regalías, recursos propios\s*\|\s*Recursos propios\s*\|\s*1/u', $salida);
+    }
+
+    public function test_el_informe_separa_resultados_distintos_del_mismo_texto(): void
+    {
+        $a = Proyecto::create(['nombre' => 'A', 'fuente_financiacion_original' => 'Mixto']);
+        $a->fuentes()->sync([$this->propios]);
+        $b = Proyecto::create(['nombre' => 'B', 'fuente_financiacion_original' => 'Mixto']);
+        $b->fuentes()->sync([$this->sgr]);
+
+        $this->assertSame(0, Artisan::call('proyectos:informe-fuentes'));
+        $salida = Artisan::output();
+
+        $this->assertMatchesRegularExpression('/Mixto\s*\|\s*Recursos propios\s*\|\s*1/u', $salida);
+        $this->assertMatchesRegularExpression('/Mixto\s*\|\s*Sistema General de Regalías \(SGR\)\s*\|\s*1/u', $salida);
+    }
+
+    public function test_el_informe_muestra_vacio_para_textos_en_blanco(): void
+    {
+        Proyecto::create(['nombre' => 'En blanco', 'financiacion_por_definir' => true, 'fuente_financiacion_original' => '   ']);
+
+        $this->assertSame(0, Artisan::call('proyectos:informe-fuentes'));
+
+        $this->assertMatchesRegularExpression('/En blanco\s*\|\s*\(vacío\)/u', Artisan::output());
+    }
+
+    public function test_rechaza_fuentes_con_formato_invalido(): void
+    {
+        foreach ([5, 'abc', [[4]], [true], ['4abc'], [1.5]] as $invalido) {
+            $this->guardar(['fuenteIds' => $invalido])->assertStatus(422);
+        }
+        $this->assertDatabaseCount('proyectos', 0);
+
+        $this->guardar(['fuenteIds' => [(string) $this->sgr]])->assertOk();
+        $this->assertDatabaseCount('proyectos', 1);
+    }
+
+    public function test_al_editar_quita_las_fuentes_que_ya_no_se_envian(): void
+    {
+        $proyecto = Proyecto::create(['nombre' => 'Puente']);
+        $proyecto->fuentes()->sync([$this->sgr, $this->propios]);
+
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'fuenteIds' => [$this->propios]])->assertOk();
+
+        $this->assertSame([$this->propios], $proyecto->fuentes()->pluck('fuentes_financiacion.id')->all());
+    }
+
+    public function test_pasar_a_por_definir_quita_las_fuentes(): void
+    {
+        $proyecto = Proyecto::create(['nombre' => 'Puente']);
+        $proyecto->fuentes()->sync([$this->sgr]);
+
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'fuenteIds' => [], 'financiacionPorDefinir' => true])->assertOk();
+
+        $proyecto->refresh();
+        $this->assertSame(0, $proyecto->fuentes()->count());
+        $this->assertTrue($proyecto->financiacion_por_definir);
+        $this->assertSame('Por definir', $proyecto->fuente_financiacion);
+    }
+
+    public function test_al_editar_rechaza_una_fuente_inactiva_nueva(): void
+    {
+        $proyecto = Proyecto::create(['nombre' => 'Puente']);
+        $proyecto->fuentes()->sync([$this->propios]);
+        FuenteFinanciacion::whereKey($this->sgr)->update(['activo' => false]);
+
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'fuenteIds' => [$this->propios, $this->sgr]])->assertStatus(422);
+
+        $this->assertSame([$this->propios], $proyecto->fuentes()->pluck('fuentes_financiacion.id')->all());
     }
 }

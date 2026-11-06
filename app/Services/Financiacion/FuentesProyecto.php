@@ -22,7 +22,7 @@ final class FuentesProyecto
     public function validar(array $datos, ?int $proyectoId = null): array
     {
         $porDefinir = filter_var($datos['financiacionPorDefinir'] ?? false, FILTER_VALIDATE_BOOLEAN);
-        $ids = array_values(array_unique(array_map('intval', $datos['fuenteIds'] ?? [])));
+        $ids = $this->idsDe($datos['fuenteIds'] ?? []);
 
         if ($porDefinir && $ids !== []) {
             throw new ReglaNegocioException('Un proyecto con fuentes de financiación no puede estar también por definir.');
@@ -52,6 +52,25 @@ final class FuentesProyecto
             'financiacion_por_definir' => $financiacion['por_definir'],
             'fuente_financiacion' => $financiacion['texto'],
         ]);
+    }
+
+    /** @return list<int> */
+    private function idsDe(mixed $valor): array
+    {
+        if (! is_array($valor)) {
+            throw new ReglaNegocioException('Las fuentes de financiación no son válidas.');
+        }
+
+        $ids = [];
+        foreach ($valor as $elemento) {
+            if (is_int($elemento) || (is_string($elemento) && ctype_digit($elemento))) {
+                $ids[] = (int) $elemento;
+            } else {
+                throw new ReglaNegocioException('Las fuentes de financiación no son válidas.');
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 
     /** Una fuente inactiva solo se admite si el proyecto ya la tenía. */

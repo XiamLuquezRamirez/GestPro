@@ -35,10 +35,12 @@ Artisan::command('proyectos:informe-fuentes', function () {
 
     // Cada texto distinto una vez: las coincidencias por palabra no detectan una negación
     // ("Sin regalías") ni una fuente omitida, y eso solo se ve revisando el resultado.
+    $textoVisible = fn (?string $t) => trim((string) $t) === '' ? '(vacío)' : $t;
+
     $conversiones = Proyecto::query()->whereNotNull('fuente_financiacion_original')->with('fuentes:id,nombre')->get()
-        ->groupBy('fuente_financiacion_original')
-        ->map(fn ($grupo, $texto) => [
-            $texto,
+        ->groupBy(fn (Proyecto $p) => $p->fuente_financiacion_original . "\0" . ($p->fuentes->pluck('nombre')->implode(', ') ?: 'Por definir'))
+        ->map(fn ($grupo) => [
+            $textoVisible($grupo->first()->fuente_financiacion_original),
             $grupo->first()->fuentes->pluck('nombre')->implode(', ') ?: 'Por definir',
             $grupo->count(),
         ]);
@@ -47,7 +49,7 @@ Artisan::command('proyectos:informe-fuentes', function () {
     $pendientes = Proyecto::query()->where('financiacion_por_definir', true)->orderBy('id')->get();
     $this->table(
         ['Id', 'Proyecto', 'Texto original'],
-        $pendientes->map(fn (Proyecto $p) => [$p->id, $p->nombre, $p->fuente_financiacion_original ?? '(vacío)'])->all()
+        $pendientes->map(fn (Proyecto $p) => [$p->id, $p->nombre, $textoVisible($p->fuente_financiacion_original)])->all()
     );
     $this->info("Proyectos por definir: {$pendientes->count()}");
 })->purpose('Muestra los proyectos por fuente y los que quedaron por definir, con su texto original');
