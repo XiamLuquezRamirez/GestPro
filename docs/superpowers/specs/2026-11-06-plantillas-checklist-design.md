@@ -252,7 +252,7 @@ Como hoy, un fallo en la creación automática se registra y no interrumpe el gu
 - `sincronizar` recorre las plantillas del expediente y aplica las reglas de cada motor.
 - `progresoDe`, `resumenPorProyecto` y `radicar` usan una sola definición de "cuenta" y "bloquea".
 - `CatalogoService` trabaja por plantilla; `/catalogo-requisitos/vigente` se conserva para el SGR.
-- Rutas nuevas en `routes/viabilizacion.php`: fuentes de financiación, plantillas y sus versiones (`gestionar-catalogos`); no aplica, aprobación, responsable, requisitos propios y aplicar versión (`editar-datos`); consulta y descarga desde historial (autenticado).
+- Las rutas de fuentes de financiación están en `routes/api.php`, junto a los demás catálogos. Rutas nuevas en `routes/viabilizacion.php`: plantillas y sus versiones (`gestionar-catalogos`); no aplica, aprobación, responsable, requisitos propios y aplicar versión (`editar-datos`); consulta y descarga desde historial (autenticado).
 - Los soportes reemplazados se descargan por el id del historial. La ruta del archivo nunca se expone.
 
 ---
