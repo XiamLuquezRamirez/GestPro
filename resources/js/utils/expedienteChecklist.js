@@ -21,6 +21,73 @@ export const ETIQUETA_FUENTE = { a12: 'A12', ot: 'OT' };
 
 const ETIQUETA_ESTADO = { borrador: 'Borrador', radicado: 'Radicado' };
 
+/** Estado de un requisito del checklist. Lo calcula el backend. */
+export const ETIQUETA_ESTADO_REQUISITO = {
+    por_definir: 'Por definir',
+    pendiente: 'Pendiente',
+    cumplido: 'Cumplido',
+    no_aplica_pendiente: 'No aplica, por aprobar',
+    no_aplica: 'No aplica',
+};
+
+/** Solo se cumple lo que aplica; un "no aplica" se retira primero. */
+export const puedeMarcarRequisito = (fila) => ['pendiente', 'cumplido'].includes(fila.estado);
+
+export const puedeMarcarNoAplica = (fila) => ['pendiente', 'por_definir'].includes(fila.estado);
+
+/**
+ * Igual que el backend: revisa otra persona, salvo un Administrador, que puede revisar
+ * lo que él mismo marcó.
+ */
+export const puedeRevisarNoAplica = (fila, usuario) =>
+    fila.estado === 'no_aplica_pendiente'
+    && (usuario?.rol === 'Administrador' || fila.no_aplica?.usuario_id !== usuario?.id);
+
+/** Responsables que se pueden elegir: los activos y el que la fila ya tiene. */
+export const responsablesDisponibles = (responsables, actualId) =>
+    responsables.filter((r) => r.activo || r.id === actualId);
+
+const EVENTOS = {
+    cumplido_marcado: 'Marcó como cumplido',
+    cumplido_desmarcado: 'Desmarcó el cumplimiento',
+    observacion_cambiada: 'Cambió la observación',
+    responsable_cambiado: 'Cambió el responsable',
+    soporte_subido: 'Adjuntó un soporte',
+    soporte_reemplazado: 'Reemplazó el soporte',
+    soporte_eliminado: 'Eliminó el soporte',
+    no_aplica_marcado: 'Indicó que no aplica',
+    no_aplica_retirado: 'Retiró el "no aplica"',
+    no_aplica_aprobado: 'Aprobó el "no aplica"',
+    no_aplica_rechazado: 'Rechazó el "no aplica"',
+};
+
+/** Texto de una entrada del historial de un requisito. */
+export const describirEvento = (entrada) => {
+    const base = EVENTOS[entrada.evento] ?? entrada.evento;
+    const d = entrada.despues ?? {};
+    const a = entrada.antes ?? {};
+    switch (entrada.evento) {
+        case 'observacion_cambiada':
+            return d.observacion ? `${base}: "${d.observacion}"` : `${base}: la quitó`;
+        case 'responsable_cambiado':
+            return d.responsable ? `${base}: ${d.responsable}` : `${base}: lo quitó (era ${a.responsable ?? '—'})`;
+        case 'soporte_subido':
+            return `${base}: ${d.soporte_nombre}`;
+        case 'soporte_reemplazado':
+            return `${base}: ${a.soporte_nombre} por ${d.soporte_nombre}`;
+        case 'soporte_eliminado':
+            return `${base}: ${a.soporte_nombre}`;
+        case 'no_aplica_marcado':
+            return `${base}: ${d.justificacion}`;
+        case 'no_aplica_aprobado':
+            return d.autoaprobado ? `${base} que él mismo marcó` : base;
+        case 'no_aplica_rechazado':
+            return d.motivo ? `${base}: ${d.motivo}` : base;
+        default:
+            return base;
+    }
+};
+
 /** Agrupa consecutivamente: el backend ya entrega las filas en el orden del catálogo. */
 const agruparConsecutivos = (items, claveDe, crear) => {
     const grupos = [];
@@ -63,8 +130,9 @@ export const agruparRequisitos = (filas) =>
         return [{
             clave,
             ...SECCIONES[clave],
-            total: deSeccion.length,
-            cumplidos: deSeccion.filter((f) => f.cumplido).length,
+            // Lo que cuenta lo decide el backend: lo no aplicable y lo opcional no suman.
+            total: deSeccion.filter((f) => f.cuenta).length,
+            cumplidos: deSeccion.filter((f) => f.cuenta && f.estado === 'cumplido').length,
             grupos,
         }];
     });
@@ -155,9 +223,12 @@ export const construirHojasExcel = (expediente) => {
         'Fuente': ETIQUETA_FUENTE[r.fuente] ?? r.fuente,
         'Requisito': r.texto,
         'Nota': r.nota ?? '',
+        'Estado': ETIQUETA_ESTADO_REQUISITO[f.estado] ?? f.estado,
         'Cumplido': f.cumplido ? 'Sí' : 'No',
         'Fecha de cumplimiento': soloFecha(f.fecha_cumplido),
-        'Responsable': f.usuario_cumplido ?? '',
+        'Marcado por': f.usuario_cumplido ?? '',
+        'Responsable': f.responsable?.nombre ?? '',
+        'Justificación de no aplica': f.no_aplica?.justificacion ?? '',
         'Observación': f.observacion ?? '',
         'Soporte': f.soporte?.nombre ?? '',
     }));

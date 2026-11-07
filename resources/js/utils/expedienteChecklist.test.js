@@ -4,9 +4,14 @@ import {
     alternarId,
     alternarSector,
     construirHojasExcel,
+    describirEvento,
     mensajeError,
     nombreArchivoExcel,
+    puedeMarcarNoAplica,
+    puedeMarcarRequisito,
     puedeRadicar,
+    puedeRevisarNoAplica,
+    responsablesDisponibles,
     sectoresSinTipo,
     seleccionDesde,
     sectoresConFuenteA12,
@@ -14,6 +19,10 @@ import {
 
 const fila = (id, seccion, extra = {}) => ({
     id,
+    estado: 'pendiente',
+    cuenta: true,
+    no_aplica: null,
+    responsable: null,
     cumplido: false,
     fecha_cumplido: null,
     usuario_cumplido: null,
@@ -50,9 +59,20 @@ describe('agruparRequisitos', () => {
     });
 
     it('cuenta total y cumplidos por sección', () => {
-        const [a] = agruparRequisitos([fila(1, 'A', { fila: { cumplido: true } }), fila(2, 'A')]);
+        const [a] = agruparRequisitos([fila(1, 'A', { fila: { cumplido: true, estado: 'cumplido' } }), fila(2, 'A')]);
         expect(a.total).toBe(2);
         expect(a.cumplidos).toBe(1);
+    });
+
+    it('lo que no cuenta no suma al total ni a los cumplidos de la sección', () => {
+        const [a] = agruparRequisitos([
+            fila(1, 'A', { fila: { estado: 'no_aplica', cuenta: false } }),
+            fila(2, 'A', { fila: { estado: 'cumplido', cumplido: true, cuenta: false } }), // opcional
+            fila(3, 'A', { fila: { estado: 'no_aplica_pendiente', cumplido: true } }),
+            fila(4, 'A'),
+        ]);
+        expect(a.total).toBe(2);
+        expect(a.cumplidos).toBe(0);
     });
 
     it('agrupa la sección C por sector y dentro por subtítulo, sin reordenar', () => {
@@ -161,6 +181,8 @@ describe('Excel', () => {
         requisitos: [
             fila(1, 'A', {
                 fila: {
+                    estado: 'cumplido',
+                    responsable: { id: 3, nombre: 'Luis Gómez', cargo: null },
                     cumplido: true,
                     fecha_cumplido: '2026-11-03T15:00:00-05:00',
                     usuario_cumplido: 'Ana',
@@ -170,6 +192,7 @@ describe('Excel', () => {
                 requisito: { nota: 'Una nota' },
             }),
             fila(2, 'C', {
+                fila: { estado: 'no_aplica', cuenta: false, no_aplica: { justificacion: 'Sin predios' } },
                 requisito: { fuente: 'ot', sector: salud, tipo: { nombre: 'Infraestructura en salud' }, subtitulo: '7.1' },
             }),
         ],
@@ -185,9 +208,12 @@ describe('Excel', () => {
             'Fuente': 'A12',
             'Requisito': 'Texto 1',
             'Nota': 'Una nota',
+            'Estado': 'Cumplido',
             'Cumplido': 'Sí',
             'Fecha de cumplimiento': '2026-11-03',
-            'Responsable': 'Ana',
+            'Marcado por': 'Ana',
+            'Responsable': 'Luis Gómez',
+            'Justificación de no aplica': '',
             'Observación': 'Ok',
             'Soporte': 'a.pdf',
         });
@@ -196,8 +222,10 @@ describe('Excel', () => {
             'Sector': 'Salud',
             'Tipo de proyecto': 'Infraestructura en salud',
             'Fuente': 'OT',
+            'Estado': 'No aplica',
             'Cumplido': 'No',
             'Fecha de cumplimiento': '',
+            'Justificación de no aplica': 'Sin predios',
         });
     });
 
@@ -216,6 +244,51 @@ describe('Excel', () => {
 
     it('el nombre del archivo no lleva caracteres inválidos', () => {
         expect(nombreArchivoExcel(expediente)).toBe('expediente-7-Acueducto-veredal-norte.xlsx');
+    });
+});
+
+describe('acciones sobre un requisito', () => {
+    it('solo se cumple lo pendiente o lo ya cumplido', () => {
+        expect(puedeMarcarRequisito({ estado: 'pendiente' })).toBe(true);
+        expect(puedeMarcarRequisito({ estado: 'cumplido' })).toBe(true);
+        expect(puedeMarcarRequisito({ estado: 'no_aplica' })).toBe(false);
+        expect(puedeMarcarRequisito({ estado: 'por_definir' })).toBe(false);
+    });
+
+    it('se marca no aplica lo pendiente o por definir, nunca lo cumplido', () => {
+        expect(puedeMarcarNoAplica({ estado: 'pendiente' })).toBe(true);
+        expect(puedeMarcarNoAplica({ estado: 'por_definir' })).toBe(true);
+        expect(puedeMarcarNoAplica({ estado: 'cumplido' })).toBe(false);
+        expect(puedeMarcarNoAplica({ estado: 'no_aplica_pendiente' })).toBe(false);
+    });
+
+    it('revisa otra persona, o un Administrador aunque lo haya marcado', () => {
+        const porAprobar = { estado: 'no_aplica_pendiente', no_aplica: { usuario_id: 5 } };
+        expect(puedeRevisarNoAplica(porAprobar, { id: 5, rol: 'Gestor' })).toBe(false);
+        expect(puedeRevisarNoAplica(porAprobar, { id: 6, rol: 'Gestor' })).toBe(true);
+        expect(puedeRevisarNoAplica(porAprobar, { id: 5, rol: 'Administrador' })).toBe(true);
+        expect(puedeRevisarNoAplica({ ...porAprobar, estado: 'no_aplica' }, { id: 6, rol: 'Gestor' })).toBe(false);
+    });
+
+    it('ofrece los responsables activos y conserva el actual aunque esté inactivo', () => {
+        const lista = [{ id: 1, activo: true }, { id: 2, activo: false }, { id: 3, activo: false }];
+        expect(responsablesDisponibles(lista, 2).map((r) => r.id)).toEqual([1, 2]);
+        expect(responsablesDisponibles(lista, null).map((r) => r.id)).toEqual([1]);
+    });
+});
+
+describe('describirEvento', () => {
+    it('explica cada cambio con sus datos', () => {
+        expect(describirEvento({ evento: 'cumplido_marcado' })).toBe('Marcó como cumplido');
+        expect(describirEvento({ evento: 'soporte_reemplazado', antes: { soporte_nombre: 'v1.pdf' }, despues: { soporte_nombre: 'v2.pdf' } }))
+            .toBe('Reemplazó el soporte: v1.pdf por v2.pdf');
+        expect(describirEvento({ evento: 'no_aplica_marcado', despues: { justificacion: 'Sin predios' } }))
+            .toBe('Indicó que no aplica: Sin predios');
+        expect(describirEvento({ evento: 'no_aplica_aprobado', despues: { autoaprobado: true } }))
+            .toBe('Aprobó el "no aplica" que él mismo marcó');
+        expect(describirEvento({ evento: 'responsable_cambiado', antes: { responsable: 'Ana' }, despues: { responsable: null } }))
+            .toBe('Cambió el responsable: lo quitó (era Ana)');
+        expect(describirEvento({ evento: 'otro_evento' })).toBe('otro_evento');
     });
 });
 
