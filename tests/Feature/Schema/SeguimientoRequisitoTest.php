@@ -228,4 +228,18 @@ class SeguimientoRequisitoTest extends TestCase
 
         $this->assertTrue(Schema::hasTable('checklist_historial'));
     }
+
+    public function test_migrar_de_nuevo_no_borra_un_historial_con_registros(): void
+    {
+        DB::table('checklist_historial')->insert(['entidad_tipo' => 'expediente', 'entidad_id' => 1, 'evento' => 'expediente_creado']);
+
+        try {
+            $this->migracionHistorial()->up();
+            $this->fail('La migración debía detenerse.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('ya tiene registros', $e->getMessage());
+        }
+
+        $this->assertDatabaseCount('checklist_historial', 1);
+    }
 }

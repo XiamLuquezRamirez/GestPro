@@ -145,12 +145,13 @@ final class ExpedienteService
         $seleccion = $this->validarSeleccion($datos, $expediente);
 
         return DB::transaction(function () use ($expediente, $datos, $seleccion, $usuario) {
-            $faseAnterior = $expediente->fase_sgr;
+            $antes = $this->configuracionRegistrable($expediente);
             $expediente->update(['fase_sgr' => (int) $datos['fase_sgr']]);
             $this->guardarSeleccion($expediente, $seleccion);
             $this->sincronizar($expediente);
-            if ($expediente->estaConfigurado()) {
-                $this->historial->registrarExpediente($expediente, 'configuracion_cambiada', ['fase_sgr' => $faseAnterior], ['fase_sgr' => $expediente->fase_sgr, ...$seleccion], $usuario);
+            $despues = $this->configuracionRegistrable($expediente);
+            if ($expediente->estaConfigurado() && $antes !== $despues) {
+                $this->historial->registrarExpediente($expediente, 'configuracion_cambiada', $antes, $despues, $usuario);
             }
 
             return $expediente;
@@ -198,9 +199,10 @@ final class ExpedienteService
         try {
             DB::transaction(function () use ($fila, $archivo, $ruta, $usuario) {
                 // Bloquea la fila: con dos subidas a la vez, la segunda ve el soporte de la primera.
-                $anterior = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail()
-                    ->only(['soporte_archivo', 'soporte_nombre']);
-                $fila->update(['soporte_archivo' => $ruta, 'soporte_nombre' => $archivo->getClientOriginalName()]);
+                $bloqueada = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
+                $anterior = $bloqueada->only(['soporte_archivo', 'soporte_nombre']);
+                $bloqueada->update(['soporte_archivo' => $ruta, 'soporte_nombre' => $archivo->getClientOriginalName()]);
+                $fila->refresh();
                 // El anterior no se borra: queda en el historial y se puede descargar.
                 $this->historial->registrarFila(
                     $fila,
@@ -554,6 +556,21 @@ final class ExpedienteService
     private function tablaDe(string $modelo): string
     {
         return (new $modelo())->getTable();
+    }
+
+    /** Fase e ids ordenados de cada selección, para comparar y registrar la configuración. */
+    private function configuracionRegistrable(ProyectoExpediente $expediente): array
+    {
+        $ids = fn (string $relacion, string $tabla) => $expediente->{$relacion}()
+            ->orderBy("{$tabla}.id")->pluck("{$tabla}.id")->map(fn ($id) => (int) $id)->all();
+
+        return [
+            'fase_sgr' => (int) $expediente->fase_sgr,
+            'sector_ids' => $ids('sectores', 'requisitos_sectores'),
+            'tipo_ids' => $ids('tipos', 'requisitos_tipos'),
+            'componente_ids' => $ids('componentes', 'requisitos_componentes'),
+            'tipologia_ids' => $ids('tipologias', 'requisitos_tipologias'),
+        ];
     }
 
     private function guardarSeleccion(ProyectoExpediente $expediente, array $seleccion): void

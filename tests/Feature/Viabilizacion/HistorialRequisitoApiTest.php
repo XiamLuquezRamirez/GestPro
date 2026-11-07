@@ -174,8 +174,16 @@ class HistorialRequisitoApiTest extends TestCase
         $this->como($this->gestor)->putJson("/GestPro/expedientes/{$this->expediente->id}/configuracion", ['fase_sgr' => 2])->assertOk();
 
         $registro = DB::table('checklist_historial')->where('evento', 'configuracion_cambiada')->first();
-        $this->assertSame(['fase_sgr' => 3], json_decode($registro->antes, true));
+        $this->assertSame(3, json_decode($registro->antes, true)['fase_sgr']);
         $this->assertSame(2, json_decode($registro->despues, true)['fase_sgr']);
+    }
+
+    public function test_reenviar_la_misma_configuracion_no_queda_registrado(): void
+    {
+        $this->como($this->gestor)->putJson("/GestPro/expedientes/{$this->expediente->id}/configuracion", ['fase_sgr' => 3])->assertOk();
+        $this->como($this->gestor)->postJson("/GestPro/expedientes/{$this->expediente->id}/configuracion/confirmar", ['fase_sgr' => 3])->assertOk();
+
+        $this->assertDatabaseMissing('checklist_historial', ['evento' => 'configuracion_cambiada']);
     }
 
     public function test_no_se_descarga_un_archivo_fuera_de_la_carpeta_del_expediente(): void
@@ -187,5 +195,14 @@ class HistorialRequisitoApiTest extends TestCase
         ]);
 
         $this->como(Rol::Consulta)->get("/GestPro/expedientes/{$this->expediente->id}/historial/{$entrada->id}/soporte")->assertNotFound();
+
+        Storage::disk('local')->put('otros/secreto.pdf', 'x');
+        $conPuntos = ChecklistHistorial::create([
+            'entidad_tipo' => 'requisito', 'entidad_id' => $this->fila->id, 'expediente_id' => $this->expediente->id,
+            'evento' => 'soporte_reemplazado',
+            'antes' => ['soporte_archivo' => "expedientes/{$this->expediente->id}/../otros/secreto.pdf", 'soporte_nombre' => 's.pdf'],
+        ]);
+
+        $this->como(Rol::Consulta)->get("/GestPro/expedientes/{$this->expediente->id}/historial/{$conPuntos->id}/soporte")->assertNotFound();
     }
 }
