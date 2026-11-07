@@ -118,6 +118,7 @@ final class NoAplicaRequisito
 
         DB::transaction(function () use ($expediente, $fila, $usuario, $decidir) {
             $actual = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->with('requisito')->firstOrFail();
+            $this->expedientes->exigirQueAplique($actual);
             [$evento, $cambios, $extra] = $decidir($actual) + [2 => []];
 
             $antes = ['estado' => $actual->estado_aplicabilidad, 'justificacion' => $actual->justificacion_no_aplica];

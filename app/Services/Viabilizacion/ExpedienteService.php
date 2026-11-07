@@ -119,7 +119,7 @@ final class ExpedienteService
             $this->actualizarConfiguracion($expediente, $datos, $usuario);
             if (! $expediente->estaConfigurado()) {
                 $expediente->update(['fecha_configuracion' => now()]);
-                $this->historial->registrarExpediente($expediente, 'configuracion_confirmada', [], ['fase_sgr' => $expediente->fase_sgr], $usuario);
+                $this->historial->registrarExpediente($expediente, 'configuracion_confirmada', [], $this->configuracionRegistrable($expediente), $usuario);
             }
 
             return $expediente;
@@ -169,6 +169,7 @@ final class ExpedienteService
             // simultánea no puede quedar pisado por una lectura vieja.
             ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
             $fila->refresh();
+            $this->exigirQueAplique($fila);
             $this->aplicarMarca($fila, $datos, $usuario);
             $this->registrarCambios($fila, $usuario);
             $fila->save();
@@ -213,7 +214,8 @@ final class ExpedienteService
             DB::transaction(function () use ($fila, $archivo, $ruta, $usuario) {
                 // Bloquea la fila: con dos subidas a la vez, la segunda ve el soporte de la primera.
                 $bloqueada = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
-                $anterior = $bloqueada->only(['soporte_archivo', 'soporte_nombre']);
+                $this->exigirQueAplique($bloqueada);
+                $anterior =$bloqueada->only(['soporte_archivo', 'soporte_nombre']);
                 $bloqueada->update(['soporte_archivo' => $ruta, 'soporte_nombre' => $archivo->getClientOriginalName()]);
                 $fila->refresh();
                 // El anterior no se borra: queda en el historial y se puede descargar.
@@ -243,8 +245,9 @@ final class ExpedienteService
 
         DB::transaction(function () use ($fila, $usuario) {
             // Bloquea la fila: si otra petición ya quitó el soporte, no hay nada que registrar.
-            $antes = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail()
-                ->only(['soporte_archivo', 'soporte_nombre']);
+            $bloqueada = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
+            $this->exigirQueAplique($bloqueada);
+            $antes = $bloqueada->only(['soporte_archivo', 'soporte_nombre']);
             if (! $antes['soporte_archivo']) {
                 return;
             }
@@ -407,7 +410,8 @@ final class ExpedienteService
             'requisitos' => $filas->map(fn (ProyectoRequisito $f) => $this->presentarFila($f))->values(),
             // Filas que dejaron de aplicar pero guardan trabajo hecho.
             'retenidos' => $expediente->requisitos()->where('aplica', false)
-                ->where(fn ($q) => $q->where('cumplido', true)->orWhereNotNull('observacion')->orWhereNotNull('soporte_archivo'))
+                ->where(fn ($q) => $q->where('cumplido', true)->orWhereNotNull('observacion')->orWhereNotNull('soporte_archivo')
+                    ->orWhere('estado_aplicabilidad', '!=', ProyectoRequisito::APLICA)->orWhereNotNull('responsable_id'))
                 ->count(),
         ];
     }
@@ -639,7 +643,14 @@ final class ExpedienteService
             $this->historial->registrarFila(
                 $fila,
                 $fila->cumplido ? 'cumplido_marcado' : 'cumplido_desmarcado',
-                ['cumplido' => (bool) $fila->getOriginal('cumplido')],
+                [
+                    'cumplido' => (bool) $fila->getOriginal('cumplido'),
+                    // Al desmarcar, la fila borra quién y cuándo: queda aquí.
+                    'fecha_cumplido' => $fila->getOriginal('fecha_cumplido')?->toIso8601String(),
+                    'usuario_cumplido' => $fila->getOriginal('usuario_cumplido_id')
+                        ? User::whereKey($fila->getOriginal('usuario_cumplido_id'))->value('name')
+                        : null,
+                ],
                 ['cumplido' => $fila->cumplido],
                 $usuario
             );
@@ -659,8 +670,8 @@ final class ExpedienteService
             $this->historial->registrarFila(
                 $fila,
                 'responsable_cambiado',
-                ['responsable' => $nombre($fila->getOriginal('responsable_id'))],
-                ['responsable' => $nombre($fila->responsable_id)],
+                ['responsable_id' => $fila->getOriginal('responsable_id'), 'responsable' => $nombre($fila->getOriginal('responsable_id'))],
+                ['responsable_id' => $fila->responsable_id, 'responsable' => $nombre($fila->responsable_id)],
                 $usuario
             );
         }
@@ -690,6 +701,12 @@ final class ExpedienteService
         if ($fila->expediente_id !== $expediente->id) {
             throw new ReglaNegocioException('El requisito no pertenece a este expediente.');
         }
+        $this->exigirQueAplique($fila);
+    }
+
+    /** También se llama con la fila ya bloqueada: la configuración pudo retirarla después de la ruta. */
+    public function exigirQueAplique(ProyectoRequisito $fila): void
+    {
         if (! $fila->aplica) {
             throw new ReglaNegocioException('El requisito no aplica con la configuración actual del expediente.');
         }

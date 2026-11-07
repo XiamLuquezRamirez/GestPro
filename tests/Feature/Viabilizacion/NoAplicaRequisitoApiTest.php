@@ -211,8 +211,8 @@ class NoAplicaRequisitoApiTest extends TestCase
             ->assertJsonPath('requisito.responsable', null);
 
         $registros = DB::table('checklist_historial')->where('evento', 'responsable_cambiado')->orderBy('id')->get();
-        $this->assertSame(['responsable' => 'Ana Pérez'], json_decode($registros[0]->despues, true));
-        $this->assertSame(['responsable' => 'Ana Pérez'], json_decode($registros[1]->antes, true));
+        $this->assertSame(['responsable_id' => $ana, 'responsable' => 'Ana Pérez'], json_decode($registros[0]->despues, true));
+        $this->assertSame(['responsable_id' => $ana, 'responsable' => 'Ana Pérez'], json_decode($registros[1]->antes, true));
     }
 
     public function test_no_se_asigna_un_responsable_inactivo_o_inexistente(): void
@@ -345,5 +345,37 @@ class NoAplicaRequisitoApiTest extends TestCase
         } finally {
             $this->assertFalse($this->fila->fresh()->cumplido);
         }
+    }
+
+    public function test_marcar_no_aplica_con_una_lectura_vieja_no_escribe_si_la_fila_dejo_de_aplicar(): void
+    {
+        $vieja = $this->fila->fresh(); // la cargó otra petición, cuando todavía aplicaba
+        DB::table('proyectos_requisitos')->where('id', $this->fila->id)->update(['aplica' => false]);
+
+        try {
+            app(NoAplicaRequisito::class)->marcar($this->expediente, $vieja, 'x', $this->usuario(Rol::Gestor));
+            $this->fail('Debía rechazar el "no aplica".');
+        } catch (\App\Exceptions\ReglaNegocioException $e) {
+            $this->assertSame('El requisito no aplica con la configuración actual del expediente.', $e->getMessage());
+        }
+        $fila = $this->fila->fresh();
+        $this->assertSame('aplica', $fila->estado_aplicabilidad);
+        $this->assertFalse($fila->cumplido);
+    }
+
+    public function test_cumplir_con_una_lectura_vieja_no_escribe_si_la_fila_dejo_de_aplicar(): void
+    {
+        $vieja = $this->fila->fresh(); // la cargó otra petición, cuando todavía aplicaba
+        DB::table('proyectos_requisitos')->where('id', $this->fila->id)->update(['aplica' => false]);
+
+        try {
+            app(ExpedienteService::class)->marcar($this->expediente, $vieja, ['cumplido' => true], $this->usuario(Rol::Gestor));
+            $this->fail('Debía rechazar la marca.');
+        } catch (\App\Exceptions\ReglaNegocioException $e) {
+            $this->assertSame('El requisito no aplica con la configuración actual del expediente.', $e->getMessage());
+        }
+        $fila = $this->fila->fresh();
+        $this->assertSame('aplica', $fila->estado_aplicabilidad);
+        $this->assertFalse($fila->cumplido);
     }
 }

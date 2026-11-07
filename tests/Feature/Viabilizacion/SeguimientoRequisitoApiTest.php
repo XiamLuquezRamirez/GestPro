@@ -189,4 +189,14 @@ class SeguimientoRequisitoApiTest extends TestCase
             ->assertJsonPath('requisito.requisito.requiere_aprobacion_no_aplica', true)
             ->assertJsonPath('progreso.cumplidos', 1);
     }
+
+    public function test_una_fila_retirada_con_responsable_cuenta_como_retenida(): void
+    {
+        $responsable = DB::table('responsable')->insertGetId(['nombre' => 'Ana', 'activo' => true]);
+        DB::table('proyectos_requisitos')->where('id', $this->filas()[0]->id)
+            ->update(['aplica' => false, 'responsable_id' => $responsable]);
+
+        $this->como(Rol::Consulta)->getJson("/GestPro/expedientes/{$this->expediente->id}")
+            ->assertOk()->assertJsonPath('retenidos', 1);
+    }
 }

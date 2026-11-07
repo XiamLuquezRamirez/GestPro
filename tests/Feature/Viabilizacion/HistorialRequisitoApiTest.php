@@ -71,7 +71,9 @@ class HistorialRequisitoApiTest extends TestCase
 
         $this->assertSame(['cumplido_desmarcado', 'cumplido_marcado'], array_column($historial, 'evento'));
         $this->assertSame('Gestora Uno', $historial[1]['usuario']);
-        $this->assertSame(['cumplido' => false], $historial[1]['antes']);
+        $this->assertFalse($historial[1]['antes']['cumplido']);
+        $this->assertSame('Gestora Uno', $historial[0]['antes']['usuario_cumplido']);
+        $this->assertNotNull($historial[0]['antes']['fecha_cumplido']);
         $this->assertSame(['cumplido' => true], $historial[1]['despues']);
     }
 
