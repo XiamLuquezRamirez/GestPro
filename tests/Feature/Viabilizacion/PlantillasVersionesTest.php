@@ -50,6 +50,40 @@ class PlantillasVersionesTest extends TestCase
         return $servicio->publicar($servicio->crearBorrador('Ajustes'));
     }
 
+    public function test_cada_requisito_sembrado_usa_su_clave_como_codigo_comun(): void
+    {
+        $this->assertSame(207, DB::table('requisitos_catalogo')->whereColumn('codigo_comun', 'clave')->count());
+    }
+
+    public function test_un_borrador_copia_los_datos_de_seguimiento(): void
+    {
+        $datos = [
+            'descripcion' => 'Descripción', 'categoria' => 'Técnico', 'tipo_requisito' => 'Documental',
+            'caracter' => 'opcional', 'cargo_cumplimiento' => 'Ingeniero', 'cargo_revision' => 'Jurídica',
+            'soporte_requerido' => 'Acta firmada', 'referencia_normativa' => 'Art. 1',
+            'condicion_descripcion' => 'Si hay predios', 'codigo_comun' => 'comun',
+        ];
+        DB::table('requisitos_catalogo')->where('clave', 'a1')->update([...$datos, 'requiere_aprobacion_no_aplica' => true]);
+
+        $copia = app(CatalogoService::class)->crearBorrador(null)->requisitos()->where('clave', 'a1')->first();
+
+        foreach ($datos as $columna => $valor) {
+            $this->assertSame($valor, $copia->{$columna}, $columna);
+        }
+        $this->assertTrue($copia->requiere_aprobacion_no_aplica);
+    }
+
+    public function test_un_requisito_nuevo_del_sgr_usa_su_clave_como_codigo_comun(): void
+    {
+        $borrador = app(CatalogoService::class)->crearBorrador(null);
+
+        $this->comoAdmin()->postJson("/GestPro/catalogo-requisitos/versiones/{$borrador->id}/requisitos", [
+            'clave' => 'nuevo', 'seccion' => 'A', 'fuente' => 'a12', 'codigo' => '9.9', 'texto' => 'Nuevo', 'condicion' => 'siempre',
+        ])->assertCreated();
+
+        $this->assertSame('nuevo', $borrador->requisitos()->where('clave', 'nuevo')->value('codigo_comun'));
+    }
+
     public function test_la_version_sembrada_pertenece_a_la_plantilla_sgr(): void
     {
         $sgr = PlantillaChecklist::sgr();

@@ -112,6 +112,7 @@ class CatalogoRequisitosSgrSeeder extends Seeder
                     'condicion' => $r['condicion'],
                     'orden' => $r['orden'],
                     'activo' => true,
+                    'codigo_comun' => $r['clave'],
                 ];
             }, $datos['requisitos']);
 

@@ -85,7 +85,12 @@ final class CatalogoService
                 'vigente' => false,
             ]);
 
-            $columnas = ['clave', 'seccion', 'fuente', 'sector_id', 'tipo_id', 'subtitulo', 'codigo', 'texto', 'nota', 'condicion', 'orden', 'activo'];
+            $columnas = [
+                'clave', 'seccion', 'fuente', 'sector_id', 'tipo_id', 'subtitulo', 'codigo', 'texto', 'nota', 'condicion', 'orden', 'activo',
+                'descripcion', 'categoria', 'tipo_requisito', 'caracter', 'cargo_cumplimiento', 'cargo_revision',
+                'soporte_requerido', 'referencia_normativa', 'condicion_descripcion',
+                'requiere_aprobacion_no_aplica', 'codigo_comun',
+            ];
             $vigente->requisitos()->orderBy('id')->select($columnas)->get()
                 ->map(fn ($r) => ['catalogo_version_id' => $borrador->id, ...$r->only($columnas)])
                 ->chunk(100)
@@ -189,6 +194,7 @@ final class CatalogoService
         $valores = [
             'catalogo_version_id' => $version->id,
             'clave' => $datos['clave'],
+            'codigo_comun' => $datos['clave'],
             'seccion' => $seccion,
             'fuente' => $datos['fuente'],
             'sector_id' => ($datos['sector_id'] ?? null) ?: null,

@@ -7,12 +7,19 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class RequisitoCatalogo extends Model
 {
+    public const OBLIGATORIO = 'obligatorio';
+    public const OPCIONAL = 'opcional';
+    public const CONDICIONADO = 'condicionado';
+
     public $timestamps = false;
 
     protected $table = 'requisitos_catalogo';
     protected $fillable = [
         'catalogo_version_id', 'clave', 'seccion', 'fuente', 'sector_id', 'tipo_id',
         'subtitulo', 'codigo', 'texto', 'nota', 'condicion', 'orden', 'activo',
+        'descripcion', 'categoria', 'tipo_requisito', 'caracter', 'cargo_cumplimiento', 'cargo_revision',
+        'soporte_requerido', 'referencia_normativa', 'condicion_descripcion',
+        'requiere_aprobacion_no_aplica', 'codigo_comun',
     ];
     protected $casts = [
         'catalogo_version_id' => 'integer',
@@ -20,6 +27,7 @@ class RequisitoCatalogo extends Model
         'tipo_id' => 'integer',
         'orden' => 'integer',
         'activo' => 'boolean',
+        'requiere_aprobacion_no_aplica' => 'boolean',
     ];
 
     public function version(): BelongsTo
