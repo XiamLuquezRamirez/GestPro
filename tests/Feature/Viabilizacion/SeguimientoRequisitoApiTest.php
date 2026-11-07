@@ -78,6 +78,25 @@ class SeguimientoRequisitoApiTest extends TestCase
         $this->assertSame(['total' => 6, 'cumplidos' => 0, 'porcentaje' => 0], $this->progreso());
     }
 
+    public function test_cada_fila_presenta_su_estado_y_si_cuenta(): void
+    {
+        [$a, $b, $c, $d] = $this->filas();
+        $a->update(['estado_aplicabilidad' => ProyectoRequisito::NO_APLICA]);
+        $b->update(['caracter' => 'opcional', 'cumplido' => true]);
+        $c->update(['estado_aplicabilidad' => ProyectoRequisito::NO_APLICA_PENDIENTE, 'cumplido' => true]);
+        $d->update(['estado_aplicabilidad' => ProyectoRequisito::POR_DEFINIR]);
+
+        $detalle = $this->como(Rol::Consulta)->getJson("/GestPro/expedientes/{$this->expediente->id}")->assertOk();
+        $filas = collect($detalle->json('requisitos'))->keyBy('id');
+
+        $this->assertSame(['no_aplica', false], [$filas[$a->id]['estado'], $filas[$a->id]['cuenta']]);
+        $this->assertSame(['cumplido', false], [$filas[$b->id]['estado'], $filas[$b->id]['cuenta']]);
+        $this->assertSame(['no_aplica_pendiente', true], [$filas[$c->id]['estado'], $filas[$c->id]['cuenta']]);
+        $this->assertSame(['por_definir', true], [$filas[$d->id]['estado'], $filas[$d->id]['cuenta']]);
+        $this->assertNotNull($filas[$a->id]['no_aplica']);
+        $this->assertSame($detalle->json('progreso.total'), $filas->where('cuenta', true)->count());
+    }
+
     public function test_el_tablero_y_el_detalle_usan_la_misma_definicion(): void
     {
         [$a, $b] = $this->filas();
@@ -98,6 +117,7 @@ class SeguimientoRequisitoApiTest extends TestCase
 
         $otro = $servicio->crear(Proyecto::create(['nombre' => 'Vía']), ['fase_sgr' => 3], null);
 
+        $this->assertGreaterThan(0, $otro->requisitos()->count());
         $this->assertSame(0, $otro->requisitos()->where('caracter', '!=', 'opcional')->count());
     }
 
@@ -141,6 +161,18 @@ class SeguimientoRequisitoApiTest extends TestCase
         $this->como(Rol::Gestor)->patchJson($this->url($fila), ['cumplido' => true])->assertStatus(422);
 
         $this->assertFalse($fila->fresh()->cumplido);
+    }
+
+    public function test_no_se_cumple_un_requisito_por_definir_ni_por_aprobar(): void
+    {
+        $fila = $this->filas()[0];
+        foreach ([ProyectoRequisito::POR_DEFINIR, ProyectoRequisito::NO_APLICA_PENDIENTE] as $estado) {
+            $fila->update(['estado_aplicabilidad' => $estado]);
+
+            $this->como(Rol::Gestor)->patchJson($this->url($fila), ['cumplido' => true])->assertStatus(422);
+
+            $this->assertFalse($fila->fresh()->cumplido, $estado);
+        }
     }
 
     public function test_la_fila_presenta_su_estado(): void

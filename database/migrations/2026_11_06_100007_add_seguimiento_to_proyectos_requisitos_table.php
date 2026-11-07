@@ -45,10 +45,13 @@ return new class extends Migration
             throw new RuntimeException('No se puede revertir: hay requisitos con no aplica, carácter o responsable que se perderían. Restaure un respaldo.');
         }
 
+        // Cada clave foránea con su guarda: en MariaDB, un fallo a mitad no impide repetir.
         foreach (array_keys(self::FORANEAS) as $columna) {
-            Schema::table('proyectos_requisitos', function (Blueprint $table) use ($columna) {
-                $table->dropForeign([$columna]);
-            });
+            if ($this->tieneForanea($columna)) {
+                Schema::table('proyectos_requisitos', function (Blueprint $table) use ($columna) {
+                    $table->dropForeign([$columna]);
+                });
+            }
         }
         Schema::table('proyectos_requisitos', function (Blueprint $table) {
             $table->dropColumn([
