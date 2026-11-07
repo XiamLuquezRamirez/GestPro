@@ -1,29 +1,50 @@
 import React, { useMemo, useState } from 'react';
-import { faPaperclip, faDownload, faTrash, faCommentDots } from '@fortawesome/free-solid-svg-icons';
+import {
+    faPaperclip, faDownload, faTrash, faCommentDots, faBan, faRotateLeft, faCheck, faXmark, faClockRotateLeft,
+} from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { ETIQUETA_FUENTE, agruparRequisitos } from '../utils/expedienteChecklist';
+import {
+    ETIQUETA_ESTADO_REQUISITO,
+    ETIQUETA_FUENTE,
+    agruparRequisitos,
+    puedeMarcarNoAplica,
+    puedeMarcarRequisito,
+    puedeRevisarNoAplica,
+    responsablesDisponibles,
+} from '../utils/expedienteChecklist';
+import ExpedienteHistorialRequisito from './ExpedienteHistorialRequisito';
 
 const TIPOS_SOPORTE = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx';
 
 const fechaCorta = (iso) => (iso ? new Date(iso).toLocaleDateString('es-CO') : '');
 
-const ItemRequisito = ({ fila, editable, onMarcar, onObservacion, onSubirSoporte, onDescargarSoporte, onEliminarSoporte }) => {
+const ItemRequisito = ({
+    fila, editable, usuario, responsables, onMarcar, onObservacion, onSubirSoporte, onDescargarSoporte, onEliminarSoporte,
+    onNoAplica, onRetirarNoAplica, onAprobarNoAplica, onRechazarNoAplica, onResponsable, onCargarHistorial, onDescargarHistorial,
+}) => {
     const { requisito: r } = fila;
     const [viendoObservacion, setViendoObservacion] = useState(Boolean(fila.observacion));
+    const [viendoHistorial, setViendoHistorial] = useState(false);
+    const marcadoNoAplica = ['no_aplica_pendiente', 'no_aplica'].includes(fila.estado);
+    const opciones = responsablesDisponibles(responsables, fila.responsable?.id ?? null);
 
     return (
-        <article className={`exv-item${fila.cumplido ? ' cumplido' : ''}`}>
+        <article className={`exv-item${fila.estado === 'cumplido' ? ' cumplido' : ''}${fila.cuenta ? '' : ' no-cuenta'}`}>
             <label className="exv-item-principal">
                 <input
                     type="checkbox"
                     checked={fila.cumplido}
-                    disabled={!editable}
+                    disabled={!editable || !puedeMarcarRequisito(fila)}
                     onChange={(e) => onMarcar(fila, e.target.checked)}
                 />
                 <div className="exv-item-cuerpo">
                     <div className="exv-item-tags">
                         <span className="exv-codigo">{r.codigo}</span>
                         <span className={`exv-fuente exv-fuente-${r.fuente}`}>{ETIQUETA_FUENTE[r.fuente]}</span>
+                        {fila.estado !== 'pendiente' && fila.estado !== 'cumplido' && (
+                            <span className={`exv-estado exv-estado-${fila.estado}`}>{ETIQUETA_ESTADO_REQUISITO[fila.estado]}</span>
+                        )}
+                        {fila.caracter !== 'obligatorio' && <span className="exv-estado">{fila.caracter === 'opcional' ? 'Opcional' : 'Condicionado'}</span>}
                     </div>
                     <div className="exv-item-texto">
                         {r.texto}
@@ -38,6 +59,36 @@ const ItemRequisito = ({ fila, editable, onMarcar, onObservacion, onSubirSoporte
                     {fila.usuario_cumplido && ` por ${fila.usuario_cumplido}`}
                 </div>
             )}
+
+            {fila.no_aplica && (
+                <div className="exv-no-aplica">
+                    <b>{ETIQUETA_ESTADO_REQUISITO[fila.estado]}:</b> {fila.no_aplica.justificacion}
+                    <span className="exv-no-aplica-quien">
+                        {fila.no_aplica.usuario && ` Marcado por ${fila.no_aplica.usuario}.`}
+                        {fila.no_aplica.aprobado_por && ` Aprobado por ${fila.no_aplica.aprobado_por} el ${fechaCorta(fila.no_aplica.fecha_aprobacion)}.`}
+                        {fila.estado === 'no_aplica_pendiente' && r.cargo_revision && ` Debería revisarlo: ${r.cargo_revision}.`}
+                    </span>
+                </div>
+            )}
+
+            <div className="exv-responsable">
+                <span>Responsable:</span>
+                {editable ? (
+                    <select
+                        value={fila.responsable?.id ?? ''}
+                        aria-label="Responsable del requisito"
+                        onChange={(e) => onResponsable(fila, e.target.value ? Number(e.target.value) : null)}
+                    >
+                        <option value="">Sin asignar</option>
+                        {opciones.map((p) => (
+                            <option key={p.id} value={p.id}>{p.nombre}{p.cargo ? ` (${p.cargo})` : ''}</option>
+                        ))}
+                    </select>
+                ) : (
+                    <b>{fila.responsable ? fila.responsable.nombre : 'Sin asignar'}</b>
+                )}
+                {r.cargo_cumplimiento && <span className="exv-responsable-cargo">Cargo indicado: {r.cargo_cumplimiento}</span>}
+            </div>
 
             <div className="exv-item-acciones">
                 {(editable || fila.observacion) && (
@@ -60,6 +111,29 @@ const ItemRequisito = ({ fila, editable, onMarcar, onObservacion, onSubirSoporte
                         />
                     </label>
                 )}
+                {editable && puedeMarcarNoAplica(fila) && (
+                    <button type="button" className="exv-mini" onClick={() => onNoAplica(fila)}>
+                        <FontAwesomeIcon icon={faBan} /> No aplica
+                    </button>
+                )}
+                {editable && marcadoNoAplica && (
+                    <button type="button" className="exv-mini" onClick={() => onRetirarNoAplica(fila)}>
+                        <FontAwesomeIcon icon={faRotateLeft} /> Retirar "no aplica"
+                    </button>
+                )}
+                {editable && puedeRevisarNoAplica(fila, usuario) && (
+                    <>
+                        <button type="button" className="exv-mini exv-mini-exito" onClick={() => onAprobarNoAplica(fila)}>
+                            <FontAwesomeIcon icon={faCheck} /> Aprobar
+                        </button>
+                        <button type="button" className="exv-mini exv-mini-peligro" onClick={() => onRechazarNoAplica(fila)}>
+                            <FontAwesomeIcon icon={faXmark} /> Rechazar
+                        </button>
+                    </>
+                )}
+                <button type="button" className="exv-mini" aria-expanded={viendoHistorial} onClick={() => setViendoHistorial((v) => !v)}>
+                    <FontAwesomeIcon icon={faClockRotateLeft} /> Historial
+                </button>
                 {fila.soporte && (
                     <>
                         <button type="button" className="exv-mini" onClick={() => onDescargarSoporte(fila)}>
@@ -98,9 +172,14 @@ const ItemRequisito = ({ fila, editable, onMarcar, onObservacion, onSubirSoporte
                 )
             )}
 
+            {viendoHistorial && (
+                <ExpedienteHistorialRequisito fila={fila} onCargar={onCargarHistorial} onDescargar={onDescargarHistorial} />
+            )}
+
             {/* Solo impresión: los controles anteriores no salen en el PDF. */}
-            {(fila.observacion || fila.soporte) && (
+            {(fila.observacion || fila.soporte || fila.responsable) && (
                 <div className="exv-solo-impresion exv-item-impresion">
+                    {fila.responsable && <div><b>Responsable:</b> {fila.responsable.nombre}</div>}
                     {fila.observacion && <div><b>Observación:</b> {fila.observacion}</div>}
                     {fila.soporte && <div><b>Soporte:</b> {fila.soporte.nombre}</div>}
                 </div>

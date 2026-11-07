@@ -37,6 +37,7 @@ const ExpedienteViabilizacion = ({ user }) => {
     const [confirmando, setConfirmando] = useState(false);
     const [configAbierta, setConfigAbierta] = useState(false);
     const [errorCarga, setErrorCarga] = useState(null);
+    const [responsables, setResponsables] = useState([]);
 
     const puedeEditar = ROLES_EDICION.includes(user?.rol);
     const editable = puedeEditar && expediente?.estado === 'borrador';
@@ -94,6 +95,15 @@ const ExpedienteViabilizacion = ({ user }) => {
 
     useEffect(() => () => clearTimeout(envio.current.temporizador), []);
 
+    // Sin la lista, el checklist igual funciona: solo no se puede elegir responsable.
+    useEffect(() => {
+        let vigente = true;
+        axios.get('/responsables')
+            .then(({ data }) => { if (vigente) setResponsables(data); })
+            .catch(() => { if (vigente) setResponsables([]); });
+        return () => { vigente = false; };
+    }, []);
+
     const enviarConfiguracion = useCallback(async (id, datos) => {
         if (envio.current.enCurso) {
             envio.current.pendiente = datos;
@@ -148,7 +158,7 @@ const ExpedienteViabilizacion = ({ user }) => {
     const urlFila = (fila) => `/expedientes/${expediente.id}/requisitos/${fila.id}`;
 
     const marcar = async (fila, cumplido) => {
-        reemplazarFila({ ...fila, cumplido });
+        reemplazarFila({ ...fila, cumplido, estado: cumplido ? 'cumplido' : 'pendiente' });
         try {
             const { data } = await axios.patch(urlFila(fila), { cumplido });
             reemplazarFila(data.requisito, data.progreso);
@@ -178,20 +188,80 @@ const ExpedienteViabilizacion = ({ user }) => {
         }
     };
 
-    const descargarSoporte = async (fila) => {
+    const descargar = async (ruta, nombre) => {
         try {
             // Con axios, para enviar el JWT: un enlace directo no lleva la cabecera.
-            const { data } = await axios.get(`${urlFila(fila)}/soporte`, { responseType: 'blob' });
+            const { data } = await axios.get(ruta, { responseType: 'blob' });
             const url = URL.createObjectURL(data);
             const enlace = document.createElement('a');
             enlace.href = url;
-            enlace.download = fila.soporte.nombre;
+            enlace.download = nombre;
             enlace.click();
             URL.revokeObjectURL(url);
         } catch (error) {
             avisarError('No se pudo descargar el soporte', error);
         }
     };
+
+    const descargarSoporte = (fila) => descargar(`${urlFila(fila)}/soporte`, fila.soporte.nombre);
+
+    const descargarSoporteHistorial = (entrada) =>
+        descargar(`/expedientes/${expediente.id}/historial/${entrada.id}/soporte`, entrada.soporte.nombre);
+
+    const cargarHistorial = useCallback(
+        async (fila) => (await axios.get(`/expedientes/${expediente.id}/requisitos/${fila.id}/historial`)).data,
+        [expediente?.id]
+    );
+
+    const accionFila = async (peticion, titulo) => {
+        try {
+            const { data } = await peticion();
+            reemplazarFila(data.requisito, data.progreso);
+        } catch (error) {
+            avisarError(titulo, error);
+        }
+    };
+
+    const marcarNoAplica = async (fila) => {
+        const { isConfirmed, value } = await Swal.fire({
+            title: 'Este requisito no aplica',
+            text: fila.requisito.requiere_aprobacion_no_aplica ? 'Otra persona deberá aprobarlo.' : undefined,
+            input: 'textarea',
+            inputLabel: 'Justificación',
+            inputPlaceholder: 'Explique por qué no aplica a este proyecto',
+            inputAttributes: { maxlength: '2000' },
+            inputValidator: (texto) => (!texto?.trim() ? 'Escriba la justificación.' : undefined),
+            showCancelButton: true,
+            confirmButtonText: 'Guardar',
+            cancelButtonText: 'Cancelar',
+        });
+        if (!isConfirmed) return;
+        await accionFila(() => axios.post(`${urlFila(fila)}/no-aplica`, { justificacion: value }), 'No se pudo marcar como no aplica');
+    };
+
+    const retirarNoAplica = (fila) =>
+        accionFila(() => axios.delete(`${urlFila(fila)}/no-aplica`), 'No se pudo retirar el "no aplica"');
+
+    const aprobarNoAplica = (fila) =>
+        accionFila(() => axios.post(`${urlFila(fila)}/no-aplica/aprobar`), 'No se pudo aprobar el "no aplica"');
+
+    const rechazarNoAplica = async (fila) => {
+        const { isConfirmed, value } = await Swal.fire({
+            title: '¿Rechazar el "no aplica"?',
+            text: 'El requisito volverá a estar pendiente.',
+            input: 'textarea',
+            inputLabel: 'Motivo (opcional)',
+            inputAttributes: { maxlength: '2000' },
+            showCancelButton: true,
+            confirmButtonText: 'Rechazar',
+            cancelButtonText: 'Cancelar',
+        });
+        if (!isConfirmed) return;
+        await accionFila(() => axios.post(`${urlFila(fila)}/no-aplica/rechazar`, { motivo: value || null }), 'No se pudo rechazar el "no aplica"');
+    };
+
+    const asignarResponsable = (fila, responsableId) =>
+        accionFila(() => axios.patch(urlFila(fila), { responsable_id: responsableId }), 'No se pudo asignar el responsable');
 
     const eliminarSoporte = async (fila) => {
         const { isConfirmed } = await Swal.fire({
@@ -518,6 +588,15 @@ const ExpedienteViabilizacion = ({ user }) => {
                                         onSubirSoporte={subirSoporte}
                                         onDescargarSoporte={descargarSoporte}
                                         onEliminarSoporte={eliminarSoporte}
+                                        usuario={user}
+                                        responsables={responsables}
+                                        onNoAplica={marcarNoAplica}
+                                        onRetirarNoAplica={retirarNoAplica}
+                                        onAprobarNoAplica={aprobarNoAplica}
+                                        onRechazarNoAplica={rechazarNoAplica}
+                                        onResponsable={asignarResponsable}
+                                        onCargarHistorial={cargarHistorial}
+                                        onDescargarHistorial={descargarSoporteHistorial}
                                     />
 
                                     <p className="exv-pie">

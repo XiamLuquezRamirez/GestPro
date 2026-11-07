@@ -292,6 +292,20 @@
 .exv-item-nota { display: block; margin-top: .25rem; font-size: .78rem; font-style: italic; color: var(--exv-tinta-tenue); }
 .exv-item-meta { margin: .35rem 0 0 calc(17px + .8rem); font-size: .76rem; color: var(--exv-verde); }
 .exv-item-acciones { display: flex; flex-wrap: wrap; gap: .35rem; margin: .45rem 0 0 calc(17px + .8rem); }
+.exv-item.no-cuenta { opacity: .72; }
+.exv-estado { padding: .06rem .4rem; font-size: .66rem; font-weight: 600; color: var(--exv-tinta-suave); background: var(--gp-superficie-3); border-radius: 2px; }
+.exv-estado-no_aplica_pendiente, .exv-estado-por_definir { color: var(--exv-tinta); background: var(--exv-alerta-tinte); }
+.exv-no-aplica { margin: .4rem 0 0 calc(17px + .8rem); padding: .4rem .6rem; font-size: .8rem; color: var(--exv-tinta); background: var(--exv-control); border-left: 3px solid var(--exv-alerta); border-radius: 2px; }
+.exv-no-aplica-quien { color: var(--exv-tinta-suave); }
+.exv-responsable { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: .4rem 0 0 calc(17px + .8rem); font-size: .78rem; color: var(--exv-tinta-suave); }
+.exv-responsable select { max-width: 100%; padding: .18rem .4rem; font: inherit; color: var(--exv-tinta); background: var(--exv-control); border: 1px solid var(--exv-linea); border-radius: 2px; }
+.exv-responsable b { color: var(--exv-tinta); font-weight: 600; }
+.exv-responsable-cargo { color: var(--exv-tinta-tenue); }
+.exv-historial { margin: .5rem 0 0 calc(17px + .8rem); padding: 0; list-style: none; font-size: .78rem; color: var(--exv-tinta-suave); }
+.exv-historial li { display: flex; flex-wrap: wrap; gap: .3rem .6rem; align-items: center; padding: .3rem 0; border-top: 1px solid var(--exv-linea-suave); }
+.exv-historial b { color: var(--exv-tinta); font-weight: 600; }
+.exv-historial-fecha { color: var(--exv-tinta-tenue); font-variant-numeric: tabular-nums; }
+.exv-historial-vacio { margin: .5rem 0 0 calc(17px + .8rem); font-size: .78rem; color: var(--exv-tinta-tenue); }
 .exv-mini {
     display: inline-flex;
     align-items: center;
@@ -310,6 +324,7 @@
 }
 .exv-mini:hover { border-color: var(--exv-a12); color: var(--exv-a12); }
 .exv-mini-peligro:hover { border-color: var(--exv-alerta); color: var(--exv-alerta); }
+.exv-mini-exito:hover { border-color: var(--exv-verde); color: var(--exv-verde); }
 .exv-observacion, .exv-observacion-lectura {
     display: block;
     width: calc(100% - 17px - .8rem);
@@ -358,7 +373,7 @@
         --exv-a12: #3A5A8C;
         --exv-a12-tinte: #E4EAF3;
     }
-    .gp-riel, .gp-barra-superior, .gp-barra-inferior, .exv-config, .exv-barra, .exv-no-imprimir, .exv-item-acciones, .exv-observacion, .exv-observacion-lectura { display: none !important; }
+    .gp-riel, .gp-barra-superior, .gp-barra-inferior, .exv-config, .exv-barra, .exv-no-imprimir, .exv-item-acciones, .exv-observacion, .exv-observacion-lectura, .exv-responsable, .exv-historial, .exv-historial-vacio { display: none !important; }
     /* El body de la app tiene un degradado que saldría con "gráficos de fondo". */
     html, body { background: #fff !important; }
     .gp-app { display: block !important; }
