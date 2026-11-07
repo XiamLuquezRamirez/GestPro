@@ -6,6 +6,9 @@ use App\Exceptions\ReglaNegocioException;
 use App\Models\CatalogoVersion;
 use App\Models\FuenteFinanciacion;
 use App\Models\PlantillaChecklist;
+use App\Models\RequisitoCatalogo;
+use App\Models\RequisitoSector;
+use App\Models\RequisitoTipo;
 use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -105,7 +108,111 @@ final class PlantillaService
         return $plantilla;
     }
 
+    /**
+     * Copia independiente de una plantilla, en borrador, con los requisitos de su versión
+     * vigente que se elijan y el mismo código común. Una copia con motor sgr puede pasar a
+     * simple: las condiciones automáticas se vuelven condicionados que decide una persona.
+     */
+    public function duplicar(PlantillaChecklist $origen, array $datos, ?User $usuario): PlantillaChecklist
+    {
+        $vigente = $origen->versionVigente()
+            ?? throw new ReglaNegocioException('La plantilla no tiene una versión publicada que copiar.');
+
+        $motor = $datos['motor'] ?? $origen->motor;
+        if ($origen->motor === PlantillaChecklist::MOTOR_SIMPLE && $motor !== PlantillaChecklist::MOTOR_SIMPLE) {
+            throw new ReglaNegocioException('Una plantilla simple solo se puede copiar como simple.');
+        }
+
+        $requisitos = $vigente->requisitos()->where('activo', true)->orderBy('orden')->get();
+        if (array_key_exists('requisito_ids', $datos)) {
+            $pedidos = array_map('intval', $datos['requisito_ids']);
+            $ajenos = array_diff($pedidos, $requisitos->pluck('id')->all());
+            if ($ajenos) {
+                throw new ReglaNegocioException('Algunos requisitos elegidos no son de la versión vigente de la plantilla.');
+            }
+            $requisitos = $requisitos->whereIn('id', $pedidos)->values();
+        }
+        if ($requisitos->isEmpty()) {
+            throw new ReglaNegocioException('Elige al menos un requisito para la copia.');
+        }
+
+        $general = [
+            'nombre' => $datos['nombre'],
+            'descripcion' => $origen->descripcion,
+            'alcance' => $origen->alcance,
+            'todas_fuentes' => $origen->todas_fuentes,
+            'todos_sectores' => $origen->todos_sectores,
+            'fuente_ids' => $origen->fuentes()->where('activo', true)->pluck('fuentes_financiacion.id')->all(),
+            'sector_ids' => $origen->sectores()->where('activo', true)->pluck('sectores.id')->all(),
+        ];
+        $asociaciones = $this->validar($general, null);
+
+        return DB::transaction(function () use ($general, $asociaciones, $motor, $requisitos, $vigente, $origen, $usuario) {
+            $copia = PlantillaChecklist::create([
+                ...$this->datosGenerales($general),
+                'motor' => $motor,
+                'activo' => true,
+                'usuario_creo_id' => $usuario?->id,
+            ]);
+            $this->asociar($copia, $asociaciones);
+            $borrador = $this->catalogo->crearBorrador("Copia de {$origen->nombre} v{$vigente->numero}", $copia);
+
+            $aSimple = $origen->motor === PlantillaChecklist::MOTOR_SGR && $motor === PlantillaChecklist::MOTOR_SIMPLE;
+            $sectores = $aSimple ? RequisitoSector::pluck('nombre', 'id')->all() : [];
+            $tipos = $aSimple ? RequisitoTipo::pluck('nombre', 'id')->all() : [];
+
+            foreach ($requisitos->values() as $posicion => $requisito) {
+                $fila = [
+                    ...$requisito->only([
+                        'clave', 'seccion', 'fuente', 'sector_id', 'tipo_id', 'subtitulo', 'codigo', 'texto', 'nota', 'condicion',
+                        'descripcion', 'categoria', 'tipo_requisito', 'caracter', 'cargo_cumplimiento', 'cargo_revision',
+                        'soporte_requerido', 'referencia_normativa', 'condicion_descripcion',
+                        'requiere_aprobacion_no_aplica', 'codigo_comun',
+                    ]),
+                    'catalogo_version_id' => $borrador->id,
+                    'orden' => $posicion + 1,
+                    'activo' => true,
+                ];
+                RequisitoCatalogo::create($aSimple ? $this->aSimple($fila, $sectores, $tipos) : $fila);
+            }
+
+            return $copia;
+        });
+    }
+
     // ------------------------------------------------------------- internos
+
+    /**
+     * Un requisito SGR en una plantilla simple: deja la sección y las condiciones automáticas.
+     * Si dependía de una condición o de un sector, queda condicionado y la descripción guarda
+     * lo que decidía el evaluador, para que el administrador la redacte antes de publicar.
+     */
+    private function aSimple(array $fila, array $sectores, array $tipos): array
+    {
+        $condicion = $fila['condicion'];
+        $porCondicion = $condicion !== null && $condicion !== 'siempre';
+        $porSector = $fila['sector_id'] !== null;
+
+        $partes = [];
+        if ($porSector) {
+            $partes[] = 'Sector: ' . ($sectores[$fila['sector_id']] ?? '')
+                . ($fila['tipo_id'] ? ' — ' . ($tipos[$fila['tipo_id']] ?? '') : '');
+        }
+        if ($porCondicion) {
+            $partes[] = "Condición original: {$condicion}";
+        }
+
+        return [
+            ...$fila,
+            'seccion' => null,
+            'fuente' => null,
+            'sector_id' => null,
+            'tipo_id' => null,
+            'condicion' => null,
+            'caracter' => ($porCondicion || $porSector) ? RequisitoCatalogo::CONDICIONADO : $fila['caracter'],
+            'condicion_descripcion' => $partes ? implode('. ', $partes) : $fila['condicion_descripcion'],
+        ];
+    }
 
     private function resumen(PlantillaChecklist $plantilla): array
     {

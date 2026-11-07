@@ -68,6 +68,7 @@ Route::middleware('can:gestionar-catalogos')->prefix('plantillas')->name('planti
     Route::get('/{plantilla}', [PlantillaChecklistController::class, 'show'])->name('show');
     Route::put('/{plantilla}', [PlantillaChecklistController::class, 'update'])->name('update');
     Route::post('/{plantilla}/activar', [PlantillaChecklistController::class, 'activar'])->name('activar');
+    Route::post('/{plantilla}/duplicar', [PlantillaChecklistController::class, 'duplicar'])->name('duplicar');
     Route::post('/{plantilla}/versiones', [PlantillaChecklistController::class, 'crearVersion'])->name('versiones.store');
 });
 

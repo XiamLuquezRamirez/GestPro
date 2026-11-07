@@ -83,6 +83,19 @@ class PlantillaChecklistController extends Controller
         return response()->json($this->plantillas->presentar($plantilla->refresh()));
     }
 
+    public function duplicar(Request $request, PlantillaChecklist $plantilla): JsonResponse
+    {
+        $datos = $request->validate([
+            'nombre' => ['required', 'string', 'max:199'],
+            'motor' => ['sometimes', Rule::in([PlantillaChecklist::MOTOR_SGR, PlantillaChecklist::MOTOR_SIMPLE])],
+            'requisito_ids' => ['sometimes', 'array'],
+            'requisito_ids.*' => ['integer'],
+        ], self::MENSAJES);
+        $copia = $this->plantillas->duplicar($plantilla, $datos, $request->user());
+
+        return response()->json($this->plantillas->presentar($copia), 201);
+    }
+
     public function crearVersion(Request $request, PlantillaChecklist $plantilla): JsonResponse
     {
         $datos = $request->validate(['descripcion' => ['nullable', 'string', 'max:255']], self::MENSAJES, self::ATRIBUTOS);
