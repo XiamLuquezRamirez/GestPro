@@ -21,6 +21,10 @@ Route::get('/expedientes/{expediente}', [ExpedienteController::class, 'show'])
     ->name('expedientes.show');
 Route::get('/expedientes/{expediente}/requisitos/{requisito}/soporte', [ExpedienteController::class, 'descargarSoporte'])
     ->scopeBindings()->name('expedientes.requisitos.soporte.descargar');
+Route::get('/expedientes/{expediente}/requisitos/{requisito}/historial', [ExpedienteController::class, 'historialRequisito'])
+    ->scopeBindings()->name('expedientes.requisitos.historial');
+Route::get('/expedientes/{expediente}/historial/{entrada}/soporte', [ExpedienteController::class, 'descargarSoporteHistorial'])
+    ->name('expedientes.historial.soporte');
 
 // Expediente y cumplimiento: Administrador o Gestor.
 Route::middleware('can:editar-datos')->group(function () {

@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ChecklistHistorial;
 use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
 use App\Models\ProyectoRequisito;
 use App\Services\Viabilizacion\ExpedienteService;
+use App\Services\Viabilizacion\HistorialChecklist;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -33,8 +35,10 @@ class ExpedienteController extends Controller
     private const MIMES_SOPORTE = 'pdf,jpg,jpeg,png,doc,docx,xls,xlsx';
     private const MAX_SOPORTE_KB = 20480;
 
-    public function __construct(private readonly ExpedienteService $servicio)
-    {
+    public function __construct(
+        private readonly ExpedienteService $servicio,
+        private readonly HistorialChecklist $historial,
+    ) {
     }
 
     /** Vista consolidada del Dashboard: el expediente más reciente de cada proyecto. */
@@ -85,7 +89,7 @@ class ExpedienteController extends Controller
     public function confirmarConfiguracion(Request $request, ProyectoExpediente $expediente): JsonResponse
     {
         $datos = $request->validate(self::REGLAS_CONFIGURACION);
-        $this->servicio->confirmarConfiguracion($expediente, $datos);
+        $this->servicio->confirmarConfiguracion($expediente, $datos, $request->user());
 
         return response()->json($this->servicio->presentar($expediente->refresh()));
     }
@@ -116,7 +120,7 @@ class ExpedienteController extends Controller
                 'max:' . self::MAX_SOPORTE_KB,
             ],
         ]);
-        $fila = $this->servicio->guardarSoporte($expediente, $requisito, $request->file('archivo'));
+        $fila = $this->servicio->guardarSoporte($expediente, $requisito, $request->file('archivo'), $request->user());
 
         return response()->json(['requisito' => $this->servicio->presentarFila($fila->refresh())]);
     }
@@ -131,9 +135,9 @@ class ExpedienteController extends Controller
         return $disco->download($requisito->soporte_archivo, $requisito->soporte_nombre);
     }
 
-    public function eliminarSoporte(ProyectoExpediente $expediente, ProyectoRequisito $requisito): JsonResponse
+    public function eliminarSoporte(Request $request, ProyectoExpediente $expediente, ProyectoRequisito $requisito): JsonResponse
     {
-        $fila = $this->servicio->eliminarSoporte($expediente, $requisito);
+        $fila = $this->servicio->eliminarSoporte($expediente, $requisito, $request->user());
 
         return response()->json(['requisito' => $this->servicio->presentarFila($fila->refresh())]);
     }
@@ -145,9 +149,26 @@ class ExpedienteController extends Controller
         return response()->json($this->servicio->presentar($expediente->refresh()));
     }
 
-    public function destroy(ProyectoExpediente $expediente): JsonResponse
+    public function historialRequisito(ProyectoExpediente $expediente, ProyectoRequisito $requisito): JsonResponse
     {
-        $this->servicio->eliminar($expediente);
+        return response()->json($this->historial->deFila($requisito));
+    }
+
+    /** Soporte reemplazado o retirado, conservado en el historial. */
+    public function descargarSoporteHistorial(ProyectoExpediente $expediente, ChecklistHistorial $entrada): StreamedResponse|JsonResponse
+    {
+        $ruta = $entrada->expediente_id === $expediente->id ? ($entrada->antes['soporte_archivo'] ?? null) : null;
+        $disco = Storage::disk(ExpedienteService::DISCO);
+        if (! $ruta || ! $disco->exists($ruta)) {
+            return response()->json(['mensaje' => 'Ese registro no tiene un soporte disponible.'], 404);
+        }
+
+        return $disco->download($ruta, $entrada->antes['soporte_nombre'] ?? 'soporte');
+    }
+
+    public function destroy(Request $request, ProyectoExpediente $expediente): JsonResponse
+    {
+        $this->servicio->eliminar($expediente, $request->user());
 
         return response()->json(['mensaje' => 'Expediente eliminado.']);
     }

@@ -422,13 +422,13 @@ class ExpedienteApiTest extends TestCase
 
         $this->como(Rol::Consulta)->get($url)->assertOk()->assertDownload('presupuesto.pdf');
 
-        // Reemplazar borra el archivo anterior.
+        // Reemplazar conserva el archivo anterior: queda en el historial.
         $this->como(Rol::Gestor)->post($url, ['archivo' => UploadedFile::fake()->create('presupuesto_v2.pdf', 80, 'application/pdf')])->assertOk();
-        Storage::disk('local')->assertMissing($primera);
+        Storage::disk('local')->assertExists($primera);
 
         $actual = DB::table('proyectos_requisitos')->where('id', $a1)->value('soporte_archivo');
         $this->como(Rol::Gestor)->deleteJson($url)->assertOk()->assertJsonPath('requisito.soporte', null);
-        Storage::disk('local')->assertMissing($actual);
+        Storage::disk('local')->assertExists($actual);
         $this->como(Rol::Gestor)->get($url)->assertNotFound();
     }
 

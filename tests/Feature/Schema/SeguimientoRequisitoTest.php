@@ -25,6 +25,11 @@ class SeguimientoRequisitoTest extends TestCase
         return require database_path('migrations/2026_11_06_100007_add_seguimiento_to_proyectos_requisitos_table.php');
     }
 
+    private function migracionHistorial(): object
+    {
+        return require database_path('migrations/2026_11_06_100008_create_checklist_historial_table.php');
+    }
+
     private function fila(array $cambios = []): int
     {
         $version = DB::table('catalogo_versiones')->value('id') ?? $this->versionSgr();
@@ -181,5 +186,46 @@ class SeguimientoRequisitoTest extends TestCase
         $this->migracionFilas()->down();
 
         $this->assertFalse(Schema::hasColumn('proyectos_requisitos', 'responsable_id'));
+    }
+
+    // ------------------------------------------------------------- historial
+
+    public function test_el_historial_sobrevive_a_la_eliminacion_de_lo_que_registra(): void
+    {
+        $id = $this->fila();
+        DB::table('checklist_historial')->insert([
+            'entidad_tipo' => 'requisito', 'entidad_id' => $id, 'expediente_id' => 1, 'evento' => 'cumplido_marcado',
+        ]);
+
+        DB::table('proyectos_expedientes')->delete();
+
+        $this->assertDatabaseCount('checklist_historial', 1);
+    }
+
+    public function test_reintentar_la_migracion_del_historial_rehace_lo_que_quedo_a_medias(): void
+    {
+        $migracion = $this->migracionHistorial();
+        $migracion->down();
+        Schema::create('checklist_historial', function ($table) {
+            $table->id();
+        });
+
+        $migracion->up();
+
+        $this->assertTrue(Schema::hasColumns('checklist_historial', ['entidad_tipo', 'antes', 'despues', 'usuario_id']));
+    }
+
+    public function test_el_rollback_del_historial_se_detiene_si_tiene_registros(): void
+    {
+        DB::table('checklist_historial')->insert(['entidad_tipo' => 'expediente', 'entidad_id' => 1, 'evento' => 'expediente_creado']);
+
+        try {
+            $this->migracionHistorial()->down();
+            $this->fail('El rollback debía detenerse.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('se perderían', $e->getMessage());
+        }
+
+        $this->assertTrue(Schema::hasTable('checklist_historial'));
     }
 }

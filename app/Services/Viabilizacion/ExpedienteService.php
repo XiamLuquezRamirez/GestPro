@@ -45,8 +45,10 @@ final class ExpedienteService
         'usuarioNoAplica:id,name', 'usuarioAprobo:id,name', 'responsable:id,nombre,cargo',
     ];
 
-    public function __construct(private readonly EvaluadorRequisitos $evaluador)
-    {
+    public function __construct(
+        private readonly EvaluadorRequisitos $evaluador,
+        private readonly HistorialChecklist $historial,
+    ) {
     }
 
     // -------------------------------------------------------------- escritura
@@ -74,6 +76,7 @@ final class ExpedienteService
             $expediente->versionesPlantilla()->attach($version->id, ['es_principal' => true]);
             $this->guardarSeleccion($expediente, $seleccion);
             $this->sincronizar($expediente);
+            $this->historial->registrarExpediente($expediente, 'expediente_creado', [], ['catalogo_version_id' => $version->id], $usuario);
 
             return $expediente;
         });
@@ -109,12 +112,13 @@ final class ExpedienteService
             && ! $proyecto->expedientes()->exists();
     }
 
-    public function confirmarConfiguracion(ProyectoExpediente $expediente, array $datos): ProyectoExpediente
+    public function confirmarConfiguracion(ProyectoExpediente $expediente, array $datos, ?User $usuario = null): ProyectoExpediente
     {
-        return DB::transaction(function () use ($expediente, $datos) {
+        return DB::transaction(function () use ($expediente, $datos, $usuario) {
             $this->actualizarConfiguracion($expediente, $datos);
             if (! $expediente->estaConfigurado()) {
                 $expediente->update(['fecha_configuracion' => now()]);
+                $this->historial->registrarExpediente($expediente, 'configuracion_confirmada', [], ['fase_sgr' => $expediente->fase_sgr], $usuario);
             }
 
             return $expediente;
@@ -171,37 +175,57 @@ final class ExpedienteService
                 : null;
         }
 
-        $fila->save();
-        $expediente->touch();
+        DB::transaction(function () use ($expediente, $fila, $usuario) {
+            $this->registrarCambios($fila, $usuario);
+            $fila->save();
+            $expediente->touch();
+        });
 
         return $fila;
     }
 
-    public function guardarSoporte(ProyectoExpediente $expediente, ProyectoRequisito $fila, UploadedFile $archivo): ProyectoRequisito
+    public function guardarSoporte(ProyectoExpediente $expediente, ProyectoRequisito $fila, UploadedFile $archivo, ?User $usuario = null): ProyectoRequisito
     {
         $this->exigirEditable($expediente, $fila);
 
-        $anterior = $fila->soporte_archivo;
+        $anterior = $fila->only(['soporte_archivo', 'soporte_nombre']);
         // Extensión deducida del contenido, no la que declara quien sube el archivo.
         $ruta = $archivo->storeAs("expedientes/{$expediente->id}", Str::uuid() . '.' . $archivo->extension(), self::DISCO);
 
-        $fila->update(['soporte_archivo' => $ruta, 'soporte_nombre' => $archivo->getClientOriginalName()]);
-
-        if ($anterior) {
-            Storage::disk(self::DISCO)->delete($anterior);
+        try {
+            DB::transaction(function () use ($fila, $archivo, $ruta, $anterior, $usuario) {
+                $fila->update(['soporte_archivo' => $ruta, 'soporte_nombre' => $archivo->getClientOriginalName()]);
+                // El anterior no se borra: queda en el historial y se puede descargar.
+                $this->historial->registrarFila(
+                    $fila,
+                    $anterior['soporte_archivo'] ? 'soporte_reemplazado' : 'soporte_subido',
+                    $anterior['soporte_archivo'] ? $anterior : [],
+                    ['soporte_nombre' => $fila->soporte_nombre],
+                    $usuario
+                );
+            });
+        } catch (\Throwable $e) {
+            Storage::disk(self::DISCO)->delete($ruta);
+            throw $e;
         }
 
         return $fila;
     }
 
-    public function eliminarSoporte(ProyectoExpediente $expediente, ProyectoRequisito $fila): ProyectoRequisito
+    public function eliminarSoporte(ProyectoExpediente $expediente, ProyectoRequisito $fila, ?User $usuario = null): ProyectoRequisito
     {
         $this->exigirEditable($expediente, $fila);
 
-        if ($fila->soporte_archivo) {
-            Storage::disk(self::DISCO)->delete($fila->soporte_archivo);
+        if (! $fila->soporte_archivo) {
+            return $fila;
         }
-        $fila->update(['soporte_archivo' => null, 'soporte_nombre' => null]);
+
+        DB::transaction(function () use ($fila, $usuario) {
+            $antes = $fila->only(['soporte_archivo', 'soporte_nombre']);
+            $fila->update(['soporte_archivo' => null, 'soporte_nombre' => null]);
+            // El archivo no se borra: queda en el historial y se puede descargar.
+            $this->historial->registrarFila($fila, 'soporte_eliminado', $antes, [], $usuario);
+        });
 
         return $fila;
     }
@@ -221,21 +245,29 @@ final class ExpedienteService
             throw new ReglaNegocioException("No se puede radicar: {$verbo} {$pendientes} de {$total} requisitos por cumplir.");
         }
 
-        $expediente->update([
-            'estado' => ProyectoExpediente::RADICADO,
-            'fecha_radicado' => now(),
-            'usuario_radicado_id' => $usuario?->id,
-        ]);
+        DB::transaction(function () use ($expediente, $usuario, $total) {
+            $expediente->update([
+                'estado' => ProyectoExpediente::RADICADO,
+                'fecha_radicado' => now(),
+                'usuario_radicado_id' => $usuario?->id,
+            ]);
+            $this->historial->registrarExpediente($expediente, 'expediente_radicado', [], ['requisitos' => $total], $usuario);
+        });
 
         return $expediente;
     }
 
-    public function eliminar(ProyectoExpediente $expediente): void
+    public function eliminar(ProyectoExpediente $expediente, ?User $usuario = null): void
     {
         $this->exigirBorrador($expediente);
 
-        DB::transaction(function () use ($expediente) {
-            $archivos = $expediente->requisitos()->whereNotNull('soporte_archivo')->pluck('soporte_archivo')->all();
+        DB::transaction(function () use ($expediente, $usuario) {
+            $archivos = [
+                ...$expediente->requisitos()->whereNotNull('soporte_archivo')->pluck('soporte_archivo')->all(),
+                ...$this->historial->archivosDe($expediente),
+            ];
+            // El registro sobrevive al expediente; los archivos no, como avisa la pantalla.
+            $this->historial->registrarExpediente($expediente, 'expediente_eliminado', ['proyecto_id' => $expediente->proyecto_id], [], $usuario);
             $expediente->delete(); // pivotes y checklist caen en cascada
             Storage::disk(self::DISCO)->delete($archivos);
         });
@@ -553,6 +585,29 @@ final class ExpedienteService
     private function normalizar(?string $texto): string
     {
         return Str::lower(Str::ascii(trim((string) $texto)));
+    }
+
+    /** Registra lo que cambió en la fila antes de guardarla. */
+    private function registrarCambios(ProyectoRequisito $fila, ?User $usuario): void
+    {
+        if ($fila->isDirty('cumplido')) {
+            $this->historial->registrarFila(
+                $fila,
+                $fila->cumplido ? 'cumplido_marcado' : 'cumplido_desmarcado',
+                ['cumplido' => (bool) $fila->getOriginal('cumplido')],
+                ['cumplido' => $fila->cumplido],
+                $usuario
+            );
+        }
+        if ($fila->isDirty('observacion')) {
+            $this->historial->registrarFila(
+                $fila,
+                'observacion_cambiada',
+                ['observacion' => $fila->getOriginal('observacion')],
+                ['observacion' => $fila->observacion],
+                $usuario
+            );
+        }
     }
 
     private function exigirEditable(ProyectoExpediente $expediente, ProyectoRequisito $fila): void
