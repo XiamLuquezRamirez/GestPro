@@ -11,6 +11,9 @@ return new class extends Migration
     {
         // up() solo corre si la migración no quedó registrada: si la tabla existe, es un resto
         // de un intento fallido, quizá sin sus índices.
+        if (Schema::hasTable('checklist_historial') && DB::table('checklist_historial')->exists()) {
+            throw new RuntimeException('La tabla checklist_historial ya tiene registros: no se reemplaza. Revise el registro de migraciones o restaure un respaldo.');
+        }
         Schema::dropIfExists('checklist_historial');
 
         // Sin claves foráneas a propósito: el historial debe sobrevivir a la eliminación de

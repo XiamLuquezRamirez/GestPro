@@ -81,7 +81,7 @@ class ExpedienteController extends Controller
     public function updateConfiguracion(Request $request, ProyectoExpediente $expediente): JsonResponse
     {
         $datos = $request->validate(self::REGLAS_CONFIGURACION);
-        $this->servicio->actualizarConfiguracion($expediente, $datos);
+        $this->servicio->actualizarConfiguracion($expediente, $datos, $request->user());
 
         return response()->json($this->servicio->presentar($expediente->refresh()));
     }
@@ -158,6 +158,9 @@ class ExpedienteController extends Controller
     public function descargarSoporteHistorial(ProyectoExpediente $expediente, ChecklistHistorial $entrada): StreamedResponse|JsonResponse
     {
         $ruta = $entrada->expediente_id === $expediente->id ? ($entrada->antes['soporte_archivo'] ?? null) : null;
+        if ($ruta && ! str_starts_with($ruta, "expedientes/{$expediente->id}/")) {
+            $ruta = null; // solo se sirven archivos de la carpeta del expediente
+        }
         $disco = Storage::disk(ExpedienteService::DISCO);
         if (! $ruta || ! $disco->exists($ruta)) {
             return response()->json(['mensaje' => 'Ese registro no tiene un soporte disponible.'], 404);

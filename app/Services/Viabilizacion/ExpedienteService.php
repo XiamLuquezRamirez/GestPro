@@ -115,7 +115,7 @@ final class ExpedienteService
     public function confirmarConfiguracion(ProyectoExpediente $expediente, array $datos, ?User $usuario = null): ProyectoExpediente
     {
         return DB::transaction(function () use ($expediente, $datos, $usuario) {
-            $this->actualizarConfiguracion($expediente, $datos);
+            $this->actualizarConfiguracion($expediente, $datos, $usuario);
             if (! $expediente->estaConfigurado()) {
                 $expediente->update(['fecha_configuracion' => now()]);
                 $this->historial->registrarExpediente($expediente, 'configuracion_confirmada', [], ['fase_sgr' => $expediente->fase_sgr], $usuario);
@@ -139,15 +139,19 @@ final class ExpedienteService
             : null;
     }
 
-    public function actualizarConfiguracion(ProyectoExpediente $expediente, array $datos): ProyectoExpediente
+    public function actualizarConfiguracion(ProyectoExpediente $expediente, array $datos, ?User $usuario = null): ProyectoExpediente
     {
         $this->exigirBorrador($expediente);
         $seleccion = $this->validarSeleccion($datos, $expediente);
 
-        return DB::transaction(function () use ($expediente, $datos, $seleccion) {
+        return DB::transaction(function () use ($expediente, $datos, $seleccion, $usuario) {
+            $faseAnterior = $expediente->fase_sgr;
             $expediente->update(['fase_sgr' => (int) $datos['fase_sgr']]);
             $this->guardarSeleccion($expediente, $seleccion);
             $this->sincronizar($expediente);
+            if ($expediente->estaConfigurado()) {
+                $this->historial->registrarExpediente($expediente, 'configuracion_cambiada', ['fase_sgr' => $faseAnterior], ['fase_sgr' => $expediente->fase_sgr, ...$seleccion], $usuario);
+            }
 
             return $expediente;
         });
@@ -188,12 +192,14 @@ final class ExpedienteService
     {
         $this->exigirEditable($expediente, $fila);
 
-        $anterior = $fila->only(['soporte_archivo', 'soporte_nombre']);
         // Extensión deducida del contenido, no la que declara quien sube el archivo.
         $ruta = $archivo->storeAs("expedientes/{$expediente->id}", Str::uuid() . '.' . $archivo->extension(), self::DISCO);
 
         try {
-            DB::transaction(function () use ($fila, $archivo, $ruta, $anterior, $usuario) {
+            DB::transaction(function () use ($fila, $archivo, $ruta, $usuario) {
+                // Bloquea la fila: con dos subidas a la vez, la segunda ve el soporte de la primera.
+                $anterior = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail()
+                    ->only(['soporte_archivo', 'soporte_nombre']);
                 $fila->update(['soporte_archivo' => $ruta, 'soporte_nombre' => $archivo->getClientOriginalName()]);
                 // El anterior no se borra: queda en el historial y se puede descargar.
                 $this->historial->registrarFila(
@@ -221,11 +227,17 @@ final class ExpedienteService
         }
 
         DB::transaction(function () use ($fila, $usuario) {
-            $antes = $fila->only(['soporte_archivo', 'soporte_nombre']);
+            // Bloquea la fila: si otra petición ya quitó el soporte, no hay nada que registrar.
+            $antes = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail()
+                ->only(['soporte_archivo', 'soporte_nombre']);
+            if (! $antes['soporte_archivo']) {
+                return;
+            }
             $fila->update(['soporte_archivo' => null, 'soporte_nombre' => null]);
             // El archivo no se borra: queda en el historial y se puede descargar.
             $this->historial->registrarFila($fila, 'soporte_eliminado', $antes, [], $usuario);
         });
+        $fila->refresh();
 
         return $fila;
     }
@@ -261,7 +273,7 @@ final class ExpedienteService
     {
         $this->exigirBorrador($expediente);
 
-        DB::transaction(function () use ($expediente, $usuario) {
+        $archivos = DB::transaction(function () use ($expediente, $usuario) {
             $archivos = [
                 ...$expediente->requisitos()->whereNotNull('soporte_archivo')->pluck('soporte_archivo')->all(),
                 ...$this->historial->archivosDe($expediente),
@@ -269,8 +281,11 @@ final class ExpedienteService
             // El registro sobrevive al expediente; los archivos no, como avisa la pantalla.
             $this->historial->registrarExpediente($expediente, 'expediente_eliminado', ['proyecto_id' => $expediente->proyecto_id], [], $usuario);
             $expediente->delete(); // pivotes y checklist caen en cascada
-            Storage::disk(self::DISCO)->delete($archivos);
+
+            return $archivos;
         });
+        // Después del commit: si la transacción falla, los archivos siguen.
+        Storage::disk(self::DISCO)->delete($archivos);
     }
 
     // ---------------------------------------------------------- recálculo

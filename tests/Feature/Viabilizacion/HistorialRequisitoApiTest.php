@@ -3,6 +3,7 @@
 namespace Tests\Feature\Viabilizacion;
 
 use App\Enums\Rol;
+use App\Models\ChecklistHistorial;
 use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
 use App\Models\ProyectoRequisito;
@@ -93,8 +94,9 @@ class HistorialRequisitoApiTest extends TestCase
 
         Storage::disk('local')->assertExists($primera);
         $respuesta = $this->como(Rol::Consulta)->getJson($this->url('/historial'))->assertOk();
-        $this->assertStringNotContainsString('expedientes/', $respuesta->getContent()); // la ruta nunca sale
+        $this->assertStringNotContainsString(basename($primera), $respuesta->getContent()); // la ruta nunca sale
         $reemplazo = $respuesta->json('0');
+        $this->assertArrayNotHasKey('soporte_archivo', $reemplazo['antes']);
         $this->assertSame('soporte_reemplazado', $reemplazo['evento']);
         $this->assertSame(['nombre' => 'v1.pdf'], $reemplazo['soporte']);
 
@@ -151,5 +153,39 @@ class HistorialRequisitoApiTest extends TestCase
         $this->assertDatabaseHas('checklist_historial', [
             'expediente_id' => $this->expediente->id, 'evento' => 'expediente_eliminado', 'usuario_id' => $this->gestor->id,
         ]);
+    }
+
+    public function test_si_falla_el_registro_no_cambia_nada_y_se_borra_el_archivo_nuevo(): void
+    {
+        $this->subir('v1.pdf');
+        $primera = $this->fila->fresh()->soporte_archivo;
+        ChecklistHistorial::creating(fn () => throw new \RuntimeException('falla simulada'));
+
+        $this->como($this->gestor)->post($this->url('/soporte'), [
+            'archivo' => UploadedFile::fake()->create('v2.pdf', 20, 'application/pdf'),
+        ])->assertStatus(500);
+
+        $this->assertSame($primera, $this->fila->fresh()->soporte_archivo);
+        $this->assertSame([$primera], Storage::disk('local')->allFiles("expedientes/{$this->expediente->id}"));
+    }
+
+    public function test_cambiar_la_configuracion_ya_confirmada_queda_registrado(): void
+    {
+        $this->como($this->gestor)->putJson("/GestPro/expedientes/{$this->expediente->id}/configuracion", ['fase_sgr' => 2])->assertOk();
+
+        $registro = DB::table('checklist_historial')->where('evento', 'configuracion_cambiada')->first();
+        $this->assertSame(['fase_sgr' => 3], json_decode($registro->antes, true));
+        $this->assertSame(2, json_decode($registro->despues, true)['fase_sgr']);
+    }
+
+    public function test_no_se_descarga_un_archivo_fuera_de_la_carpeta_del_expediente(): void
+    {
+        Storage::disk('local')->put('otros/secreto.pdf', 'x');
+        $entrada = ChecklistHistorial::create([
+            'entidad_tipo' => 'requisito', 'entidad_id' => $this->fila->id, 'expediente_id' => $this->expediente->id,
+            'evento' => 'soporte_reemplazado', 'antes' => ['soporte_archivo' => 'otros/secreto.pdf', 'soporte_nombre' => 's.pdf'],
+        ]);
+
+        $this->como(Rol::Consulta)->get("/GestPro/expedientes/{$this->expediente->id}/historial/{$entrada->id}/soporte")->assertNotFound();
     }
 }
