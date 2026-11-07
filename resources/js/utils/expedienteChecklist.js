@@ -9,7 +9,7 @@ export const SECCIONES = {
     C: { num: 'S.3', titulo: 'Requisitos sectoriales', cita: 'según el sector seleccionado' },
 };
 
-const ORDEN_SECCIONES = ['A', 'B', 'D', 'C'];
+export const ORDEN_SECCIONES = ['A', 'B', 'D', 'C'];
 
 export const FASES = [
     { valor: 1, romano: 'I', corta: 'Perfil', larga: 'Perfil' },

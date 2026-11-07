@@ -1,5 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
+    ALCANCES,
+    CARACTERES,
+    CATEGORIAS,
+    PLANTILLA_VACIA,
+    TIPOS_REQUISITO,
     agruparVistaPrevia,
     datosPlantilla,
     datosRequisito,
@@ -112,5 +118,121 @@ describe('utilidades', () => {
         expect(etiquetaCategoria('juridico')).toBe('Jurídico');
         expect(etiquetaCategoria('nada')).toBe('');
         expect(filtrarPlantillas([{ activo: true }, { activo: false }], { soloActivas: true })).toHaveLength(1);
+    });
+});
+
+describe('refuerzo: payload completo del requisito', () => {
+    it('motor sgr: envía el objeto entero', () => {
+        const formulario = {
+            ...requisitoVacio('sgr'),
+            texto: ' Texto ', descripcion: ' Desc ', categoria: 'tecnico', tipo_requisito: 'documental',
+            cargo_cumplimiento: 'Gestor', cargo_revision: 'Revisor', soporte_requerido: 'PDF',
+            referencia_normativa: 'Art. 1', nota: 'N', codigo_comun: ' CC ', clave: ' k1 ', seccion: 'C',
+            fuente: 'ot', sector_id: '3', tipo_id: '9', subtitulo: ' Sub ', codigo: ' c1 ', condicion: '  fase=3  ',
+        };
+        expect(datosRequisito(formulario, 'sgr')).toEqual({
+            texto: 'Texto', descripcion: 'Desc', categoria: 'tecnico', tipo_requisito: 'documental',
+            cargo_cumplimiento: 'Gestor', cargo_revision: 'Revisor', soporte_requerido: 'PDF',
+            referencia_normativa: 'Art. 1', nota: 'N', requiere_aprobacion_no_aplica: true, activo: true,
+            codigo_comun: 'CC', clave: 'k1', seccion: 'C', fuente: 'ot', sector_id: 3, tipo_id: 9,
+            subtitulo: 'Sub', codigo: 'c1', condicion: 'fase=3',
+        });
+    });
+
+    it('motor simple: envía el objeto entero y respeta el carácter', () => {
+        const formulario = {
+            ...requisitoVacio('simple'),
+            texto: ' Texto ', descripcion: 'Desc', categoria: 'juridico', tipo_requisito: 'validacion',
+            cargo_cumplimiento: 'A', cargo_revision: 'B', soporte_requerido: 'C', referencia_normativa: 'D',
+            nota: 'E', codigo_comun: 'CC', clave: ' k2 ', codigo: ' c2 ', caracter: 'opcional',
+            condicion_descripcion: 'ignorada', activo: false,
+        };
+        expect(datosRequisito(formulario, 'simple')).toEqual({
+            texto: 'Texto', descripcion: 'Desc', categoria: 'juridico', tipo_requisito: 'validacion',
+            cargo_cumplimiento: 'A', cargo_revision: 'B', soporte_requerido: 'C', referencia_normativa: 'D',
+            nota: 'E', requiere_aprobacion_no_aplica: false, activo: false, codigo_comun: 'CC', clave: 'k2',
+            caracter: 'opcional', condicion_descripcion: null, codigo: 'c2',
+        });
+    });
+});
+
+describe('refuerzo: constantes contra PHP', () => {
+    const leer = (ruta) => readFileSync(ruta, 'utf8');
+    const lista = (codigo, nombre) => {
+        const m = codigo.match(new RegExp(`const ${nombre} = \\[([^\\]]*)\\]`));
+        return [...m[1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]);
+    };
+    const modelo = leer('app/Models/RequisitoCatalogo.php');
+    const servicio = leer('app/Services/Viabilizacion/PlantillaService.php');
+
+    it('categorías, tipos y alcances coinciden con PHP', () => {
+        expect(CATEGORIAS.map(([v]) => v)).toEqual(lista(modelo, 'CATEGORIAS'));
+        expect(TIPOS_REQUISITO.map(([v]) => v)).toEqual(lista(modelo, 'TIPOS'));
+        expect(ALCANCES.map(([v]) => v)).toEqual(lista(servicio, 'ALCANCES'));
+    });
+
+    it('los caracteres coinciden con PHP', () => {
+        const valor = (n) => modelo.match(new RegExp(`const ${n} = '([a-z_]+)'`))[1];
+        expect(CARACTERES.map(([v]) => v)).toEqual([valor('OBLIGATORIO'), valor('OPCIONAL'), valor('CONDICIONADO')]);
+    });
+
+    it('las etiquetas están fijadas', () => {
+        expect(CATEGORIAS.map(([, t]) => t)).toEqual(['Técnico', 'Jurídico', 'Financiero', 'Ambiental', 'Social', 'Administrativo', 'Otro']);
+        expect(TIPOS_REQUISITO.map(([, t]) => t)).toEqual(['Documental', 'Validación', 'Condición']);
+        expect(CARACTERES.map(([, t]) => t)).toEqual(['Obligatorio', 'Opcional', 'Condicionado']);
+        expect(ALCANCES.map(([, t]) => t)).toEqual(['General', 'Específica']);
+    });
+});
+
+describe('refuerzo: formularioRequisito', () => {
+    it('conserva aprobación y activo de un requisito existente', () => {
+        expect(formularioRequisito({ requiere_aprobacion_no_aplica: false }, 'sgr').requiere_aprobacion_no_aplica).toBe(false);
+        expect(formularioRequisito({ requiere_aprobacion_no_aplica: true }, 'simple').requiere_aprobacion_no_aplica).toBe(true);
+        expect(formularioRequisito({ activo: false }, 'simple').activo).toBe(false);
+        expect(formularioRequisito({}, 'simple').activo).toBe(true);
+        expect(formularioRequisito({ caracter: 'opcional' }, 'simple').caracter).toBe('opcional');
+    });
+
+    it('un campo ausente no pisa los valores por defecto', () => {
+        const f = formularioRequisito({ texto: 'x', seccion: null, fuente: undefined, condicion: null, requiere_aprobacion_no_aplica: null }, 'sgr');
+        expect(f).toMatchObject({ texto: 'x', seccion: 'A', fuente: 'a12', condicion: 'siempre', requiere_aprobacion_no_aplica: true });
+    });
+});
+
+describe('refuerzo: vista previa', () => {
+    const r = (id, orden, seccion, extra) => ({ id, orden, seccion, activo: true, texto: `R${id}`, ...extra });
+
+    it('sgr: orden A, B, D, C, por orden dentro del grupo y con títulos', () => {
+        const grupos = agruparVistaPrevia([
+            r(1, 9, 'C'), r(2, 8, 'D'), r(3, 7, 'B'), r(4, 6, 'A'), r(5, 2, 'A'), r(6, 1, 'C'),
+        ], 'sgr');
+        expect(grupos.map((g) => g.clave)).toEqual(['A', 'B', 'D', 'C']);
+        expect(grupos.map((g) => g.titulo)).toEqual([
+            'S.1 Requisitos generales', 'S.2 Requisitos adicionales', 'ESP Recuperación tras desastre', 'S.3 Requisitos sectoriales',
+        ]);
+        expect(grupos[0].requisitos.map((x) => x.id)).toEqual([5, 4]);
+        expect(grupos[3].requisitos.map((x) => x.id)).toEqual([6, 1]);
+    });
+
+    it('simple: una categoría vacía o desconocida cae en "Sin categoría"', () => {
+        const grupos = agruparVistaPrevia([
+            r(1, 1, undefined, { categoria: '' }), r(2, 2, undefined, { categoria: 'inventada' }), r(3, 3, undefined, { categoria: 'otro' }),
+        ], 'simple');
+        expect(grupos.map((g) => g.titulo)).toEqual(['Otro', 'Sin categoría']);
+        expect(grupos[1].requisitos.map((x) => x.id)).toEqual([1, 2]);
+    });
+});
+
+describe('refuerzo: resto', () => {
+    it('plantilla vacía, versiones, filtro y mover', () => {
+        expect(PLANTILLA_VACIA.todos_sectores).toBe(true);
+        expect(PLANTILLA_VACIA.todas_fuentes).toBe(false);
+        expect(etiquetaVersion({ numero: 2, estado: 'publicada', vigente: false })).toBe('v2');
+        expect(filtrarPlantillas([{ activo: true }, { activo: false }], { soloActivas: false })).toHaveLength(2);
+        expect(mover([1, 2, 3], 0, -1)).toEqual([1, 2, 3]);
+        expect(mover([1, 2, 3], -1, 1)).toEqual([1, 2, 3]);
+        expect(mover([1, 2, 3], 3, -1)).toEqual([1, 2, 3]);
+        const original = [1, 2, 3];
+        expect(mover(original, 5, 0)).not.toBe(original);
     });
 });

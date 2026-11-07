@@ -1,7 +1,7 @@
 // Lógica de presentación de la administración de plantillas de checklist.
 // Funciones puras, probadas en plantillasChecklist.test.js. Las reglas las valida el backend.
 
-import { SECCIONES } from './expedienteChecklist';
+import { ORDEN_SECCIONES, SECCIONES } from './expedienteChecklist';
 
 export const CATEGORIAS = [
     ['tecnico', 'Técnico'],
@@ -29,6 +29,8 @@ export const ALCANCES = [
     ['general', 'General'],
     ['especifica', 'Específica'],
 ];
+
+const CONDICIONADO = CARACTERES.find(([v]) => v === 'condicionado')[0];
 
 const etiqueta = (lista, valor) => lista.find(([v]) => v === valor)?.[1] ?? '';
 
@@ -91,15 +93,19 @@ export const requisitoVacio = (motor) => ({
     ...(motor === 'sgr' ? { seccion: 'A', fuente: 'a12', condicion: 'siempre' } : {}),
 });
 
-export const formularioRequisito = (requisito, motor) => ({
-    ...requisitoVacio(motor),
-    ...Object.fromEntries(CAMPOS_TEXTO.map((c) => [c, requisito[c] ?? ''])),
-    caracter: requisito.caracter ?? 'obligatorio',
-    requiere_aprobacion_no_aplica: Boolean(requisito.requiere_aprobacion_no_aplica),
-    activo: requisito.activo ?? true,
-    sector_id: requisito.sector_id ?? '',
-    tipo_id: requisito.tipo_id ?? '',
-});
+export const formularioRequisito = (requisito, motor) => {
+    const base = requisitoVacio(motor);
+    const valor = (campo) => requisito[campo] ?? base[campo];
+    return {
+        ...base,
+        ...Object.fromEntries(CAMPOS_TEXTO.map((c) => [c, valor(c)])),
+        caracter: valor('caracter'),
+        requiere_aprobacion_no_aplica: Boolean(valor('requiere_aprobacion_no_aplica')),
+        activo: valor('activo'),
+        sector_id: valor('sector_id'),
+        tipo_id: valor('tipo_id'),
+    };
+};
 
 /** Lo que espera la API según el motor. Los textos vacíos viajan como null. */
 export const datosRequisito = (formulario, motor) => {
@@ -137,7 +143,7 @@ export const datosRequisito = (formulario, motor) => {
         ...comunes,
         clave: texto('clave'),
         caracter: formulario.caracter,
-        condicion_descripcion: formulario.caracter === 'condicionado' ? texto('condicion_descripcion') : null,
+        condicion_descripcion: formulario.caracter === CONDICIONADO ? texto('condicion_descripcion') : null,
         codigo: texto('codigo'),
     };
 };
@@ -150,7 +156,7 @@ export const agruparVistaPrevia = (requisitos, motor) => {
     const activos = requisitos.filter((r) => r.activo).sort((a, b) => a.orden - b.orden);
 
     if (motor === 'sgr') {
-        return ['A', 'B', 'D', 'C']
+        return ORDEN_SECCIONES
             .map((clave) => ({
                 clave,
                 titulo: `${SECCIONES[clave].num} ${SECCIONES[clave].titulo}`,
@@ -160,15 +166,15 @@ export const agruparVistaPrevia = (requisitos, motor) => {
     }
 
     const grupos = [...CATEGORIAS, [null, 'Sin categoría']]
-        .map(([clave, titulo]) => ({ clave: clave ?? 'sin', titulo, requisitos: activos.filter((r) => (r.categoria ?? null) === clave) }));
+        .map(([clave, titulo]) => ({ clave: clave ?? 'sin', titulo, requisitos: activos.filter((r) => (CATEGORIAS.some(([c]) => c === r.categoria) ? r.categoria : null) === clave) }));
     return grupos.filter((g) => g.requisitos.length);
 };
 
 /** Mueve un elemento una posición arriba (-1) o abajo (+1). Fuera de rango, no cambia nada. */
 export const mover = (lista, indice, delta) => {
     const destino = indice + delta;
-    if (destino < 0 || destino >= lista.length) return lista;
     const copia = [...lista];
+    if (indice < 0 || indice >= lista.length || destino < 0 || destino >= lista.length) return copia;
     [copia[indice], copia[destino]] = [copia[destino], copia[indice]];
     return copia;
 };
