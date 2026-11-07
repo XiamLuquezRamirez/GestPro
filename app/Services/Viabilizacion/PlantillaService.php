@@ -139,6 +139,18 @@ final class PlantillaService
             throw new ReglaNegocioException('Elige al menos un requisito para la copia.');
         }
 
+        // Sin fuentes o sectores activos que heredar, el error genérico de validar() no explicaría la causa.
+        $inactivas = [];
+        if (! $origen->todas_fuentes && ! $origen->fuentes()->where('activo', true)->exists()) {
+            $inactivas[] = 'Las fuentes de financiación de la plantilla de origen están inactivas. Actívalas, o edita la plantilla de origen para elegir otras fuentes o marcar "Todas las fuentes", y vuelve a copiarla.';
+        }
+        if (! $origen->todos_sectores && ! $origen->sectores()->where('activo', true)->exists()) {
+            $inactivas[] = 'Los sectores de la plantilla de origen están inactivos. Actívalos, o edita la plantilla de origen para elegir otros sectores o marcar "Todos los sectores", y vuelve a copiarla.';
+        }
+        if ($inactivas) {
+            throw new ReglaNegocioException('La plantilla no es válida.', $inactivas);
+        }
+
         $general = [
             'nombre' => $datos['nombre'],
             'descripcion' => $origen->descripcion,

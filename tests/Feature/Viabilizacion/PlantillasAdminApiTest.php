@@ -217,4 +217,34 @@ class PlantillasAdminApiTest extends TestCase
         $this->como(Rol::Gestor)->getJson('/GestPro/plantillas')->assertForbidden();
         $this->como(Rol::Gestor)->postJson('/GestPro/plantillas', $this->datos())->assertForbidden();
     }
+
+    public function test_el_porcentaje_de_la_busqueda_no_actua_como_comodin(): void
+    {
+        $this->crear(['nombre' => 'Cobertura 100% rural'])->assertCreated();
+        $this->crear(['nombre' => 'Cobertura 1000 rural'])->assertCreated();
+
+        $encontradas = $this->como(Rol::Administrador)->getJson('/GestPro/plantillas?buscar=100%25')->assertOk()->json();
+
+        $this->assertSame(['Cobertura 100% rural'], array_column($encontradas, 'nombre'));
+    }
+
+    public function test_el_guion_bajo_de_la_busqueda_no_actua_como_comodin(): void
+    {
+        $this->crear(['nombre' => 'Zona_norte'])->assertCreated();
+        $this->crear(['nombre' => 'Zona norte'])->assertCreated();
+
+        $encontradas = $this->como(Rol::Administrador)->getJson('/GestPro/plantillas?buscar=zona_')->assertOk()->json();
+
+        $this->assertSame(['Zona_norte'], array_column($encontradas, 'nombre'));
+    }
+
+    public function test_activar_valida_en_espanol(): void
+    {
+        $id = $this->crear()->json('id');
+
+        $this->como(Rol::Administrador)->postJson("/GestPro/plantillas/{$id}/activar", [])->assertStatus(422)
+            ->assertJsonPath('errors.activo.0', 'Completa el estado activo.');
+        $this->como(Rol::Administrador)->postJson("/GestPro/plantillas/{$id}/activar", ['activo' => 'quizá'])->assertStatus(422)
+            ->assertJsonPath('errors.activo.0', 'Revisa el estado activo: debe ser sí o no.');
+    }
 }

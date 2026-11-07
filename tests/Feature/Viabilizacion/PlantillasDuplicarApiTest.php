@@ -232,7 +232,7 @@ class PlantillasDuplicarApiTest extends TestCase
         $this->withHeader('Authorization', $this->admin())
             ->postJson("/GestPro/catalogo-requisitos/versiones/{$version->id}/publicar")
             ->assertStatus(422)
-            ->assertJsonFragment(["{$copia->texto}: redacta en palabras cuándo aplica; la condición original es del evaluador SGR."]);
+            ->assertJsonFragment(["{$copia->texto}: reemplaza la \"Condición original:\" por una descripción en palabras de cuándo aplica."]);
 
         $this->withHeader('Authorization', $this->admin())
             ->putJson("/GestPro/catalogo-requisitos/versiones/{$version->id}/requisitos/{$copia->id}", [
@@ -243,5 +243,123 @@ class PlantillasDuplicarApiTest extends TestCase
         $this->withHeader('Authorization', $this->admin())
             ->postJson("/GestPro/catalogo-requisitos/versiones/{$version->id}/publicar")
             ->assertOk();
+    }
+
+    /** Copia simple de la SGR con su versión publicada, lista para ser origen de otra copia. */
+    private function origenSimple(): PlantillaChecklist
+    {
+        $id = $this->duplicar(['nombre' => 'Origen simple', 'motor' => 'simple', 'requisito_ids' => [$this->requisito('a1')->id]])
+            ->assertCreated()->json('id');
+        PlantillaChecklist::find($id)->versiones()->first()->update(['estado' => 'publicada', 'vigente' => true]);
+
+        return PlantillaChecklist::find($id);
+    }
+
+    private function copiarDesde(PlantillaChecklist $origen, array $datos = [])
+    {
+        return $this->withHeader('Authorization', $this->admin())
+            ->postJson("/GestPro/plantillas/{$origen->id}/duplicar", ['nombre' => 'Hija', ...$datos]);
+    }
+
+    public function test_la_copia_solo_hereda_los_sectores_activos(): void
+    {
+        $origen = $this->origenSimple();
+        $activo = DB::table('sectores')->insertGetId(['nombre' => 'Educación', 'activo' => true]);
+        $inactivo = DB::table('sectores')->insertGetId(['nombre' => 'Minas', 'activo' => false]);
+        $origen->update(['todos_sectores' => false]);
+        $origen->sectores()->sync([$activo, $inactivo]);
+
+        $respuesta = $this->copiarDesde($origen)->assertCreated();
+
+        $this->assertSame([$activo], array_column($respuesta->json('sectores'), 'id'));
+        $this->assertSame([$activo], PlantillaChecklist::find($respuesta->json('id'))->sectores()->pluck('sectores.id')->all());
+    }
+
+    public function test_con_el_mismo_orden_la_copia_desempata_por_id(): void
+    {
+        $filas = DB::table('requisitos_catalogo')->where('catalogo_version_id', $this->sgr->versionVigente()->id)
+            ->whereIn('clave', ['a1', 'a2', 'a3'])->orderBy('id')->get();
+        DB::table('requisitos_catalogo')->whereIn('id', $filas->pluck('id'))->update(['orden' => 9999]);
+
+        $id = $this->duplicar(['requisito_ids' => $filas->pluck('id')->reverse()->values()->all()])->assertCreated()->json('id');
+
+        $version = PlantillaChecklist::find($id)->versiones()->first();
+        $copia = DB::table('requisitos_catalogo')->where('catalogo_version_id', $version->id)->orderBy('orden')->pluck('clave')->all();
+        $this->assertSame($filas->pluck('clave')->all(), $copia);
+    }
+
+    public function test_una_referencia_normativa_previa_no_se_pisa_con_la_norma(): void
+    {
+        $a1 = $this->requisito('a1');
+        $this->assertSame('a12', $a1->fuente);
+        DB::table('requisitos_catalogo')->where('id', $a1->id)->update(['referencia_normativa' => 'Decreto 1082 de 2015']);
+
+        $id = $this->duplicar(['motor' => 'simple', 'requisito_ids' => [$a1->id]])->assertCreated()->json('id');
+
+        $this->assertSame('Decreto 1082 de 2015', $this->copiaDe($id, 'a1')->referencia_normativa);
+    }
+
+    public function test_una_copia_sgr_a_sgr_conserva_la_aprobacion_del_no_aplica(): void
+    {
+        $a1 = $this->requisito('a1');
+        DB::table('requisitos_catalogo')->where('id', $a1->id)->update(['requiere_aprobacion_no_aplica' => true]);
+
+        $id = $this->duplicar(['motor' => 'sgr', 'requisito_ids' => [$a1->id]])->assertCreated()->json('id');
+
+        $copia = $this->copiaDe($id, 'a1');
+        $this->assertEquals(1, $copia->requiere_aprobacion_no_aplica);
+        $this->assertNotNull($copia->seccion);
+    }
+
+    public function test_los_mensajes_de_validacion_de_duplicar_usan_los_atributos_en_espanol(): void
+    {
+        $this->duplicar(['requisito_ids' => 'x'])->assertStatus(422)
+            ->assertJsonPath('errors.requisito_ids.0', 'Revisa los requisitos: debe ser una lista.');
+
+        $errores = $this->duplicar(['requisito_ids' => ['x']])->assertStatus(422)->json('errors');
+        $this->assertSame('Revisa cada requisito: debe ser un número entero.', $errores['requisito_ids.0'][0]);
+    }
+
+    public function test_si_las_fuentes_del_origen_estan_inactivas_el_mensaje_lo_dice(): void
+    {
+        DB::table('fuentes_financiacion')->where('clave', FuenteFinanciacion::SGR)->update(['activo' => false]);
+
+        $this->duplicar([])->assertStatus(422)
+            ->assertJsonPath('mensaje', 'La plantilla no es válida.')
+            ->assertJsonPath('errores.0', 'Las fuentes de financiación de la plantilla de origen están inactivas. Actívalas, o edita la plantilla de origen para elegir otras fuentes o marcar "Todas las fuentes", y vuelve a copiarla.');
+    }
+
+    public function test_si_los_sectores_del_origen_estan_inactivos_el_mensaje_lo_dice(): void
+    {
+        $origen = $this->origenSimple();
+        $inactivo = DB::table('sectores')->insertGetId(['nombre' => 'Minas', 'activo' => false]);
+        $origen->update(['todos_sectores' => false]);
+        $origen->sectores()->sync([$inactivo]);
+
+        $this->copiarDesde($origen)->assertStatus(422)
+            ->assertJsonPath('errores.0', 'Los sectores de la plantilla de origen están inactivos. Actívalos, o edita la plantilla de origen para elegir otros sectores o marcar "Todos los sectores", y vuelve a copiarla.');
+    }
+
+    public function test_el_marcador_de_condicion_original_se_detecta_sin_mayusculas_ni_tildes(): void
+    {
+        $conCondicion = DB::table('requisitos_catalogo')->where('catalogo_version_id', $this->sgr->versionVigente()->id)
+            ->whereNotIn('condicion', ['siempre'])->whereNotNull('condicion')->where('seccion', '!=', 'C')->first();
+        $id = $this->duplicar(['motor' => 'simple', 'requisito_ids' => [$conCondicion->id]])->assertCreated()->json('id');
+        $version = PlantillaChecklist::find($id)->versiones()->first();
+        $copia = $this->copiaDe($id, $conCondicion->clave);
+        $esperado = "{$copia->texto}: reemplaza la \"Condición original:\" por una descripción en palabras de cuándo aplica.";
+
+        foreach (['(condición original: x)', 'aplica si hay obras (condicion original: x)', 'CONDICION ORIGINAL: x'] as $descripcion) {
+            DB::table('requisitos_catalogo')->where('id', $copia->id)->update(['condicion_descripcion' => $descripcion]);
+
+            $this->withHeader('Authorization', $this->admin())
+                ->postJson("/GestPro/catalogo-requisitos/versiones/{$version->id}/publicar")
+                ->assertStatus(422)->assertJsonPath('errores.0', $esperado);
+        }
+
+        DB::table('requisitos_catalogo')->where('id', $copia->id)->update(['condicion_descripcion' => '']);
+        $this->withHeader('Authorization', $this->admin())
+            ->postJson("/GestPro/catalogo-requisitos/versiones/{$version->id}/publicar")
+            ->assertStatus(422)->assertJsonPath('errores.0', "{$copia->texto}: describe cuándo aplica este requisito condicionado.");
     }
 }
