@@ -72,8 +72,9 @@ return new class extends Migration
             throw new RuntimeException('No se puede revertir: hay plantillas distintas de SGR. Elimínelas o restaure un respaldo.');
         }
 
-        if ($this->sgrEditada()) {
-            throw new RuntimeException('No se puede revertir: la plantilla SGR fue editada y esos cambios se perderían. Restaure un respaldo.');
+        $editados = $this->camposEditadosSgr();
+        if ($editados) {
+            throw new RuntimeException('No se puede revertir: la plantilla SGR fue editada (' . implode(', ', $editados) . ') y esos cambios se perderían. Deshaga esos cambios desde la pantalla Plantillas o restaure un respaldo.');
         }
 
         // Sin esto, se borrarían las asociaciones antes de que falle la clave foránea de las versiones.
@@ -84,28 +85,47 @@ return new class extends Migration
         $this->eliminarTablas();
     }
 
-    /** La plantilla SGR ya no es la que creó up(): sus datos o asociaciones cambiaron. */
-    private function sgrEditada(): bool
+    /**
+     * Campos en que la plantilla SGR ya no es la que creó up(). Una tabla de asociaciones que
+     * no existe (un rollback anterior que falló a medias) se cuenta como sin datos.
+     */
+    private function camposEditadosSgr(): array
     {
         $sgr = Schema::hasTable('plantillas_checklist') ? DB::table('plantillas_checklist')->where('clave', 'sgr')->first() : null;
         if (! $sgr) {
-            return false;
+            return [];
         }
 
-        $fuentes = DB::table('plantilla_fuentes')
-            ->join('fuentes_financiacion', 'fuentes_financiacion.id', 'plantilla_fuentes.fuente_id')
-            ->where('plantilla_id', $sgr->id)
-            ->pluck('fuentes_financiacion.clave')
-            ->all();
+        $editados = [];
+        foreach ([
+            'nombre' => $sgr->nombre !== self::NOMBRE_SGR,
+            'descripcion' => $sgr->descripcion !== self::DESCRIPCION_SGR,
+            'alcance' => $sgr->alcance !== null,
+            'todas_fuentes' => (bool) $sgr->todas_fuentes,
+            'todos_sectores' => ! (bool) $sgr->todos_sectores,
+            'activo' => ! (bool) $sgr->activo,
+        ] as $campo => $cambio) {
+            if ($cambio) {
+                $editados[] = $campo;
+            }
+        }
 
-        return $sgr->nombre !== self::NOMBRE_SGR
-            || $sgr->descripcion !== self::DESCRIPCION_SGR
-            || $sgr->alcance !== null
-            || (bool) $sgr->todas_fuentes
-            || ! (bool) $sgr->todos_sectores
-            || ! (bool) $sgr->activo
-            || $fuentes !== ['sgr']
-            || DB::table('plantilla_sectores')->where('plantilla_id', $sgr->id)->exists();
+        if (Schema::hasTable('plantilla_fuentes') && Schema::hasTable('fuentes_financiacion')) {
+            $fuentes = DB::table('plantilla_fuentes')
+                ->join('fuentes_financiacion', 'fuentes_financiacion.id', 'plantilla_fuentes.fuente_id')
+                ->where('plantilla_id', $sgr->id)
+                ->pluck('fuentes_financiacion.clave')
+                ->all();
+            if ($fuentes !== ['sgr']) {
+                $editados[] = 'fuentes';
+            }
+        }
+
+        if (Schema::hasTable('plantilla_sectores') && DB::table('plantilla_sectores')->where('plantilla_id', $sgr->id)->exists()) {
+            $editados[] = 'sectores';
+        }
+
+        return $editados;
     }
 
     private function eliminarTablas(): void
