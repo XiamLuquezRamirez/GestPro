@@ -392,5 +392,6 @@
     .exv-item.cumplido { background: #f0f0f0 !important; }
     .exv-item-impresion { margin: .35rem 0 0 calc(17px + .8rem); font-size: .8rem; }
     .exv-item input, .exv-num, .exv-codigo, .exv-fuente { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .exv-estado { color: #000 !important; background: none !important; border: 1px solid #999; }
     .exv-pie { font-size: .7rem; }
 }

@@ -219,6 +219,8 @@ const ExpedienteViabilizacion = ({ user }) => {
             reemplazarFila(data.requisito, data.progreso);
         } catch (error) {
             avisarError(titulo, error);
+            // La fila pudo cambiar en el servidor: se recarga para no mostrar acciones viejas.
+            cargarExpediente(expediente.id).catch(() => {});
         }
     };
 
@@ -228,9 +230,9 @@ const ExpedienteViabilizacion = ({ user }) => {
             text: fila.requisito.requiere_aprobacion_no_aplica ? 'Otra persona deberá aprobarlo.' : undefined,
             input: 'textarea',
             inputLabel: 'Justificación',
-            inputPlaceholder: 'Explique por qué no aplica a este proyecto',
+            inputPlaceholder: 'Explica por qué no aplica a este proyecto',
             inputAttributes: { maxlength: '2000' },
-            inputValidator: (texto) => (!texto?.trim() ? 'Escriba la justificación.' : undefined),
+            inputValidator: (texto) => (!texto?.trim() ? 'Escribe la justificación.' : undefined),
             showCancelButton: true,
             confirmButtonText: 'Guardar',
             cancelButtonText: 'Cancelar',
@@ -239,8 +241,18 @@ const ExpedienteViabilizacion = ({ user }) => {
         await accionFila(() => axios.post(`${urlFila(fila)}/no-aplica`, { justificacion: value }), 'No se pudo marcar como no aplica');
     };
 
-    const retirarNoAplica = (fila) =>
-        accionFila(() => axios.delete(`${urlFila(fila)}/no-aplica`), 'No se pudo retirar el "no aplica"');
+    const retirarNoAplica = async (fila) => {
+        const { isConfirmed } = await Swal.fire({
+            icon: 'warning',
+            title: '¿Retirar el "no aplica"?',
+            text: 'El requisito volverá a estar pendiente. Si ya estaba aprobado, necesitará otra aprobación.',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, retirar',
+            cancelButtonText: 'Cancelar',
+        });
+        if (!isConfirmed) return;
+        await accionFila(() => axios.delete(`${urlFila(fila)}/no-aplica`), 'No se pudo retirar el "no aplica"');
+    };
 
     const aprobarNoAplica = (fila) =>
         accionFila(() => axios.post(`${urlFila(fila)}/no-aplica/aprobar`), 'No se pudo aprobar el "no aplica"');
@@ -260,8 +272,16 @@ const ExpedienteViabilizacion = ({ user }) => {
         await accionFila(() => axios.post(`${urlFila(fila)}/no-aplica/rechazar`, { motivo: value || null }), 'No se pudo rechazar el "no aplica"');
     };
 
-    const asignarResponsable = (fila, responsableId) =>
-        accionFila(() => axios.patch(urlFila(fila), { responsable_id: responsableId }), 'No se pudo asignar el responsable');
+    const asignarResponsable = async (fila, responsableId) => {
+        reemplazarFila({ ...fila, responsable: responsables.find((r) => r.id === responsableId) ?? null });
+        try {
+            const { data } = await axios.patch(urlFila(fila), { responsable_id: responsableId });
+            reemplazarFila(data.requisito, data.progreso);
+        } catch (error) {
+            reemplazarFila(fila);
+            avisarError('No se pudo asignar el responsable', error);
+        }
+    };
 
     const eliminarSoporte = async (fila) => {
         const { isConfirmed } = await Swal.fire({
@@ -342,7 +362,8 @@ const ExpedienteViabilizacion = ({ user }) => {
         const hojaResumen = XLSX.utils.json_to_sheet(resumen);
         hojaResumen['!cols'] = [{ wch: 24 }, { wch: 80 }];
         const hojaChecklist = XLSX.utils.json_to_sheet(checklist);
-        hojaChecklist['!cols'] = [28, 26, 30, 30, 14, 8, 80, 40, 10, 14, 22, 40, 26].map((wch) => ({ wch }));
+        // Un ancho por columna, en el orden de construirHojasExcel (17 columnas).
+        hojaChecklist['!cols'] = [28, 26, 30, 30, 14, 8, 80, 40, 18, 10, 14, 22, 22, 40, 22, 40, 26].map((wch) => ({ wch }));
         XLSX.utils.book_append_sheet(libro, hojaResumen, 'Resumen');
         XLSX.utils.book_append_sheet(libro, hojaChecklist, 'Checklist');
         XLSX.writeFile(libro, nombreArchivoExcel(expediente));

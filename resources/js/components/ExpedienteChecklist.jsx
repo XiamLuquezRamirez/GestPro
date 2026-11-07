@@ -26,7 +26,11 @@ const ItemRequisito = ({
     const [viendoObservacion, setViendoObservacion] = useState(Boolean(fila.observacion));
     const [viendoHistorial, setViendoHistorial] = useState(false);
     const marcadoNoAplica = ['no_aplica_pendiente', 'no_aplica'].includes(fila.estado);
-    const opciones = responsablesDisponibles(responsables, fila.responsable?.id ?? null);
+    const disponibles = responsablesDisponibles(responsables, fila.responsable?.id ?? null);
+    // Si la lista falla o aún no llega, el asignado se muestra igual.
+    const opciones = fila.responsable && !disponibles.some((p) => p.id === fila.responsable.id)
+        ? [fila.responsable, ...disponibles]
+        : disponibles;
 
     return (
         <article className={`exv-item${fila.estado === 'cumplido' ? ' cumplido' : ''}${fila.cuenta ? '' : ' no-cuenta'}`}>
@@ -76,7 +80,7 @@ const ItemRequisito = ({
                 {editable ? (
                     <select
                         value={fila.responsable?.id ?? ''}
-                        aria-label="Responsable del requisito"
+                        aria-label={`Responsable del requisito ${r.codigo}`}
                         onChange={(e) => onResponsable(fila, e.target.value ? Number(e.target.value) : null)}
                     >
                         <option value="">Sin asignar</option>
