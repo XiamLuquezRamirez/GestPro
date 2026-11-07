@@ -92,7 +92,7 @@ const PlantillasChecklist = () => {
             const eleccion = await Swal.fire({
                 titleText: '¿Cómo deciden si aplica cada requisito?',
                 html: 'Simple: una persona decide los condicionados. SGR: el evaluador automático de regalías.'
-                    + '<br><br><b>Con Simple</b>, los requisitos condicionados quedarán "por redactar": tendrás que describir en palabras cuándo aplica cada uno antes de publicar.',
+                    + '<br><br><b>Con Simple</b>, los requisitos que dependían de una condición del evaluador quedarán como condicionados por redactar: describe en palabras cuándo aplican antes de publicar. Los que dependían solo del sector quedan condicionados y se pueden publicar.',
                 input: 'select',
                 inputOptions: { simple: 'Simple (recomendado para otras fuentes)', sgr: 'SGR (evaluador automático)' },
                 inputValue: 'simple',

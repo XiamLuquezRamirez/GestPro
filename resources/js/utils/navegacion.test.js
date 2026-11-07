@@ -61,6 +61,7 @@ describe('puedeVer', () => {
     it('aplica la misma regla de rol que destinosPara', () => {
         expect(puedeVer({ rol: 'Administrador' }, 'plantillas')).toBe(true);
         expect(puedeVer({ rol: 'Gestor' }, 'plantillas')).toBe(false);
+        expect(puedeVer({ rol: 'Consulta' }, 'plantillas')).toBe(false);
         expect(puedeVer(null, 'plantillas')).toBe(false);
         expect(puedeVer({ rol: 'Gestor' }, 'tablero')).toBe(true);
         expect(puedeVer({ rol: 'Administrador' }, 'inexistente')).toBe(false);

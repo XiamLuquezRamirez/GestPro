@@ -27,6 +27,12 @@ export const CARACTERES = [
     [CONDICIONADO, 'Condicionado'],
 ];
 
+/** Norma de la que sale un requisito del evaluador SGR (el valor `fuente` que guarda la API). */
+export const FUENTES_NORMATIVAS = [
+    ['a12', 'Acuerdo 12/2024'],
+    ['ot', 'Orientaciones Transitorias'],
+];
+
 export const ALCANCES = [
     ['general', 'General'],
     ['especifica', 'Específica'],
@@ -38,6 +44,7 @@ export const etiquetaCategoria = (valor) => etiqueta(CATEGORIAS, valor);
 export const etiquetaTipo = (valor) => etiqueta(TIPOS_REQUISITO, valor);
 export const etiquetaCaracter = (valor) => etiqueta(CARACTERES, valor);
 export const etiquetaAlcance = (valor) => etiqueta(ALCANCES, valor);
+export const etiquetaFuenteNormativa = (valor) => etiqueta(FUENTES_NORMATIVAS, valor);
 
 /** "Todas las fuentes" o los nombres separados por coma. */
 export const textoAsociaciones = (todas, items, textoTodas) =>
@@ -73,6 +80,19 @@ export const datosPlantilla = (formulario) => ({
     fuente_ids: formulario.todas_fuentes ? [] : formulario.fuente_ids,
     sector_ids: formulario.todos_sectores ? [] : formulario.sector_ids,
 });
+
+/**
+ * Lo que se envía al guardar. La plantilla SGR siempre aplica a todos los sectores y conserva la
+ * fuente SGR (salvo que ya sea para todas las fuentes): un dato inconsistente no debe llegar como 422.
+ */
+export const datosGuardarPlantilla = (formulario, plantilla, fuentes = []) => {
+    if (!plantilla?.es_sgr) return datosPlantilla(formulario);
+    const idSgr = fuentes.find((f) => f.clave === 'sgr')?.id;
+    const conSgr = idSgr === undefined || formulario.todas_fuentes || formulario.fuente_ids.includes(idSgr)
+        ? formulario.fuente_ids
+        : [...formulario.fuente_ids, idSgr];
+    return datosPlantilla({ ...formulario, todos_sectores: true, fuente_ids: conSgr });
+};
 
 /** Opciones de un catálogo: las activas y las que la plantilla ya tiene. */
 export const opcionesCatalogo = (items, elegidos) => items.filter((i) => i.activo || elegidos.includes(i.id));
@@ -172,6 +192,17 @@ export const agruparVistaPrevia = (requisitos, motor) => {
     return grupos.filter((g) => g.requisitos.length);
 };
 
+/** La pestaña a la que llevan las flechas, Inicio y Fin desde `actual`; null si la tecla no navega. */
+export const pestanaPorTecla = (ids, actual, tecla) => {
+    const indice = ids.indexOf(actual);
+    if (indice < 0 || ids.length === 0) return null;
+    if (tecla === 'ArrowRight') return ids[(indice + 1) % ids.length];
+    if (tecla === 'ArrowLeft') return ids[(indice - 1 + ids.length) % ids.length];
+    if (tecla === 'Home') return ids[0];
+    if (tecla === 'End') return ids[ids.length - 1];
+    return null;
+};
+
 /** Mueve un elemento una posición arriba (-1) o abajo (+1). Fuera de rango, no cambia nada. */
 export const mover = (lista, indice, delta) => {
     const destino = indice + delta;
@@ -179,6 +210,14 @@ export const mover = (lista, indice, delta) => {
     if (indice < 0 || indice >= lista.length || destino < 0 || destino >= lista.length) return copia;
     [copia[indice], copia[destino]] = [copia[destino], copia[indice]];
     return copia;
+};
+
+/** Requisitos activos de una versión y, si los hay, cuántos inactivos tiene: "206" o "206 · 1 inactivo". */
+export const textoRequisitosVersion = (version) => {
+    const activos = version.requisitos_activos ?? version.requisitos;
+    const inactivos = Math.max((version.requisitos ?? activos) - activos, 0);
+    if (inactivos === 0) return String(activos);
+    return `${activos} · ${inactivos} ${inactivos === 1 ? 'inactivo' : 'inactivos'}`;
 };
 
 export const etiquetaVersion = (version) => {
@@ -215,10 +254,21 @@ export const mensajeApi = (error) => {
     const estado = error?.response?.status;
     if (estado === 401) return 'Tu sesión expiró. Vuelve a iniciar sesión.';
     if (estado === 403) return 'No tienes permiso para esta acción.';
-    if (estado === 404) return 'El registro ya no existe. Recarga la página.';
+    if (estado === 404) return 'El registro ya no existe.';
+    if (estado === 429) return 'Demasiadas solicitudes. Espera un momento e inténtalo de nuevo.';
     if (estado >= 500) return 'Error del servidor. Inténtalo de nuevo.';
-    if (!error?.response && (error?.request || error?.isAxiosError)) return 'No hay conexión con el servidor.';
+    if (!error?.response) {
+        if (error?.request || error?.isAxiosError) return 'No hay conexión con el servidor.';
+        return 'Ocurrió un error inesperado.';
+    }
     return mensajeError(error);
+};
+
+/** El mensaje y la lista de un 422 de reglas de negocio ({ mensaje, errores }); null si el error es de otra clase. */
+export const errorConLista = (error) => {
+    const datos = error?.response?.data;
+    if (error?.response?.status !== 422 || !datos?.mensaje || !Array.isArray(datos.errores) || datos.errores.length === 0) return null;
+    return { mensaje: datos.mensaje, errores: datos.errores };
 };
 
 export const escaparHtml = (texto) => String(texto ?? '')

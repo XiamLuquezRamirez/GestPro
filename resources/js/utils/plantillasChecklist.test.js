@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, describe, it, expect } from 'vitest';
 import {
     ALCANCES,
+    FUENTES_NORMATIVAS,
     CARACTERES,
     CATEGORIAS,
     PLANTILLA_VACIA,
@@ -11,7 +12,12 @@ import {
     htmlErrores,
     mensajeApi,
     porRedactar,
+    datosGuardarPlantilla,
     datosPlantilla,
+    errorConLista,
+    etiquetaFuenteNormativa,
+    pestanaPorTecla,
+    textoRequisitosVersion,
     datosRequisito,
     etiquetaCategoria,
     etiquetaVersion,
@@ -272,13 +278,15 @@ describe('porRedactar, mensajeApi y htmlErrores', () => {
         const con = (status, data) => ({ response: { status, data } });
         expect(mensajeApi(con(401))).toBe('Tu sesión expiró. Vuelve a iniciar sesión.');
         expect(mensajeApi(con(403))).toBe('No tienes permiso para esta acción.');
-        expect(mensajeApi(con(404))).toBe('El registro ya no existe. Recarga la página.');
+        expect(mensajeApi(con(404))).toBe('El registro ya no existe.');
+        expect(mensajeApi(con(429))).toBe('Demasiadas solicitudes. Espera un momento e inténtalo de nuevo.');
         expect(mensajeApi(con(500))).toBe('Error del servidor. Inténtalo de nuevo.');
         expect(mensajeApi(con(503))).toBe('Error del servidor. Inténtalo de nuevo.');
         expect(mensajeApi({ isAxiosError: true, request: {}, message: 'Network Error' })).toBe('No hay conexión con el servidor.');
         expect(mensajeApi(con(422, { mensaje: 'No se puede', errores: ['a'] }))).toBe('No se puede a');
         expect(mensajeApi(con(422, { errors: { nombre: ['Falta el nombre.'] } }))).toBe('Falta el nombre.');
-        expect(mensajeApi(new Error('fallo'))).toBe('fallo');
+        expect(mensajeApi(new Error('Cannot read properties of undefined'))).toBe('Ocurrió un error inesperado.');
+        expect(mensajeApi(undefined)).toBe('Ocurrió un error inesperado.');
     });
 
     it('escapa y limita la lista de errores', () => {
@@ -291,5 +299,83 @@ describe('porRedactar, mensajeApi y htmlErrores', () => {
         const muchos = htmlErrores('m', Array.from({ length: 25 }, (_, i) => `e${i}`));
         expect(muchos.match(/<li>/g)).toHaveLength(21);
         expect(muchos).toContain('<li>y 5 más</li>');
+    });
+});
+
+describe('fuentes normativas', () => {
+    it('lista las dos normas con su etiqueta completa', () => {
+        expect(FUENTES_NORMATIVAS).toEqual([['a12', 'Acuerdo 12/2024'], ['ot', 'Orientaciones Transitorias']]);
+        expect(etiquetaFuenteNormativa('ot')).toBe('Orientaciones Transitorias');
+        expect(etiquetaFuenteNormativa('xx')).toBe('');
+    });
+
+    it('el formulario nuevo del SGR parte de una fuente que existe en la lista', () => {
+        expect(FUENTES_NORMATIVAS.map(([v]) => v)).toContain(requisitoVacio('sgr').fuente);
+    });
+});
+
+describe('datosGuardarPlantilla', () => {
+    const fuentes = [{ id: 1, clave: 'propios' }, { id: 2, clave: 'sgr' }];
+    const base = { nombre: 'P', descripcion: '', alcance: '', todas_fuentes: false, todos_sectores: false, fuente_ids: [1], sector_ids: [5] };
+
+    it('no cambia nada en una plantilla que no es SGR', () => {
+        expect(datosGuardarPlantilla(base, { es_sgr: false }, fuentes)).toEqual(datosPlantilla(base));
+    });
+
+    it('en la SGR fuerza todos los sectores y conserva la fuente SGR', () => {
+        const datos = datosGuardarPlantilla(base, { es_sgr: true }, fuentes);
+        expect(datos.todos_sectores).toBe(true);
+        expect(datos.sector_ids).toEqual([]);
+        expect(datos.fuente_ids).toEqual([1, 2]);
+        expect(base.fuente_ids).toEqual([1]);
+    });
+
+    it('en la SGR no duplica la fuente ni la agrega si es para todas las fuentes', () => {
+        expect(datosGuardarPlantilla({ ...base, fuente_ids: [2] }, { es_sgr: true }, fuentes).fuente_ids).toEqual([2]);
+        const todas = datosGuardarPlantilla({ ...base, todas_fuentes: true, fuente_ids: [] }, { es_sgr: true }, fuentes);
+        expect(todas.todas_fuentes).toBe(true);
+        expect(todas.fuente_ids).toEqual([]);
+    });
+
+    it('en la SGR, sin el catálogo de fuentes cargado, no inventa ids', () => {
+        expect(datosGuardarPlantilla(base, { es_sgr: true }, []).fuente_ids).toEqual([1]);
+    });
+});
+
+describe('pestanaPorTecla', () => {
+    const ids = ['a', 'b', 'c'];
+
+    it('las flechas avanzan y retroceden con vuelta', () => {
+        expect(pestanaPorTecla(ids, 'a', 'ArrowRight')).toBe('b');
+        expect(pestanaPorTecla(ids, 'c', 'ArrowRight')).toBe('a');
+        expect(pestanaPorTecla(ids, 'b', 'ArrowLeft')).toBe('a');
+        expect(pestanaPorTecla(ids, 'a', 'ArrowLeft')).toBe('c');
+    });
+
+    it('Inicio y Fin van a los extremos; otra tecla o pestaña desconocida no navega', () => {
+        expect(pestanaPorTecla(ids, 'b', 'Home')).toBe('a');
+        expect(pestanaPorTecla(ids, 'b', 'End')).toBe('c');
+        expect(pestanaPorTecla(ids, 'b', 'Enter')).toBeNull();
+        expect(pestanaPorTecla(ids, 'z', 'Home')).toBeNull();
+        expect(pestanaPorTecla([], 'a', 'Home')).toBeNull();
+    });
+});
+
+describe('errorConLista y textoRequisitosVersion', () => {
+    it('reconoce solo el 422 con mensaje y lista', () => {
+        const con = (status, data) => ({ response: { status, data } });
+        expect(errorConLista(con(422, { mensaje: 'No', errores: ['a', 'b'] }))).toEqual({ mensaje: 'No', errores: ['a', 'b'] });
+        expect(errorConLista(con(422, { mensaje: 'No', errores: [] }))).toBeNull();
+        expect(errorConLista(con(422, { mensaje: 'No' }))).toBeNull();
+        expect(errorConLista(con(422, { errors: { x: ['y'] } }))).toBeNull();
+        expect(errorConLista(con(500, { mensaje: 'No', errores: ['a'] }))).toBeNull();
+        expect(errorConLista(new Error('x'))).toBeNull();
+    });
+
+    it('cuenta los requisitos activos y avisa de los inactivos', () => {
+        expect(textoRequisitosVersion({ requisitos: 10, requisitos_activos: 10 })).toBe('10');
+        expect(textoRequisitosVersion({ requisitos: 207, requisitos_activos: 206 })).toBe('206 · 1 inactivo');
+        expect(textoRequisitosVersion({ requisitos: 10, requisitos_activos: 7 })).toBe('7 · 3 inactivos');
+        expect(textoRequisitosVersion({ requisitos: 4 })).toBe('4');
     });
 });

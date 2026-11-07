@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import { faArrowDown, faArrowUp, faPen, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -6,7 +6,7 @@ import axios from '../axios';
 import { ORDEN_SECCIONES, SECCIONES } from '../utils/expedienteChecklist';
 import { avisarError } from '../utils/avisosPlantillas';
 import {
-    CARACTERES, CATEGORIAS, CONDICIONADO, TIPOS_REQUISITO, datosRequisito, etiquetaCaracter, etiquetaCategoria, formularioRequisito,
+    CARACTERES, CATEGORIAS, CONDICIONADO, FUENTES_NORMATIVAS, TIPOS_REQUISITO, datosRequisito, etiquetaCaracter, etiquetaCategoria, formularioRequisito,
     mensajeApi, mover, porRedactar, requisitoVacio,
 } from '../utils/plantillasChecklist';
 import useOcupado from './useOcupado';
@@ -56,8 +56,7 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, guardando, on
                     </Campo>
                     <Campo etiqueta="Fuente normativa">
                         <select value={f.fuente} onChange={(e) => cambiar('fuente', e.target.value)}>
-                            <option value="a12">Acuerdo 12/2024</option>
-                            <option value="ot">Orientaciones Transitorias</option>
+                            {FUENTES_NORMATIVAS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
                         </select>
                     </Campo>
                     {f.seccion === 'C' && (
@@ -146,7 +145,7 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, guardando, on
             )}
 
             <div className="pl-formulario-acciones">
-                <button type="button" className="gp-boton" onClick={onCancelar}>Cancelar</button>
+                <button type="button" className="gp-boton" onClick={onCancelar} disabled={guardando}>Cancelar</button>
                 <button type="submit" className="gp-boton gp-boton-primario" disabled={guardando}>Guardar requisito</button>
             </div>
         </form>
@@ -158,6 +157,8 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
     const [editando, setEditando] = useState(null); // null, 'nuevo' o el requisito
     const [catalogoSgr, setCatalogoSgr] = useState(null);
     const [ocupado, ejecutar] = useOcupado();
+    const contenedor = useRef(null);
+    const retorno = useRef(null); // data-foco del botón que abrió el formulario
     const editable = version?.estado === 'borrador';
     const esSgr = plantilla.es_sgr;
     const url = version ? `/catalogo-requisitos/versiones/${version.id}` : null;
@@ -167,9 +168,21 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
         let vigente = true;
         axios.get('/catalogo-requisitos/vigente', { params: { incluir_inactivos: 1 } })
             .then(({ data }) => { if (vigente) setCatalogoSgr(data); })
-            .catch(() => {});
+            .catch((e) => { if (vigente) avisarError('No se pudo cargar el catálogo SGR (sectores y tipos)', e); });
         return () => { vigente = false; };
     }, [plantilla.motor]);
+
+    // Al cerrar el formulario, el foco vuelve al botón que lo abrió.
+    useEffect(() => {
+        if (editando || !retorno.current) return;
+        contenedor.current?.querySelector(`[data-foco="${retorno.current}"]`)?.focus();
+        retorno.current = null;
+    }, [editando]);
+
+    const abrir = (requisito) => {
+        retorno.current = requisito === 'nuevo' ? 'nuevo' : `editar-${requisito.id}`;
+        setEditando(requisito);
+    };
 
     const crearBorrador = () => ejecutar(async () => {
         try {
@@ -250,7 +263,7 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
     }
 
     return (
-        <div className="pl-requisitos">
+        <div className="pl-requisitos" ref={contenedor}>
             <div className="pl-barra">
                 <p className="pl-ayuda">
                     {editable
@@ -258,7 +271,7 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
                         : `La versión v${version.numero} está publicada y no se modifica.`}
                 </p>
                 {editable ? (
-                    <button type="button" className="gp-boton gp-boton-primario" onClick={() => setEditando('nuevo')}>
+                    <button type="button" className="gp-boton gp-boton-primario" data-foco="nuevo" onClick={() => abrir('nuevo')}>
                         <FontAwesomeIcon icon={faPlus} /> Agregar requisito
                     </button>
                 ) : (
@@ -267,7 +280,7 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
             </div>
 
             {porRedactarTotal > 0 && (
-                <p className="pl-error" role="status">
+                <p className="pl-aviso-suave" role="status">
                     {porRedactarTotal} {porRedactarTotal === 1 ? 'condicionado por redactar' : 'condicionados por redactar'}: describe en palabras cuándo aplica cada uno antes de publicar.
                 </p>
             )}
@@ -295,7 +308,7 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
                                 <button type="button" className="gp-icono" aria-label={`Bajar ${r.texto}`} disabled={ocupado || indice === requisitos.length - 1} onClick={() => moverRequisito(indice, 1)}>
                                     <FontAwesomeIcon icon={faArrowDown} />
                                 </button>
-                                <button type="button" className="gp-icono" aria-label={`Editar ${r.texto}`} disabled={ocupado} onClick={() => setEditando(r)}>
+                                <button type="button" className="gp-icono" aria-label={`Editar ${r.texto}`} disabled={ocupado} data-foco={`editar-${r.id}`} onClick={() => abrir(r)}>
                                     <FontAwesomeIcon icon={faPen} />
                                 </button>
                                 <button type="button" className="gp-icono" aria-label={`Eliminar ${r.texto}`} disabled={ocupado} onClick={() => eliminar(r)}>

@@ -27,7 +27,7 @@ const PlantillaVistaPrevia = ({ plantilla, version, requisitos }) => {
             </p>
             {grupos.map((g) => (
                 <section key={g.clave} className="gp-panel pl-vista-grupo">
-                    <h3>{g.titulo} <span className="pl-ayuda">· {g.requisitos.length}</span></h3>
+                    <h2>{g.titulo} <span className="pl-ayuda">· {g.requisitos.length}</span></h2>
                     <ul>
                         {g.requisitos.map((r) => (
                             <li key={r.id}>

@@ -4,8 +4,10 @@ import { faBullhorn, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
 import { avisarError } from '../utils/avisosPlantillas';
-import { etiquetaVersion, htmlErrores } from '../utils/plantillasChecklist';
+import { etiquetaVersion, textoRequisitosVersion } from '../utils/plantillasChecklist';
 import useOcupado from './useOcupado';
+
+const COLUMNAS = ['Versión', 'Estado', 'Publicada', 'Requisitos', 'Expedientes', 'Acciones'];
 
 const fecha = (iso) => (iso ? new Date(iso).toLocaleDateString('es-CO') : '—');
 
@@ -24,12 +26,7 @@ const PlantillaVersiones = ({ plantilla, onCambio }) => {
             await onCambio();
         } catch (e) {
             const estado = e?.response?.status;
-            const datos = e?.response?.data;
-            if (estado === 422 && datos?.mensaje && datos?.errores?.length) {
-                await Swal.fire({ icon: 'error', titleText: titulo, html: htmlErrores(datos.mensaje, datos.errores) });
-            } else {
-                await avisarError(titulo, e);
-            }
+            await avisarError(titulo, e);
             if (estado === 404 || estado === 422) await onCambio();
         }
     };
@@ -71,21 +68,16 @@ const PlantillaVersiones = ({ plantilla, onCambio }) => {
             )}
             <div className="pl-tabla-versiones" role="table" aria-label="Versiones de la plantilla">
                 <div role="row" className="pl-versiones-cabecera">
-                    <span role="columnheader">Versión</span>
-                    <span role="columnheader">Estado</span>
-                    <span role="columnheader">Publicada</span>
-                    <span role="columnheader">Requisitos</span>
-                    <span role="columnheader">Expedientes</span>
-                    <span role="columnheader">Acciones</span>
+                    {COLUMNAS.map((c) => <span key={c} role="columnheader">{c}</span>)}
                 </div>
                 {plantilla.versiones.map((v) => (
                     <div role="row" key={v.id}>
-                        <span role="cell"><b>v{v.numero}</b>{v.descripcion && <small> · {v.descripcion}</small>}</span>
-                        <span role="cell">{v.estado === 'borrador' ? 'Borrador' : (v.vigente ? 'Vigente' : 'Publicada')}</span>
-                        <span role="cell">{v.estado === 'borrador' ? '—' : `${fecha(v.fecha_publicacion)}${v.publicada_por ? ` por ${v.publicada_por}` : ''}`}</span>
-                        <span role="cell">{v.requisitos}</span>
-                        <span role="cell">{v.expedientes}</span>
-                        <span role="cell" className="pl-fila-acciones">
+                        <span role="cell" data-label={COLUMNAS[0]}><b>v{v.numero}</b>{v.descripcion && <small> · {v.descripcion}</small>}</span>
+                        <span role="cell" data-label={COLUMNAS[1]}>{v.estado === 'borrador' ? 'Borrador' : (v.vigente ? 'Vigente' : 'Publicada')}</span>
+                        <span role="cell" data-label={COLUMNAS[2]}>{v.estado === 'borrador' ? '—' : `${fecha(v.fecha_publicacion)}${v.publicada_por ? ` por ${v.publicada_por}` : ''}`}</span>
+                        <span role="cell" data-label={COLUMNAS[3]}>{textoRequisitosVersion(v)}</span>
+                        <span role="cell" data-label={COLUMNAS[4]}>{v.expedientes}</span>
+                        <span role="cell" data-label={COLUMNAS[5]} className="pl-fila-acciones">
                             {v.estado === 'borrador' && (
                                 <>
                                     <button type="button" className="gp-boton gp-boton-primario" onClick={() => publicar(v)} disabled={ocupado}>
