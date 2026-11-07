@@ -72,7 +72,7 @@ final class CatalogoService
         $plantilla ??= PlantillaChecklist::sgr();
 
         if ($plantilla->versiones()->where('estado', CatalogoVersion::BORRADOR)->exists()) {
-            throw new ReglaNegocioException('Ya existe una versión en borrador; publíquela o elimínela antes de crear otra.');
+            throw new ReglaNegocioException('Ya existe una versión en borrador; publícala o elimínala antes de crear otra.');
         }
         $vigente = $plantilla->versionVigente();
         // Sin versiones publicadas, el borrador nace vacío: es la primera versión de la plantilla.
@@ -236,13 +236,13 @@ final class CatalogoService
             'fuente' => $datos['fuente'],
             'sector_id' => ($datos['sector_id'] ?? null) ?: null,
             'tipo_id' => ($datos['tipo_id'] ?? null) ?: null,
-            'subtitulo' => $datos['subtitulo'] ?? null,
+            'subtitulo' => array_key_exists('subtitulo', $datos) ? (trim((string) $datos['subtitulo']) ?: null) : $requisito?->subtitulo,
             'codigo' => $datos['codigo'],
             'texto' => $datos['texto'],
-            'nota' => $datos['nota'] ?? null,
+            'nota' => array_key_exists('nota', $datos) ? (trim((string) $datos['nota']) ?: null) : $requisito?->nota,
             'condicion' => $datos['condicion'],
             'orden' => $datos['orden'] ?? ($requisito?->orden ?? (int) $version->requisitos()->max('orden') + 1),
-            'activo' => $datos['activo'] ?? true,
+            'activo' => array_key_exists('activo', $datos) ? (bool) $datos['activo'] : ($requisito?->activo ?? true),
             ...$this->camposDeSeguimiento($datos, $requisito, sinCaracter: true),
         ];
         if ($version->plantilla->clave === PlantillaChecklist::CLAVE_SGR) {
@@ -252,9 +252,13 @@ final class CatalogoService
             $valores['requiere_aprobacion_no_aplica'] = true;
         } else {
             // Otra plantilla con motor sgr (una copia): el código común lo define el administrador.
-            $valores['codigo_comun'] = array_key_exists('codigo_comun', $datos)
-                ? (trim((string) $datos['codigo_comun']) ?: null)
+            $codigoComun = array_key_exists('codigo_comun', $datos)
+                ? (mb_strtolower(trim((string) $datos['codigo_comun'])) ?: null)
                 : $requisito?->codigo_comun;
+            if ($this->codigoComunRepetido($version, $codigoComun, $requisito)) {
+                throw new ReglaNegocioException('El requisito no es válido.', ["Ya existe un requisito con el código común \"{$codigoComun}\" en esta versión."]);
+            }
+            $valores['codigo_comun'] = $codigoComun;
             $valores['requiere_aprobacion_no_aplica'] = (bool) ($datos['requiere_aprobacion_no_aplica'] ?? $requisito?->requiere_aprobacion_no_aplica ?? true);
         }
 
@@ -283,7 +287,7 @@ final class CatalogoService
 
         $seguimiento = $this->camposDeSeguimiento($datos, $requisito);
         $codigoComun = array_key_exists('codigo_comun', $datos)
-            ? (trim((string) $datos['codigo_comun']) ?: null)
+            ? (mb_strtolower(trim((string) $datos['codigo_comun'])) ?: null)
             : $requisito?->codigo_comun;
         if ($repetida('codigo_comun', $codigoComun)) {
             $errores[] = "Ya existe un requisito con el código común \"{$codigoComun}\" en esta versión.";
@@ -304,12 +308,12 @@ final class CatalogoService
             'sector_id' => null,
             'tipo_id' => null,
             'condicion' => null,
-            'subtitulo' => $datos['subtitulo'] ?? $requisito?->subtitulo,
-            'codigo' => $datos['codigo'] ?? $requisito?->codigo,
+            'subtitulo' => array_key_exists('subtitulo', $datos) ? (trim((string) $datos['subtitulo']) ?: null) : $requisito?->subtitulo,
+            'codigo' => array_key_exists('codigo', $datos) ? (trim((string) $datos['codigo']) ?: null) : $requisito?->codigo,
             'texto' => $datos['texto'],
-            'nota' => $datos['nota'] ?? null,
+            'nota' => array_key_exists('nota', $datos) ? (trim((string) $datos['nota']) ?: null) : $requisito?->nota,
             'orden' => $datos['orden'] ?? ($requisito?->orden ?? (int) $version->requisitos()->max('orden') + 1),
-            'activo' => $datos['activo'] ?? ($requisito?->activo ?? true),
+            'activo' => array_key_exists('activo', $datos) ? (bool) $datos['activo'] : ($requisito?->activo ?? true),
             'codigo_comun' => $codigoComun,
             'requiere_aprobacion_no_aplica' => (bool) ($datos['requiere_aprobacion_no_aplica'] ?? $requisito?->requiere_aprobacion_no_aplica ?? false),
             ...$seguimiento,
@@ -349,14 +353,24 @@ final class CatalogoService
         return $campos;
     }
 
+    /** La siguiente rN libre en toda la plantilla: la clave reconoce un requisito de una versión a otra. */
     private function claveLibre(CatalogoVersion $version): string
     {
-        $numero = $version->requisitos()->count() + 1;
-        while ($version->requisitos()->where('clave', "r{$numero}")->exists()) {
-            $numero++;
-        }
+        $mayor = RequisitoCatalogo::query()
+            ->whereIn('catalogo_version_id', $version->plantilla->versiones()->select('id'))
+            ->pluck('clave')
+            ->map(fn ($clave) => preg_match('/^r(\d+)$/', $clave, $m) ? (int) $m[1] : 0)
+            ->max() ?? 0;
 
-        return "r{$numero}";
+        return 'r' . ($mayor + 1);
+    }
+
+    private function codigoComunRepetido(CatalogoVersion $version, ?string $codigo, ?RequisitoCatalogo $requisito): bool
+    {
+        return $codigo !== null && RequisitoCatalogo::where('catalogo_version_id', $version->id)
+            ->where('codigo_comun', $codigo)
+            ->when($requisito, fn ($q) => $q->where('id', '!=', $requisito->id))
+            ->exists();
     }
 
     /** Orden de presentación: los ids en el orden en que deben mostrarse. */
@@ -420,7 +434,7 @@ final class CatalogoService
     private function exigirBorrador(CatalogoVersion $version): void
     {
         if (! $version->esBorrador()) {
-            throw new ReglaNegocioException('Esta versión del catálogo ya fue publicada y es inmutable. Cree un borrador para hacer cambios.');
+            throw new ReglaNegocioException('Esta versión del catálogo ya fue publicada y es inmutable. Crea un borrador para hacer cambios.');
         }
     }
 

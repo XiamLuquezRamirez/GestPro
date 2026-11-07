@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\CatalogoVersion;
 use App\Models\PlantillaChecklist;
-use Illuminate\Validation\Rule;
 use App\Models\RequisitoCatalogo;
 use App\Models\RequisitoComponente;
 use App\Models\RequisitoTipologia;
@@ -12,6 +11,7 @@ use App\Services\Viabilizacion\CatalogoService;
 use App\Services\Viabilizacion\EvaluadorRequisitos;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 /**
  * Catálogo maestro de requisitos de viabilización.
@@ -82,19 +82,19 @@ class CatalogoRequisitosController extends Controller
 
     public function crearRequisito(Request $request, CatalogoVersion $version): JsonResponse
     {
-        $requisito = $this->servicio->guardarRequisito($version, $request->validate($this->reglasRequisito($version), self::MENSAJES));
+        $requisito = $this->servicio->guardarRequisito($version, $request->validate($this->reglasRequisito($version), self::MENSAJES, self::ATRIBUTOS));
 
         return response()->json($requisito, 201);
     }
 
     public function actualizarRequisito(Request $request, CatalogoVersion $version, RequisitoCatalogo $requisito): JsonResponse
     {
-        return response()->json($this->servicio->guardarRequisito($version, $request->validate($this->reglasRequisito($version), self::MENSAJES), $requisito));
+        return response()->json($this->servicio->guardarRequisito($version, $request->validate($this->reglasRequisito($version), self::MENSAJES, self::ATRIBUTOS), $requisito));
     }
 
     public function ordenarRequisitos(Request $request, CatalogoVersion $version): JsonResponse
     {
-        $datos = $request->validate(['ids' => ['required', 'array'], 'ids.*' => ['integer']]);
+        $datos = $request->validate(['ids' => ['required', 'array'], 'ids.*' => ['integer']], self::MENSAJES, self::ATRIBUTOS);
         $this->servicio->ordenarRequisitos($version, $datos['ids']);
 
         return response()->json(['mensaje' => 'Orden guardado.']);
@@ -157,7 +157,27 @@ class CatalogoRequisitosController extends Controller
         return response()->json($this->servicio->guardarEntidad($entidad, $request->validate($reglas), $item));
     }
 
+    private const ATRIBUTOS = [
+        'clave' => 'la clave', 'texto' => 'el nombre del requisito', 'descripcion' => 'la descripción',
+        'categoria' => 'la categoría', 'tipo_requisito' => 'el tipo de requisito', 'caracter' => 'el carácter',
+        'cargo_cumplimiento' => 'el cargo de cumplimiento', 'cargo_revision' => 'el cargo de revisión',
+        'soporte_requerido' => 'el soporte requerido', 'referencia_normativa' => 'la referencia normativa',
+        'condicion_descripcion' => 'la descripción de la condición',
+        'requiere_aprobacion_no_aplica' => 'la aprobación del "no aplica"', 'codigo_comun' => 'el código común',
+        'codigo' => 'el código', 'subtitulo' => 'el subtítulo', 'seccion' => 'la sección',
+        'fuente' => 'la fuente normativa', 'sector_id' => 'el sector', 'tipo_id' => 'el tipo de proyecto',
+        'condicion' => 'la condición', 'nota' => 'las observaciones', 'orden' => 'el orden',
+        'activo' => 'el estado activo', 'ids' => 'el orden de los requisitos',
+    ];
+
     private const MENSAJES = [
+        'required' => 'Completa :attribute.',
+        'max' => 'En :attribute caben hasta :max caracteres.',
+        'boolean' => 'Revisa :attribute: debe ser sí o no.',
+        'integer' => 'Revisa :attribute: debe ser un número entero.',
+        'array' => 'Revisa :attribute: debe ser una lista.',
+        'in' => 'Revisa :attribute: no es un valor válido.',
+        'codigo_comun.regex' => 'El código común solo admite letras, números, punto, guion y guion bajo.',
         'texto.required' => 'Escribe el nombre del requisito.',
         'clave.regex' => 'La clave solo admite minúsculas, números y guion bajo.',
         'caracter.in' => 'El carácter debe ser obligatorio, opcional o condicionado.',
@@ -177,7 +197,7 @@ class CatalogoRequisitosController extends Controller
             'soporte_requerido' => ['nullable', 'string', 'max:255'],
             'referencia_normativa' => ['nullable', 'string', 'max:255'],
             'requiere_aprobacion_no_aplica' => ['sometimes', 'boolean'],
-            'codigo_comun' => ['nullable', 'string', 'max:40'],
+            'codigo_comun' => ['nullable', 'string', 'max:40', 'regex:/^[A-Za-z0-9_.-]+$/'],
             'nota' => ['nullable', 'string'],
             'orden' => ['sometimes', 'integer', 'min:0'],
             'activo' => ['sometimes', 'boolean'],

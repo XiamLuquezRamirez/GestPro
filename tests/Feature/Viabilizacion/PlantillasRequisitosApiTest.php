@@ -206,4 +206,99 @@ class PlantillasRequisitosApiTest extends TestCase
         $this->assertSame('Oficina jurídica', $editado->cargo_revision);
         $this->assertSame('obligatorio', $editado->caracter);
     }
+
+    // ------------------------------------------------------------ revisión
+
+    public function test_una_clave_nueva_no_reutiliza_las_de_versiones_anteriores(): void
+    {
+        foreach (['A', 'B', 'C'] as $t) {
+            $this->crear(['texto' => $t])->assertCreated();
+        }
+        $this->comoAdmin()->postJson($this->url('/publicar'))->assertOk();
+        $v2 = app(CatalogoService::class)->crearBorrador(null, $this->plantilla);
+        $r3 = $v2->requisitos()->where('clave', 'r3')->first();
+        $this->comoAdmin()->deleteJson("/GestPro/catalogo-requisitos/versiones/{$v2->id}/requisitos/{$r3->id}")->assertOk();
+
+        $this->comoAdmin()->postJson("/GestPro/catalogo-requisitos/versiones/{$v2->id}/requisitos", ['texto' => 'Nuevo'])
+            ->assertCreated()->assertJsonPath('clave', 'r4');
+    }
+
+    public function test_editar_conserva_lo_que_no_se_envia_y_vacia_lo_que_llega_vacio(): void
+    {
+        $id = $this->crear(['nota' => 'Una nota', 'subtitulo' => 'Sub', 'codigo' => 'C-1'])->json('id');
+        $this->comoAdmin()->putJson($this->url("/requisitos/{$id}"), ['texto' => 'X', 'activo' => false])->assertOk();
+
+        $this->comoAdmin()->putJson($this->url("/requisitos/{$id}"), ['texto' => 'Y'])->assertOk();
+        $fila = $this->borrador->requisitos()->find($id);
+        $this->assertSame('Una nota', $fila->nota);
+        $this->assertFalse((bool) $fila->activo);
+        $this->assertSame(1, $fila->orden);
+
+        $this->comoAdmin()->putJson($this->url("/requisitos/{$id}"), ['texto' => 'Y', 'subtitulo' => null, 'codigo' => ''])->assertOk();
+        $fila = $this->borrador->requisitos()->find($id);
+        $this->assertNull($fila->subtitulo);
+        $this->assertNull($fila->codigo);
+    }
+
+    public function test_el_codigo_comun_se_normaliza_y_se_valida(): void
+    {
+        $this->crear(['codigo_comun' => '  CDP '])->assertCreated();
+        $this->assertSame('cdp', $this->borrador->requisitos()->first()->codigo_comun);
+
+        $this->crear(['texto' => 'Otro', 'codigo_comun' => 'Cdp'])->assertStatus(422)
+            ->assertJsonPath('errores.0', 'Ya existe un requisito con el código común "cdp" en esta versión.');
+
+        $this->crear(['texto' => 'Otro', 'codigo_comun' => 'con espacios'])->assertStatus(422)
+            ->assertJsonValidationErrors(['codigo_comun']);
+    }
+
+    public function test_una_copia_con_motor_sgr_no_repite_el_codigo_comun(): void
+    {
+        $copia = PlantillaChecklist::create(['nombre' => 'Copia SGR', 'motor' => 'sgr', 'todas_fuentes' => true, 'todos_sectores' => true]);
+        $borrador = app(CatalogoService::class)->crearBorrador(null, $copia);
+        $url = "/GestPro/catalogo-requisitos/versiones/{$borrador->id}/requisitos";
+        $datos = ['seccion' => 'A', 'fuente' => 'a12', 'codigo' => 'X', 'texto' => 'Uno', 'condicion' => 'siempre', 'codigo_comun' => 'dup'];
+
+        $this->comoAdmin()->postJson($url, [...$datos, 'clave' => 'x1'])->assertCreated();
+        $this->comoAdmin()->postJson($url, [...$datos, 'clave' => 'x2', 'texto' => 'Dos'])->assertStatus(422)
+            ->assertJsonPath('errores.0', 'Ya existe un requisito con el código común "dup" en esta versión.');
+    }
+
+    public function test_los_mensajes_de_validacion_estan_en_espanol(): void
+    {
+        $this->crear(['cargo_cumplimiento' => str_repeat('a', 151)])->assertStatus(422)
+            ->assertJsonPath('errors.cargo_cumplimiento.0', 'En el cargo de cumplimiento caben hasta 150 caracteres.');
+    }
+
+    public function test_el_orden_rechaza_ids_repetidos(): void
+    {
+        [$a, $b] = collect(['A', 'B', 'C'])->map(fn ($t) => $this->crear(['texto' => $t])->json('id'))->all();
+
+        $this->comoAdmin()->putJson($this->url('/requisitos-orden'), ['ids' => [$a, $a, $b]])->assertStatus(422);
+    }
+
+    public function test_no_se_publica_sin_sectores(): void
+    {
+        $this->crear()->assertCreated();
+        $this->plantilla->update(['todos_sectores' => false]);
+
+        $this->comoAdmin()->postJson($this->url('/publicar'))->assertStatus(422)
+            ->assertJsonPath('mensaje', 'Asocia la plantilla a sus fuentes y sectores antes de publicar.');
+    }
+
+    public function test_editar_en_el_sgr_conserva_activo_y_nota_si_no_se_envian(): void
+    {
+        $borrador = app(CatalogoService::class)->crearBorrador(null);
+        $a1 = DB::table('requisitos_catalogo')->where('catalogo_version_id', $borrador->id)->where('clave', 'a1')->first();
+        DB::table('requisitos_catalogo')->where('id', $a1->id)->update(['activo' => false, 'nota' => 'Nota previa']);
+
+        $this->comoAdmin()->putJson("/GestPro/catalogo-requisitos/versiones/{$borrador->id}/requisitos/{$a1->id}", [
+            'clave' => $a1->clave, 'seccion' => $a1->seccion, 'fuente' => $a1->fuente, 'codigo' => $a1->codigo,
+            'texto' => 'Texto nuevo', 'condicion' => $a1->condicion,
+        ])->assertOk();
+
+        $editado = DB::table('requisitos_catalogo')->where('id', $a1->id)->first();
+        $this->assertEquals(0, $editado->activo);
+        $this->assertSame('Nota previa', $editado->nota);
+    }
 }
