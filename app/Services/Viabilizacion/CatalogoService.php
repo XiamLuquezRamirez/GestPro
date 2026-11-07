@@ -106,38 +106,38 @@ final class CatalogoService
 
     public function publicar(CatalogoVersion $version, ?User $usuario = null): CatalogoVersion
     {
-        $this->exigirBorrador($version);
-        $plantilla = $version->plantilla;
+        // Se relee la fila con bloqueo: una edición en curso termina antes, y una que llega después ve la versión publicada.
+        $this->enBorrador($version, function (CatalogoVersion $actual) use ($usuario) {
+            $plantilla = $actual->plantilla;
 
-        if (! $version->requisitos()->where('activo', true)->exists()) {
-            throw new ReglaNegocioException('La versión no tiene requisitos activos y no puede publicarse.');
-        }
-        $sinFuentes = ! $plantilla->todas_fuentes && ! $plantilla->fuentes()->exists();
-        $sinSectores = ! $plantilla->todos_sectores && ! $plantilla->sectores()->exists();
-        if ($sinFuentes || $sinSectores) {
-            throw new ReglaNegocioException('Asocia la plantilla a sus fuentes y sectores antes de publicar.');
-        }
+            if (! $actual->requisitos()->where('activo', true)->exists()) {
+                throw new ReglaNegocioException('La versión no tiene requisitos activos y no puede publicarse.');
+            }
+            $sinFuentes = ! $plantilla->todas_fuentes && ! $plantilla->fuentes()->exists();
+            $sinSectores = ! $plantilla->todos_sectores && ! $plantilla->sectores()->exists();
+            if ($sinFuentes || $sinSectores) {
+                throw new ReglaNegocioException('Asocia la plantilla a sus fuentes y sectores antes de publicar.');
+            }
 
-        [$errores, $mensaje] = $plantilla->motor === PlantillaChecklist::MOTOR_SGR
-            ? [$this->erroresDeCondiciones($version), 'La versión tiene condiciones inválidas y no puede publicarse.']
-            : [$this->erroresDeCondicionados($version), 'La versión tiene requisitos condicionados sin describir y no puede publicarse.'];
-        if ($errores) {
-            throw new ReglaNegocioException($mensaje, $errores);
-        }
+            [$errores, $mensaje] = $plantilla->motor === PlantillaChecklist::MOTOR_SGR
+                ? [$this->erroresDeCondiciones($actual), 'La versión tiene condiciones inválidas y no puede publicarse.']
+                : [$this->erroresDeCondicionados($actual), 'La versión tiene requisitos condicionados sin describir y no puede publicarse.'];
+            if ($errores) {
+                throw new ReglaNegocioException($mensaje, $errores);
+            }
 
-        return DB::transaction(function () use ($version, $usuario) {
-            CatalogoVersion::where('plantilla_id', $version->plantilla_id)
-                ->where('id', '!=', $version->id)
+            CatalogoVersion::where('plantilla_id', $actual->plantilla_id)
+                ->where('id', '!=', $actual->id)
                 ->update(['vigente' => false]);
-            $version->update([
+            $actual->update([
                 'estado' => CatalogoVersion::PUBLICADA,
                 'fecha_publicacion' => now(),
                 'usuario_publico_id' => $usuario?->id,
                 'vigente' => true,
             ]);
-
-            return $version;
         });
+
+        return $version->refresh();
     }
 
     /** Motor sgr: cada condición debe ser válida en el DSL. En la sección C es opcional. */
@@ -185,15 +185,20 @@ final class CatalogoService
 
     public function eliminarBorrador(CatalogoVersion $version): void
     {
-        $this->exigirBorrador($version);
-        $version->delete(); // sus requisitos caen en cascada; ningún expediente usa un borrador
+        $this->enBorrador($version, function (CatalogoVersion $actual) {
+            $actual->delete(); // sus requisitos caen en cascada; ningún expediente usa un borrador
+        });
     }
 
     // ------------------------------------------------------------ requisitos
 
     public function guardarRequisito(CatalogoVersion $version, array $datos, ?RequisitoCatalogo $requisito = null): RequisitoCatalogo
     {
-        $this->exigirBorrador($version);
+        return $this->enBorrador($version, fn (CatalogoVersion $actual) => $this->guardarRequisitoEnBorrador($actual, $datos, $requisito));
+    }
+
+    private function guardarRequisitoEnBorrador(CatalogoVersion $version, array $datos, ?RequisitoCatalogo $requisito): RequisitoCatalogo
+    {
         if ($requisito && $requisito->catalogo_version_id !== $version->id) {
             throw new ReglaNegocioException('El requisito no pertenece a esta versión.');
         }
@@ -390,15 +395,13 @@ final class CatalogoService
     /** Orden de presentación: los ids en el orden en que deben mostrarse. */
     public function ordenarRequisitos(CatalogoVersion $version, array $ids): void
     {
-        $this->exigirBorrador($version);
+        $this->enBorrador($version, function (CatalogoVersion $actual) use ($ids) {
+            $propios = $actual->requisitos()->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+            $pedidos = collect($ids)->map(fn ($id) => (int) $id);
+            if ($pedidos->sort()->values()->all() !== $propios) {
+                throw new ReglaNegocioException('El orden debe incluir todos los requisitos de la versión, una vez cada uno.');
+            }
 
-        $propios = $version->requisitos()->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all();
-        $pedidos = collect($ids)->map(fn ($id) => (int) $id);
-        if ($pedidos->sort()->values()->all() !== $propios) {
-            throw new ReglaNegocioException('El orden debe incluir todos los requisitos de la versión, una vez cada uno.');
-        }
-
-        DB::transaction(function () use ($pedidos) {
             foreach ($pedidos->values() as $posicion => $id) {
                 RequisitoCatalogo::whereKey($id)->update(['orden' => $posicion + 1]);
             }
@@ -407,11 +410,12 @@ final class CatalogoService
 
     public function eliminarRequisito(CatalogoVersion $version, RequisitoCatalogo $requisito): void
     {
-        $this->exigirBorrador($version);
-        if ($requisito->catalogo_version_id !== $version->id) {
-            throw new ReglaNegocioException('El requisito no pertenece a esta versión.');
-        }
-        $requisito->delete();
+        $this->enBorrador($version, function (CatalogoVersion $actual) use ($requisito) {
+            if ($requisito->catalogo_version_id !== $actual->id) {
+                throw new ReglaNegocioException('El requisito no pertenece a esta versión.');
+            }
+            $requisito->delete();
+        });
     }
 
     // ------------------------------------- sectores, tipos, componentes...
@@ -444,6 +448,20 @@ final class CatalogoService
     }
 
     // ------------------------------------------------------------- internos
+
+    /**
+     * Ejecuta una escritura sobre la versión releída con bloqueo (FOR UPDATE): publicar y editar se
+     * serializan, y quien llega después de un publicar ve la versión publicada y recibe el error habitual.
+     */
+    private function enBorrador(CatalogoVersion $version, callable $accion): mixed
+    {
+        return DB::transaction(function () use ($version, $accion) {
+            $actual = CatalogoVersion::query()->whereKey($version->id)->lockForUpdate()->firstOrFail();
+            $this->exigirBorrador($actual);
+
+            return $accion($actual);
+        });
+    }
 
     private function exigirBorrador(CatalogoVersion $version): void
     {

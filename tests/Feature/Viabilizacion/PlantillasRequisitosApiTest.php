@@ -177,6 +177,35 @@ class PlantillasRequisitosApiTest extends TestCase
             ->assertJsonPath('errores.0', 'Certificado de disponibilidad presupuestal: describe cuándo aplica este requisito condicionado.');
     }
 
+    public function test_las_escrituras_se_validan_sobre_la_fila_releida_de_la_version(): void
+    {
+        $servicio = app(CatalogoService::class);
+        $this->crear()->assertCreated();
+        $requisito = $this->borrador->requisitos()->firstOrFail();
+        $obsoleta = CatalogoVersion::findOrFail($this->borrador->id); // aún figura como borrador en memoria
+
+        // Otra petición la publica entre la lectura y la escritura.
+        $servicio->publicar($this->borrador);
+        $this->assertTrue($obsoleta->esBorrador());
+
+        $mensaje = 'Esta versión del catálogo ya fue publicada y es inmutable. Crea un borrador para hacer cambios.';
+        $acciones = [
+            'publicar' => fn () => $servicio->publicar($obsoleta),
+            'guardar' => fn () => $servicio->guardarRequisito($obsoleta, ['texto' => 'Otro requisito']),
+            'ordenar' => fn () => $servicio->ordenarRequisitos($obsoleta, [$requisito->id]),
+            'eliminar' => fn () => $servicio->eliminarRequisito($obsoleta, $requisito),
+        ];
+        foreach ($acciones as $nombre => $accion) {
+            try {
+                $accion();
+                $this->fail("{$nombre} no debió aplicarse a una versión ya publicada.");
+            } catch (ReglaNegocioException $e) {
+                $this->assertSame($mensaje, $e->getMessage(), $nombre);
+            }
+        }
+        $this->assertSame(1, $this->borrador->requisitos()->count());
+    }
+
     public function test_publicar_una_plantilla_simple_no_toca_la_sgr(): void
     {
         $this->crear()->assertCreated();
