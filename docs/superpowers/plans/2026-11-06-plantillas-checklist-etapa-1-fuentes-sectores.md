@@ -19,8 +19,8 @@ Cada etapa tiene su propio plan, que se escribe al validar la anterior, porque c
 | Etapa | Plan | Estado |
 |---|---|---|
 | 1. Fuentes y sectores | Este documento | Validada y aplicada en `gest_pro` |
-| 2. Plantillas sobre versiones | `2026-11-06-plantillas-checklist-etapa-2-plantillas.md` | Implementada y verificada en copia. Falta validarla y aplicarla en `gest_pro` |
-| 3. Seguimiento del requisito | Plan propio | Se escribe al validar la etapa 2 |
+| 2. Plantillas sobre versiones | `2026-11-06-plantillas-checklist-etapa-2-plantillas.md` | Validada y aplicada en `gest_pro` |
+| 3. Seguimiento del requisito | `2026-11-07-plantillas-checklist-etapa-3-seguimiento.md` | Listo para ejecutar |
 | 4. Administración de plantillas | Plan propio | Se escribe al validar la etapa 3 |
 | 5. Composición en el expediente | Plan propio | Se escribe al validar la etapa 4. Debe incluir el cambio de nombre a "Expediente", según "Textos en pantalla" en la sección 6 del diseño |
 | 6. Versiones y cierre | Plan propio | Se escribe al validar la etapa 5 |
