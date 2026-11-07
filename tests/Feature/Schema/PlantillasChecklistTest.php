@@ -103,6 +103,32 @@ class PlantillasChecklistTest extends TestCase
         PlantillaChecklist::create(['clave' => PlantillaChecklist::CLAVE_SGR, 'nombre' => 'Otra']);
     }
 
+    public function test_el_rollback_de_plantillas_se_detiene_si_la_sgr_fue_editada(): void
+    {
+        $this->migracionExpedientes()->down();
+        $this->migracionVersiones()->down();
+        $cambios = [
+            ['nombre' => 'SGR editada'], ['alcance' => 'general'], ['todas_fuentes' => true], ['activo' => false],
+        ];
+        foreach ($cambios as $cambio) {
+            $original = (array) DB::table('plantillas_checklist')->where('clave', 'sgr')->first();
+            DB::table('plantillas_checklist')->where('clave', 'sgr')->update($cambio);
+
+            try {
+                $this->migracionPlantillas()->down();
+                $this->fail('El rollback debía detenerse con ' . json_encode($cambio));
+            } catch (RuntimeException $e) {
+                $this->assertStringContainsString('la plantilla SGR fue editada', $e->getMessage());
+            }
+            DB::table('plantillas_checklist')->where('clave', 'sgr')->update(array_intersect_key($original, $cambio));
+        }
+
+        $sgr = PlantillaChecklist::sgr()->id;
+        DB::table('plantilla_sectores')->insert(['plantilla_id' => $sgr, 'sector_id' => DB::table('sectores')->insertGetId(['nombre' => 'Agua', 'activo' => true])]);
+        $this->expectException(RuntimeException::class);
+        $this->migracionPlantillas()->down();
+    }
+
     public function test_reintentar_la_migracion_rehace_lo_que_quedo_a_medias(): void
     {
         $this->migracionExpedientes()->down();

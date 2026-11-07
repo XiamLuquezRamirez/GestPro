@@ -7,6 +7,9 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    private const NOMBRE_SGR = 'SGR';
+    private const DESCRIPCION_SGR = 'Orientaciones Transitorias + Acuerdo 12 de 2024';
+
     public function up(): void
     {
         $fuenteSgr = DB::table('fuentes_financiacion')->where('clave', 'sgr')->value('id')
@@ -46,8 +49,8 @@ return new class extends Migration
         DB::transaction(function () use ($fuenteSgr) {
             $plantilla = DB::table('plantillas_checklist')->insertGetId([
                 'clave' => 'sgr',
-                'nombre' => 'SGR',
-                'descripcion' => 'Orientaciones Transitorias + Acuerdo 12 de 2024',
+                'nombre' => self::NOMBRE_SGR,
+                'descripcion' => self::DESCRIPCION_SGR,
                 'todas_fuentes' => false,
                 'todos_sectores' => true,
                 'motor' => 'sgr',
@@ -69,12 +72,40 @@ return new class extends Migration
             throw new RuntimeException('No se puede revertir: hay plantillas distintas de SGR. Elimínelas o restaure un respaldo.');
         }
 
+        if ($this->sgrEditada()) {
+            throw new RuntimeException('No se puede revertir: la plantilla SGR fue editada y esos cambios se perderían. Restaure un respaldo.');
+        }
+
         // Sin esto, se borrarían las asociaciones antes de que falle la clave foránea de las versiones.
         if (Schema::hasColumn('catalogo_versiones', 'plantilla_id')) {
             throw new RuntimeException('No se puede revertir: catalogo_versiones todavía depende de las plantillas. Revierta primero la migración de versiones.');
         }
 
         $this->eliminarTablas();
+    }
+
+    /** La plantilla SGR ya no es la que creó up(): sus datos o asociaciones cambiaron. */
+    private function sgrEditada(): bool
+    {
+        $sgr = Schema::hasTable('plantillas_checklist') ? DB::table('plantillas_checklist')->where('clave', 'sgr')->first() : null;
+        if (! $sgr) {
+            return false;
+        }
+
+        $fuentes = DB::table('plantilla_fuentes')
+            ->join('fuentes_financiacion', 'fuentes_financiacion.id', 'plantilla_fuentes.fuente_id')
+            ->where('plantilla_id', $sgr->id)
+            ->pluck('fuentes_financiacion.clave')
+            ->all();
+
+        return $sgr->nombre !== self::NOMBRE_SGR
+            || $sgr->descripcion !== self::DESCRIPCION_SGR
+            || $sgr->alcance !== null
+            || (bool) $sgr->todas_fuentes
+            || ! (bool) $sgr->todos_sectores
+            || ! (bool) $sgr->activo
+            || $fuentes !== ['sgr']
+            || DB::table('plantilla_sectores')->where('plantilla_id', $sgr->id)->exists();
     }
 
     private function eliminarTablas(): void
