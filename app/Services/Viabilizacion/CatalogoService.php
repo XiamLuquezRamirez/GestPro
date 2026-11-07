@@ -13,6 +13,7 @@ use App\Models\RequisitoTipologia;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Administración del catálogo maestro (rol Administrador).
@@ -160,15 +161,25 @@ final class CatalogoService
     /** Motor simple: un requisito condicionado debe decir cuándo aplica, para que una persona lo decida. */
     private function erroresDeCondicionados(CatalogoVersion $version): array
     {
+        // Se compara en PHP, sin mayúsculas ni tildes, para que MariaDB y SQLite decidan igual.
+        $normalizar = fn (?string $texto) => Str::lower(Str::ascii((string) $texto));
+        $marcador = 'condicion original:';
+
         return $version->requisitos()->where('activo', true)
             ->where('caracter', RequisitoCatalogo::CONDICIONADO)
-            ->where(fn ($q) => $q->whereNull('condicion_descripcion')->orWhere('condicion_descripcion', '')
-                ->orWhere('condicion_descripcion', 'like', '%Condición original:%'))
             ->orderBy('orden')
             ->get()
-            ->map(fn (RequisitoCatalogo $r) => str_contains((string) $r->condicion_descripcion, 'Condición original:')
-                ? "{$r->texto}: redacta en palabras cuándo aplica; la condición original es del evaluador SGR."
-                : "{$r->texto}: describe cuándo aplica este requisito condicionado.")
+            ->map(function (RequisitoCatalogo $r) use ($normalizar, $marcador) {
+                if (str_contains($normalizar($r->condicion_descripcion), $marcador)) {
+                    return "{$r->texto}: reemplaza la \"Condición original:\" por una descripción en palabras de cuándo aplica.";
+                }
+
+                return trim((string) $r->condicion_descripcion) === ''
+                    ? "{$r->texto}: describe cuándo aplica este requisito condicionado."
+                    : null;
+            })
+            ->filter()
+            ->values()
             ->all();
     }
 
