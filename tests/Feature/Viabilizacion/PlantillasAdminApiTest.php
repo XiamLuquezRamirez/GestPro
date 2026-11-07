@@ -155,6 +155,63 @@ class PlantillasAdminApiTest extends TestCase
             ->assertJsonPath('versiones.0.requisitos', 207);
     }
 
+    public function test_la_plantilla_sgr_no_se_restringe_por_sectores(): void
+    {
+        $sgr = PlantillaChecklist::sgr();
+
+        $this->como(Rol::Administrador)->putJson("/GestPro/plantillas/{$sgr->id}", $this->datos([
+            'nombre' => 'SGR', 'todas_fuentes' => true, 'todos_sectores' => false, 'sector_ids' => [$this->sectorEducacion],
+        ]))->assertStatus(422)
+            ->assertJsonPath('errores.0', 'La plantilla SGR debe aplicar a todos los sectores: el evaluador decide qué requisitos sectoriales aplican.');
+    }
+
+    public function test_el_nombre_repetido_ignora_tildes_y_mayusculas(): void
+    {
+        $this->crear()->assertCreated();
+
+        $this->crear(['nombre' => 'REQUISITOS GENERALES DE INVERSION PUBLICA'])->assertStatus(422)
+            ->assertJsonPath('errores.0', 'Ya existe una plantilla llamada "Requisitos generales de inversión pública".');
+    }
+
+    public function test_la_busqueda_encuentra_por_descripcion_y_con_porcentaje(): void
+    {
+        $this->crear(['nombre' => 'Rural', 'descripcion' => 'Cobertura 100% rural'])->assertCreated();
+
+        $admin = $this->como(Rol::Administrador);
+        $this->assertSame(['Rural'], array_column($admin->getJson('/GestPro/plantillas?buscar=100%25')->assertOk()->json(), 'nombre'));
+        $this->assertSame(['Rural'], array_column($this->como(Rol::Administrador)->getJson('/GestPro/plantillas?buscar=cobertura')->assertOk()->json(), 'nombre'));
+    }
+
+    public function test_la_busqueda_debe_ser_texto(): void
+    {
+        $this->como(Rol::Administrador)->getJson('/GestPro/plantillas?buscar[]=x')->assertStatus(422);
+    }
+
+    public function test_la_descripcion_tiene_limite_con_mensaje_en_espanol(): void
+    {
+        $this->crear(['descripcion' => str_repeat('a', 5001)])->assertStatus(422)
+            ->assertJsonPath('errors.descripcion.0', 'En la descripción caben hasta 5000 caracteres.');
+    }
+
+    public function test_un_gestor_no_edita_activa_ni_versiona(): void
+    {
+        $id = $this->crear()->json('id');
+
+        $this->como(Rol::Gestor)->putJson("/GestPro/plantillas/{$id}", $this->datos())->assertForbidden();
+        $this->como(Rol::Gestor)->postJson("/GestPro/plantillas/{$id}/activar", ['activo' => false])->assertForbidden();
+        $this->como(Rol::Gestor)->postJson("/GestPro/plantillas/{$id}/versiones", [])->assertForbidden();
+    }
+
+    public function test_el_detalle_ordena_las_versiones_de_la_mas_nueva_a_la_mas_antigua(): void
+    {
+        $sgr = PlantillaChecklist::sgr();
+        $this->como(Rol::Administrador)->postJson("/GestPro/plantillas/{$sgr->id}/versiones", [])->assertCreated();
+
+        $this->como(Rol::Administrador)->getJson("/GestPro/plantillas/{$sgr->id}")->assertOk()
+            ->assertJsonPath('versiones.0.numero', 2)
+            ->assertJsonPath('versiones.1.numero', 1);
+    }
+
     public function test_solo_un_administrador_administra_plantillas(): void
     {
         $this->como(Rol::Gestor)->getJson('/GestPro/plantillas')->assertForbidden();

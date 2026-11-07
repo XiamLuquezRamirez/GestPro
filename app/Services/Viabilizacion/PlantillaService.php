@@ -9,6 +9,7 @@ use App\Models\PlantillaChecklist;
 use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Administración de plantillas de checklist (rol Administrador): datos generales,
@@ -30,8 +31,8 @@ final class PlantillaService
         return PlantillaChecklist::query()
             ->with(['fuentes:id,nombre', 'sectores:id,nombre', 'versiones' => fn ($q) => $q->withCount('requisitos')])
             ->when($buscar !== '', function ($q) use ($buscar) {
-                $patron = '%' . addcslashes($buscar, '%_\\') . '%';
-                $q->where(fn ($w) => $w->where('nombre', 'like', $patron)->orWhere('descripcion', 'like', $patron));
+                $patron = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $buscar) . '%';
+                $q->where(fn ($w) => $w->whereRaw("nombre like ? escape '!'", [$patron])->orWhereRaw("descripcion like ? escape '!'", [$patron]));
             })
             ->orderByDesc('activo')
             ->orderBy('nombre')
@@ -147,12 +148,14 @@ final class PlantillaService
         $errores = [];
 
         $nombre = trim((string) ($datos['nombre'] ?? ''));
-        $repetido = PlantillaChecklist::query()
-            ->whereRaw('LOWER(nombre) = ?', [mb_strtolower($nombre)])
+        // Se compara en PHP para que MariaDB y SQLite ignoren igual mayúsculas y tildes.
+        $normalizar = fn (string $texto) => Str::lower(Str::ascii(trim($texto)));
+        $existente = PlantillaChecklist::query()
             ->when($plantilla, fn ($q) => $q->whereKeyNot($plantilla->id))
-            ->exists();
-        if ($repetido) {
-            $errores[] = "Ya existe una plantilla llamada \"{$nombre}\".";
+            ->pluck('nombre')
+            ->first(fn ($guardado) => $normalizar($guardado) === $normalizar($nombre));
+        if ($existente !== null) {
+            $errores[] = "Ya existe una plantilla llamada \"{$existente}\".";
         }
 
         $todasFuentes = (bool) ($datos['todas_fuentes'] ?? false);
@@ -173,6 +176,11 @@ final class PlantillaService
             if (! in_array($sgr, $fuenteIds, true)) {
                 $errores[] = 'La plantilla SGR debe seguir asociada a la fuente SGR.';
             }
+        }
+
+        // En el motor sgr el sector lo decide cada requisito con el evaluador.
+        if ($plantilla?->clave === PlantillaChecklist::CLAVE_SGR && ! $todosSectores) {
+            $errores[] = 'La plantilla SGR debe aplicar a todos los sectores: el evaluador decide qué requisitos sectoriales aplican.';
         }
 
         if ($errores) {
