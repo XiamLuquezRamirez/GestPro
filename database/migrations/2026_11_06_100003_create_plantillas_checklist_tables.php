@@ -74,7 +74,7 @@ return new class extends Migration
 
         $editados = $this->camposEditadosSgr();
         if ($editados) {
-            throw new RuntimeException('No se puede revertir: la plantilla SGR fue editada (' . implode(', ', $editados) . ') y esos cambios se perderían. Deshaga esos cambios desde la pantalla Plantillas o restaure un respaldo.');
+            throw new RuntimeException('No se puede revertir: la plantilla SGR fue editada (' . implode(', ', $editados) . ') y esos cambios se perderían. Deshaga esos cambios desde la pantalla Plantillas de checklist o restaure un respaldo.');
         }
 
         // Sin esto, se borrarían las asociaciones antes de que falle la clave foránea de las versiones.
