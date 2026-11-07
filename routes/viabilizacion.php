@@ -67,6 +67,7 @@ Route::middleware('can:gestionar-catalogos')->prefix('catalogo-requisitos')->nam
     Route::delete('/versiones/{version}', [CatalogoRequisitosController::class, 'eliminarVersion'])->name('versiones.destroy');
 
     Route::get('/versiones/{version}/requisitos', [CatalogoRequisitosController::class, 'requisitos'])->name('requisitos.index');
+    Route::put('/versiones/{version}/requisitos-orden', [CatalogoRequisitosController::class, 'ordenarRequisitos'])->name('requisitos.orden');
     Route::post('/versiones/{version}/requisitos', [CatalogoRequisitosController::class, 'crearRequisito'])->name('requisitos.store');
     Route::put('/versiones/{version}/requisitos/{requisito}', [CatalogoRequisitosController::class, 'actualizarRequisito'])->name('requisitos.update');
     Route::delete('/versiones/{version}/requisitos/{requisito}', [CatalogoRequisitosController::class, 'eliminarRequisito'])->name('requisitos.destroy');

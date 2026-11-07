@@ -91,7 +91,7 @@ class PlantillasVersionesTest extends TestCase
         $this->assertTrue($nuevo->requiere_aprobacion_no_aplica);
     }
 
-    public function test_editar_un_requisito_conserva_su_codigo_comun_y_su_aprobacion_del_no_aplica(): void
+    public function test_editar_un_requisito_sgr_aplica_las_reglas_del_sgr(): void
     {
         $borrador = app(CatalogoService::class)->crearBorrador(null);
         $consulta = fn () => DB::table('requisitos_catalogo')->where('catalogo_version_id', $borrador->id)->where('clave', 'a1');
@@ -106,8 +106,8 @@ class PlantillasVersionesTest extends TestCase
 
         $editado = $consulta()->first();
         $this->assertSame('Texto editado', $editado->texto);
-        $this->assertSame('comun', $editado->codigo_comun);
-        $this->assertEquals(0, $editado->requiere_aprobacion_no_aplica);
+        $this->assertSame('a1', $editado->codigo_comun);
+        $this->assertEquals(1, $editado->requiere_aprobacion_no_aplica);
     }
 
     public function test_la_version_sembrada_pertenece_a_la_plantilla_sgr(): void

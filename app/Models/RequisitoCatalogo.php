@@ -10,6 +10,11 @@ class RequisitoCatalogo extends Model
     public const OBLIGATORIO = 'obligatorio';
     public const OPCIONAL = 'opcional';
     public const CONDICIONADO = 'condicionado';
+    public const CARACTERES = [self::OBLIGATORIO, self::OPCIONAL, self::CONDICIONADO];
+
+    // Valores que pide la propuesta; las etiquetas con tilde las pone la pantalla.
+    public const CATEGORIAS = ['tecnico', 'juridico', 'financiero', 'ambiental', 'social', 'administrativo', 'otro'];
+    public const TIPOS = ['documental', 'validacion', 'condicion'];
 
     public $timestamps = false;
 

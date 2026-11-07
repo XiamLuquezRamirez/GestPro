@@ -74,8 +74,11 @@ final class CatalogoService
         if ($plantilla->versiones()->where('estado', CatalogoVersion::BORRADOR)->exists()) {
             throw new ReglaNegocioException('Ya existe una versión en borrador; publíquela o elimínela antes de crear otra.');
         }
-        $vigente = $plantilla->versionVigente()
-            ?? throw new ReglaNegocioException('No hay una versión vigente que copiar.');
+        $vigente = $plantilla->versionVigente();
+        // Sin versiones publicadas, el borrador nace vacío: es la primera versión de la plantilla.
+        if (! $vigente && $plantilla->versiones()->where('estado', CatalogoVersion::PUBLICADA)->exists()) {
+            throw new ReglaNegocioException('No hay una versión vigente que copiar.');
+        }
 
         return DB::transaction(function () use ($plantilla, $vigente, $descripcion) {
             $borrador = $plantilla->versiones()->create([
@@ -91,7 +94,7 @@ final class CatalogoService
                 'soporte_requerido', 'referencia_normativa', 'condicion_descripcion',
                 'requiere_aprobacion_no_aplica', 'codigo_comun',
             ];
-            $vigente->requisitos()->orderBy('id')->select($columnas)->get()
+            $vigente?->requisitos()->orderBy('id')->select($columnas)->get()
                 ->map(fn ($r) => ['catalogo_version_id' => $borrador->id, ...$r->only($columnas)])
                 ->chunk(100)
                 ->each(fn ($lote) => DB::table('requisitos_catalogo')->insert($lote->values()->all()));
@@ -103,21 +106,22 @@ final class CatalogoService
     public function publicar(CatalogoVersion $version, ?User $usuario = null): CatalogoVersion
     {
         $this->exigirBorrador($version);
+        $plantilla = $version->plantilla;
 
-        $errores = [];
-        $componentes = RequisitoComponente::pluck('clave')->all();
-        $tipologias = RequisitoTipologia::pluck('clave')->all();
-        // En la sección C la condición es opcional: solo se valida si la hay.
-        $conCondicion = $version->requisitos()->where('activo', true)
-            ->where(fn ($q) => $q->where('seccion', '!=', 'C')->orWhereNotNull('condicion'))
-            ->get();
-        foreach ($conCondicion as $r) {
-            foreach ($this->evaluador->validarCondicion($r->condicion, $componentes, $tipologias) as $error) {
-                $errores[] = "{$r->clave}: {$error}";
-            }
+        if (! $version->requisitos()->where('activo', true)->exists()) {
+            throw new ReglaNegocioException('La versión no tiene requisitos activos y no puede publicarse.');
         }
+        $sinFuentes = ! $plantilla->todas_fuentes && ! $plantilla->fuentes()->exists();
+        $sinSectores = ! $plantilla->todos_sectores && ! $plantilla->sectores()->exists();
+        if ($sinFuentes || $sinSectores) {
+            throw new ReglaNegocioException('Asocia la plantilla a sus fuentes y sectores antes de publicar.');
+        }
+
+        [$errores, $mensaje] = $plantilla->motor === PlantillaChecklist::MOTOR_SGR
+            ? [$this->erroresDeCondiciones($version), 'La versión tiene condiciones inválidas y no puede publicarse.']
+            : [$this->erroresDeCondicionados($version), 'La versión tiene requisitos condicionados sin describir y no puede publicarse.'];
         if ($errores) {
-            throw new ReglaNegocioException('La versión tiene condiciones inválidas y no puede publicarse.', $errores);
+            throw new ReglaNegocioException($mensaje, $errores);
         }
 
         return DB::transaction(function () use ($version, $usuario) {
@@ -135,6 +139,36 @@ final class CatalogoService
         });
     }
 
+    /** Motor sgr: cada condición debe ser válida en el DSL. En la sección C es opcional. */
+    private function erroresDeCondiciones(CatalogoVersion $version): array
+    {
+        $errores = [];
+        $componentes = RequisitoComponente::pluck('clave')->all();
+        $tipologias = RequisitoTipologia::pluck('clave')->all();
+        $conCondicion = $version->requisitos()->where('activo', true)
+            ->where(fn ($q) => $q->where('seccion', '!=', 'C')->orWhereNotNull('condicion'))
+            ->get();
+        foreach ($conCondicion as $r) {
+            foreach ($this->evaluador->validarCondicion($r->condicion, $componentes, $tipologias) as $error) {
+                $errores[] = "{$r->clave}: {$error}";
+            }
+        }
+
+        return $errores;
+    }
+
+    /** Motor simple: un requisito condicionado debe decir cuándo aplica, para que una persona lo decida. */
+    private function erroresDeCondicionados(CatalogoVersion $version): array
+    {
+        return $version->requisitos()->where('activo', true)
+            ->where('caracter', RequisitoCatalogo::CONDICIONADO)
+            ->where(fn ($q) => $q->whereNull('condicion_descripcion')->orWhere('condicion_descripcion', ''))
+            ->orderBy('orden')
+            ->get()
+            ->map(fn (RequisitoCatalogo $r) => "{$r->texto}: describe cuándo aplica este requisito condicionado.")
+            ->all();
+    }
+
     public function eliminarBorrador(CatalogoVersion $version): void
     {
         $this->exigirBorrador($version);
@@ -148,6 +182,10 @@ final class CatalogoService
         $this->exigirBorrador($version);
         if ($requisito && $requisito->catalogo_version_id !== $version->id) {
             throw new ReglaNegocioException('El requisito no pertenece a esta versión.');
+        }
+
+        if ($version->plantilla->motor === PlantillaChecklist::MOTOR_SIMPLE) {
+            return $this->guardarRequisitoSimple($version, $datos, $requisito);
         }
 
         $errores = [];
@@ -205,6 +243,76 @@ final class CatalogoService
             'condicion' => $datos['condicion'],
             'orden' => $datos['orden'] ?? ($requisito?->orden ?? (int) $version->requisitos()->max('orden') + 1),
             'activo' => $datos['activo'] ?? true,
+            ...$this->camposDeSeguimiento($datos, $requisito, sinCaracter: true),
+        ];
+        if ($version->plantilla->clave === PlantillaChecklist::CLAVE_SGR) {
+            // En la plantilla SGR el código común es la clave, también al editarla, y todo
+            // "no aplica" se aprueba (decisión del usuario).
+            $valores['codigo_comun'] = $datos['clave'];
+            $valores['requiere_aprobacion_no_aplica'] = true;
+        } else {
+            // Otra plantilla con motor sgr (una copia): el código común lo define el administrador.
+            $valores['codigo_comun'] = array_key_exists('codigo_comun', $datos)
+                ? (trim((string) $datos['codigo_comun']) ?: null)
+                : $requisito?->codigo_comun;
+            $valores['requiere_aprobacion_no_aplica'] = (bool) ($datos['requiere_aprobacion_no_aplica'] ?? $requisito?->requiere_aprobacion_no_aplica ?? true);
+        }
+
+        if ($requisito) {
+            $requisito->update($valores);
+
+            return $requisito;
+        }
+
+        return RequisitoCatalogo::create($valores);
+    }
+
+    /** Motor simple: sin sección ni condiciones automáticas; una persona decide si un condicionado aplica. */
+    private function guardarRequisitoSimple(CatalogoVersion $version, array $datos, ?RequisitoCatalogo $requisito): RequisitoCatalogo
+    {
+        $errores = [];
+        $clave = trim((string) ($datos['clave'] ?? '')) ?: ($requisito?->clave ?? $this->claveLibre($version));
+
+        $repetida = fn (string $columna, ?string $valor) => $valor !== null && RequisitoCatalogo::where('catalogo_version_id', $version->id)
+            ->where($columna, $valor)
+            ->when($requisito, fn ($q) => $q->where('id', '!=', $requisito->id))
+            ->exists();
+        if ($repetida('clave', $clave)) {
+            $errores[] = "Ya existe un requisito con la clave \"{$clave}\" en esta versión.";
+        }
+
+        $seguimiento = $this->camposDeSeguimiento($datos, $requisito);
+        $codigoComun = array_key_exists('codigo_comun', $datos)
+            ? (trim((string) $datos['codigo_comun']) ?: null)
+            : $requisito?->codigo_comun;
+        if ($repetida('codigo_comun', $codigoComun)) {
+            $errores[] = "Ya existe un requisito con el código común \"{$codigoComun}\" en esta versión.";
+        }
+        if ($seguimiento['caracter'] === RequisitoCatalogo::CONDICIONADO && ! $seguimiento['condicion_descripcion']) {
+            $errores[] = 'Un requisito condicionado necesita describir cuándo aplica.';
+        }
+
+        if ($errores) {
+            throw new ReglaNegocioException('El requisito no es válido.', $errores);
+        }
+
+        $valores = [
+            'catalogo_version_id' => $version->id,
+            'clave' => $clave,
+            'seccion' => null,
+            'fuente' => null,
+            'sector_id' => null,
+            'tipo_id' => null,
+            'condicion' => null,
+            'subtitulo' => $datos['subtitulo'] ?? $requisito?->subtitulo,
+            'codigo' => $datos['codigo'] ?? $requisito?->codigo,
+            'texto' => $datos['texto'],
+            'nota' => $datos['nota'] ?? null,
+            'orden' => $datos['orden'] ?? ($requisito?->orden ?? (int) $version->requisitos()->max('orden') + 1),
+            'activo' => $datos['activo'] ?? ($requisito?->activo ?? true),
+            'codigo_comun' => $codigoComun,
+            'requiere_aprobacion_no_aplica' => (bool) ($datos['requiere_aprobacion_no_aplica'] ?? $requisito?->requiere_aprobacion_no_aplica ?? false),
+            ...$seguimiento,
         ];
 
         if ($requisito) {
@@ -213,8 +321,60 @@ final class CatalogoService
             return $requisito;
         }
 
-        // Al crear en el SGR: el código común es la clave y todo "no aplica" se aprueba. Al editar se conservan.
-        return RequisitoCatalogo::create([...$valores, 'codigo_comun' => $datos['clave'], 'requiere_aprobacion_no_aplica' => true]);
+        return RequisitoCatalogo::create($valores);
+    }
+
+    /** Campos que la propuesta pide a todo requisito. Lo que no llega conserva su valor. */
+    private function camposDeSeguimiento(array $datos, ?RequisitoCatalogo $requisito, bool $sinCaracter = false): array
+    {
+        $texto = fn (string $campo) => array_key_exists($campo, $datos)
+            ? (trim((string) $datos[$campo]) ?: null)
+            : $requisito?->{$campo};
+
+        $campos = [
+            'descripcion' => $texto('descripcion'),
+            'categoria' => $texto('categoria'),
+            'tipo_requisito' => $texto('tipo_requisito'),
+            'cargo_cumplimiento' => $texto('cargo_cumplimiento'),
+            'cargo_revision' => $texto('cargo_revision'),
+            'soporte_requerido' => $texto('soporte_requerido'),
+            'referencia_normativa' => $texto('referencia_normativa'),
+            'condicion_descripcion' => $texto('condicion_descripcion'),
+        ];
+        // En el motor sgr el carácter es siempre obligatorio: qué aplica lo decide el evaluador.
+        if (! $sinCaracter) {
+            $campos['caracter'] = $datos['caracter'] ?? ($requisito?->caracter ?? RequisitoCatalogo::OBLIGATORIO);
+        }
+
+        return $campos;
+    }
+
+    private function claveLibre(CatalogoVersion $version): string
+    {
+        $numero = $version->requisitos()->count() + 1;
+        while ($version->requisitos()->where('clave', "r{$numero}")->exists()) {
+            $numero++;
+        }
+
+        return "r{$numero}";
+    }
+
+    /** Orden de presentación: los ids en el orden en que deben mostrarse. */
+    public function ordenarRequisitos(CatalogoVersion $version, array $ids): void
+    {
+        $this->exigirBorrador($version);
+
+        $propios = $version->requisitos()->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+        $pedidos = collect($ids)->map(fn ($id) => (int) $id);
+        if ($pedidos->sort()->values()->all() !== $propios) {
+            throw new ReglaNegocioException('El orden debe incluir todos los requisitos de la versión, una vez cada uno.');
+        }
+
+        DB::transaction(function () use ($pedidos) {
+            foreach ($pedidos->values() as $posicion => $id) {
+                RequisitoCatalogo::whereKey($id)->update(['orden' => $posicion + 1]);
+            }
+        });
     }
 
     public function eliminarRequisito(CatalogoVersion $version, RequisitoCatalogo $requisito): void

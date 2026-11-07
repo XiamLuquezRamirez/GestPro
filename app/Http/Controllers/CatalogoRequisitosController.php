@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CatalogoVersion;
 use App\Models\PlantillaChecklist;
+use Illuminate\Validation\Rule;
 use App\Models\RequisitoCatalogo;
 use App\Models\RequisitoComponente;
 use App\Models\RequisitoTipologia;
@@ -81,14 +82,22 @@ class CatalogoRequisitosController extends Controller
 
     public function crearRequisito(Request $request, CatalogoVersion $version): JsonResponse
     {
-        $requisito = $this->servicio->guardarRequisito($version, $request->validate($this->reglasRequisito()));
+        $requisito = $this->servicio->guardarRequisito($version, $request->validate($this->reglasRequisito($version), self::MENSAJES));
 
         return response()->json($requisito, 201);
     }
 
     public function actualizarRequisito(Request $request, CatalogoVersion $version, RequisitoCatalogo $requisito): JsonResponse
     {
-        return response()->json($this->servicio->guardarRequisito($version, $request->validate($this->reglasRequisito()), $requisito));
+        return response()->json($this->servicio->guardarRequisito($version, $request->validate($this->reglasRequisito($version), self::MENSAJES), $requisito));
+    }
+
+    public function ordenarRequisitos(Request $request, CatalogoVersion $version): JsonResponse
+    {
+        $datos = $request->validate(['ids' => ['required', 'array'], 'ids.*' => ['integer']]);
+        $this->servicio->ordenarRequisitos($version, $datos['ids']);
+
+        return response()->json(['mensaje' => 'Orden guardado.']);
     }
 
     public function eliminarRequisito(CatalogoVersion $version, RequisitoCatalogo $requisito): JsonResponse
@@ -148,9 +157,46 @@ class CatalogoRequisitosController extends Controller
         return response()->json($this->servicio->guardarEntidad($entidad, $request->validate($reglas), $item));
     }
 
-    private function reglasRequisito(): array
+    private const MENSAJES = [
+        'texto.required' => 'Escribe el nombre del requisito.',
+        'clave.regex' => 'La clave solo admite minúsculas, números y guion bajo.',
+        'caracter.in' => 'El carácter debe ser obligatorio, opcional o condicionado.',
+        'categoria.in' => 'Elige una categoría de la lista.',
+        'tipo_requisito.in' => 'Elige un tipo de requisito de la lista.',
+    ];
+
+    /** Las reglas dependen del motor de la plantilla de la versión. */
+    private function reglasRequisito(CatalogoVersion $version): array
     {
+        $seguimiento = [
+            'descripcion' => ['nullable', 'string'],
+            'categoria' => ['nullable', Rule::in(RequisitoCatalogo::CATEGORIAS)],
+            'tipo_requisito' => ['nullable', Rule::in(RequisitoCatalogo::TIPOS)],
+            'cargo_cumplimiento' => ['nullable', 'string', 'max:150'],
+            'cargo_revision' => ['nullable', 'string', 'max:150'],
+            'soporte_requerido' => ['nullable', 'string', 'max:255'],
+            'referencia_normativa' => ['nullable', 'string', 'max:255'],
+            'requiere_aprobacion_no_aplica' => ['sometimes', 'boolean'],
+            'codigo_comun' => ['nullable', 'string', 'max:40'],
+            'nota' => ['nullable', 'string'],
+            'orden' => ['sometimes', 'integer', 'min:0'],
+            'activo' => ['sometimes', 'boolean'],
+        ];
+
+        if ($version->plantilla->motor === PlantillaChecklist::MOTOR_SIMPLE) {
+            return [
+                ...$seguimiento,
+                'clave' => ['nullable', 'string', 'max:40', 'regex:/^[a-z0-9_]+$/'],
+                'texto' => ['required', 'string'],
+                'caracter' => ['sometimes', Rule::in(RequisitoCatalogo::CARACTERES)],
+                'condicion_descripcion' => ['nullable', 'string'],
+                'codigo' => ['nullable', 'string', 'max:60'],
+                'subtitulo' => ['nullable', 'string', 'max:255'],
+            ];
+        }
+
         return [
+            ...$seguimiento,
             'clave' => self::CLAVE,
             'seccion' => ['required', 'in:A,B,C,D'],
             'fuente' => ['required', 'in:a12,ot'],
@@ -159,10 +205,7 @@ class CatalogoRequisitosController extends Controller
             'subtitulo' => ['nullable', 'string', 'max:255'],
             'codigo' => ['required', 'string', 'max:60'],
             'texto' => ['required', 'string'],
-            'nota' => ['nullable', 'string'],
             'condicion' => ['nullable', 'string', 'max:255'],
-            'orden' => ['sometimes', 'integer', 'min:0'],
-            'activo' => ['sometimes', 'boolean'],
         ];
     }
 }
