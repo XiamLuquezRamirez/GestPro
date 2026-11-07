@@ -78,7 +78,7 @@ class SeguimientoRequisitoTest extends TestCase
         $fila = RequisitoCatalogo::find($id);
         $this->assertSame('a1', $fila->codigo_comun);
         $this->assertSame(RequisitoCatalogo::OBLIGATORIO, $fila->caracter);
-        $this->assertFalse($fila->requiere_aprobacion_no_aplica);
+        $this->assertTrue($fila->requiere_aprobacion_no_aplica); // los existentes son del SGR
         $this->assertNull($fila->categoria);
     }
 
@@ -89,6 +89,13 @@ class SeguimientoRequisitoTest extends TestCase
         $this->migracionCatalogo()->up();
 
         $this->assertSame('propio', DB::table('requisitos_catalogo')->where('id', $id)->value('codigo_comun'));
+    }
+
+    public function test_un_requisito_nuevo_no_exige_aprobacion_por_defecto(): void
+    {
+        $id = $this->requisito($this->versionSgr());
+
+        $this->assertEquals(0, DB::table('requisitos_catalogo')->where('id', $id)->value('requiere_aprobacion_no_aplica'));
     }
 
     public function test_un_requisito_puede_no_tener_seccion_fuente_ni_codigo(): void
@@ -114,7 +121,7 @@ class SeguimientoRequisitoTest extends TestCase
 
     public function test_el_rollback_se_detiene_si_se_perderian_datos_de_seguimiento(): void
     {
-        foreach ([['categoria' => 'Técnico'], ['caracter' => 'opcional'], ['requiere_aprobacion_no_aplica' => true]] as $indice => $datos) {
+        foreach ([['categoria' => 'Técnico'], ['caracter' => 'opcional']] as $indice => $datos) {
             DB::table('requisitos_catalogo')->delete();
             $version = DB::table('catalogo_versiones')->value('id') ?? $this->versionSgr();
             $this->requisito($version, ['clave' => "r{$indice}", ...$datos]);
@@ -126,6 +133,15 @@ class SeguimientoRequisitoTest extends TestCase
                 $this->assertStringContainsString('se perderían', $e->getMessage());
             }
         }
+    }
+
+    public function test_el_rollback_del_catalogo_avanza_aunque_se_exija_aprobacion(): void
+    {
+        $this->requisito($this->versionSgr(), ['requiere_aprobacion_no_aplica' => true]);
+
+        $this->migracionCatalogo()->down();
+
+        $this->assertFalse(Schema::hasColumn('requisitos_catalogo', 'requiere_aprobacion_no_aplica'));
     }
 
     // ------------------------------------------------------------ checklist

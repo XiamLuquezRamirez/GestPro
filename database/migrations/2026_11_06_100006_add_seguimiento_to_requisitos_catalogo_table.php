@@ -24,7 +24,9 @@ return new class extends Migration
         $this->agregar('soporte_requerido', fn (Blueprint $t) => $t->string('soporte_requerido', 255)->nullable());
         $this->agregar('referencia_normativa', fn (Blueprint $t) => $t->string('referencia_normativa', 255)->nullable());
         $this->agregar('condicion_descripcion', fn (Blueprint $t) => $t->text('condicion_descripcion')->nullable());
-        $this->agregar('requiere_aprobacion_no_aplica', fn (Blueprint $t) => $t->boolean('requiere_aprobacion_no_aplica')->default(false));
+        // Nace en true para que los requisitos existentes, todos del SGR, exijan aprobación del
+        // "no aplica" (decisión del usuario). Abajo el valor por defecto pasa a false.
+        $this->agregar('requiere_aprobacion_no_aplica', fn (Blueprint $t) => $t->boolean('requiere_aprobacion_no_aplica')->default(true));
         $this->agregar('codigo_comun', fn (Blueprint $t) => $t->string('codigo_comun', 40)->nullable());
 
         // Hasta hoy todos los requisitos son del SGR, y allí el código común es la clave.
@@ -35,6 +37,7 @@ return new class extends Migration
             $table->char('seccion', 1)->nullable()->change();
             $table->string('fuente', 5)->nullable()->change();
             $table->string('codigo', 60)->nullable()->change();
+            $table->boolean('requiere_aprobacion_no_aplica')->default(false)->change();
         });
     }
 
@@ -52,7 +55,8 @@ return new class extends Migration
                 foreach (self::TEXTOS as $columna) {
                     $q->orWhereNotNull($columna);
                 }
-                $q->orWhere('caracter', '!=', 'obligatorio')->orWhere('requiere_aprobacion_no_aplica', true);
+                // requiere_aprobacion_no_aplica no se revisa: en el SGR lo puso esta misma migración.
+                $q->orWhere('caracter', '!=', 'obligatorio');
             })
             ->exists();
         if ($conDatos) {

@@ -195,6 +195,7 @@ final class CatalogoService
             'catalogo_version_id' => $version->id,
             'clave' => $datos['clave'],
             'codigo_comun' => $datos['clave'],
+            'requiere_aprobacion_no_aplica' => true, // en el SGR todo "no aplica" se aprueba
             'seccion' => $seccion,
             'fuente' => $datos['fuente'],
             'sector_id' => ($datos['sector_id'] ?? null) ?: null,

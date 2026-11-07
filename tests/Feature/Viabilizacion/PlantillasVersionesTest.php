@@ -55,6 +55,11 @@ class PlantillasVersionesTest extends TestCase
         $this->assertSame(207, DB::table('requisitos_catalogo')->whereColumn('codigo_comun', 'clave')->count());
     }
 
+    public function test_todos_los_requisitos_sgr_exigen_aprobacion_del_no_aplica(): void
+    {
+        $this->assertSame(207, DB::table('requisitos_catalogo')->where('requiere_aprobacion_no_aplica', true)->count());
+    }
+
     public function test_un_borrador_copia_los_datos_de_seguimiento(): void
     {
         $datos = [
@@ -81,7 +86,9 @@ class PlantillasVersionesTest extends TestCase
             'clave' => 'nuevo', 'seccion' => 'A', 'fuente' => 'a12', 'codigo' => '9.9', 'texto' => 'Nuevo', 'condicion' => 'siempre',
         ])->assertCreated();
 
-        $this->assertSame('nuevo', $borrador->requisitos()->where('clave', 'nuevo')->value('codigo_comun'));
+        $nuevo = $borrador->requisitos()->where('clave', 'nuevo')->first();
+        $this->assertSame('nuevo', $nuevo->codigo_comun);
+        $this->assertTrue($nuevo->requiere_aprobacion_no_aplica);
     }
 
     public function test_la_version_sembrada_pertenece_a_la_plantilla_sgr(): void

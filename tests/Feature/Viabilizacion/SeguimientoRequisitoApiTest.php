@@ -186,7 +186,7 @@ class SeguimientoRequisitoApiTest extends TestCase
             ->assertJsonPath('requisito.cuenta', true)
             ->assertJsonPath('requisito.no_aplica', null)
             ->assertJsonPath('requisito.responsable', null)
-            ->assertJsonPath('requisito.requisito.requiere_aprobacion_no_aplica', false)
+            ->assertJsonPath('requisito.requisito.requiere_aprobacion_no_aplica', true)
             ->assertJsonPath('progreso.cumplidos', 1);
     }
 }

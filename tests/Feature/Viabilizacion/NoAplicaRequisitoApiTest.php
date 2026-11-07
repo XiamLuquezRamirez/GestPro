@@ -55,6 +55,12 @@ class NoAplicaRequisitoApiTest extends TestCase
         DB::table('requisitos_catalogo')->where('id', $this->fila->requisito_catalogo_id)->update(['requiere_aprobacion_no_aplica' => true]);
     }
 
+    /** En el SGR todo "no aplica" se aprueba; estas pruebas lo quitan para probar el caso sin aprobación. */
+    private function sinAprobacion(): void
+    {
+        DB::table('requisitos_catalogo')->where('id', $this->fila->requisito_catalogo_id)->update(['requiere_aprobacion_no_aplica' => false]);
+    }
+
     private function marcarComo(User $usuario)
     {
         return $this->como($usuario)->postJson($this->url('/no-aplica'), ['justificacion' => '  El proyecto no tiene predios.  ']);
@@ -69,6 +75,7 @@ class NoAplicaRequisitoApiTest extends TestCase
 
     public function test_un_no_aplica_sin_aprobacion_deja_de_contar_de_inmediato(): void
     {
+        $this->sinAprobacion();
         $gestor = $this->usuario(Rol::Gestor);
 
         $this->marcarComo($gestor)->assertOk()
@@ -99,6 +106,7 @@ class NoAplicaRequisitoApiTest extends TestCase
 
     public function test_retirar_un_no_aplica_vuelve_a_contar(): void
     {
+        $this->sinAprobacion();
         $this->marcarComo($this->usuario(Rol::Gestor))->assertOk();
 
         $this->como(Rol::Gestor)->deleteJson($this->url('/no-aplica'))->assertOk()
@@ -110,6 +118,13 @@ class NoAplicaRequisitoApiTest extends TestCase
     }
 
     // ------------------------------------------------------------ con aprobación
+
+    public function test_en_el_sgr_un_no_aplica_queda_por_aprobar(): void
+    {
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertOk()
+            ->assertJsonPath('requisito.estado', 'no_aplica_pendiente')
+            ->assertJsonPath('progreso.total', 8);
+    }
 
     public function test_con_aprobacion_queda_pendiente_y_sigue_contando(): void
     {
@@ -163,6 +178,7 @@ class NoAplicaRequisitoApiTest extends TestCase
 
     public function test_no_se_aprueba_lo_que_no_esta_por_aprobar(): void
     {
+        $this->sinAprobacion();
         $this->marcarComo($this->usuario(Rol::Gestor))->assertOk(); // sin aprobación: ya es no_aplica
 
         $this->como(Rol::Administrador)->postJson($this->url('/no-aplica/aprobar'))->assertStatus(422)

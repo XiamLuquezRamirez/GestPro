@@ -113,6 +113,7 @@ class CatalogoRequisitosSgrSeeder extends Seeder
                     'orden' => $r['orden'],
                     'activo' => true,
                     'codigo_comun' => $r['clave'],
+                    'requiere_aprobacion_no_aplica' => true, // en el SGR todo "no aplica" se aprueba
                 ];
             }, $datos['requisitos']);
 
