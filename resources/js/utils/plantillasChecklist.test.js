@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import {
     ALCANCES,
     CARACTERES,
@@ -157,13 +157,18 @@ describe('refuerzo: payload completo del requisito', () => {
 });
 
 describe('refuerzo: constantes contra PHP', () => {
-    const leer = (ruta) => readFileSync(ruta, 'utf8');
+    // Rutas relativas a este archivo, no al directorio desde donde se lance Vitest.
+    const leer = (ruta) => readFileSync(new URL(ruta, import.meta.url), 'utf8');
     const lista = (codigo, nombre) => {
         const m = codigo.match(new RegExp(`const ${nombre} = \\[([^\\]]*)\\]`));
         return [...m[1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]);
     };
-    const modelo = leer('app/Models/RequisitoCatalogo.php');
-    const servicio = leer('app/Services/Viabilizacion/PlantillaService.php');
+    let modelo;
+    let servicio;
+    beforeAll(() => {
+        modelo = leer('../../../app/Models/RequisitoCatalogo.php');
+        servicio = leer('../../../app/Services/Viabilizacion/PlantillaService.php');
+    });
 
     it('categorías, tipos y alcances coinciden con PHP', () => {
         expect(CATEGORIAS.map(([v]) => v)).toEqual(lista(modelo, 'CATEGORIAS'));
@@ -190,12 +195,25 @@ describe('refuerzo: formularioRequisito', () => {
         expect(formularioRequisito({ requiere_aprobacion_no_aplica: true }, 'simple').requiere_aprobacion_no_aplica).toBe(true);
         expect(formularioRequisito({ activo: false }, 'simple').activo).toBe(false);
         expect(formularioRequisito({}, 'simple').activo).toBe(true);
+        expect(formularioRequisito({}, 'simple').caracter).toBe('obligatorio');
         expect(formularioRequisito({ caracter: 'opcional' }, 'simple').caracter).toBe('opcional');
     });
 
     it('un campo ausente no pisa los valores por defecto', () => {
-        const f = formularioRequisito({ texto: 'x', seccion: null, fuente: undefined, condicion: null, requiere_aprobacion_no_aplica: null }, 'sgr');
+        const f = formularioRequisito({ texto: 'x', fuente: undefined, requiere_aprobacion_no_aplica: undefined }, 'sgr');
         expect(f).toMatchObject({ texto: 'x', seccion: 'A', fuente: 'a12', condicion: 'siempre', requiere_aprobacion_no_aplica: true });
+    });
+
+    it('un null del servidor en un texto es un dato real: pasa a vacío', () => {
+        const f = formularioRequisito({ texto: 'x', seccion: null, condicion: null, sector_id: null }, 'sgr');
+        expect(f).toMatchObject({ seccion: '', condicion: '', sector_id: '' });
+    });
+
+    it('un requisito de la sección C con condicion null no se reescribe como "siempre"', () => {
+        const r = { texto: 'Requisito sectorial', seccion: 'C', fuente: 'a12', condicion: null, sector_id: 3, tipo_id: 9, requiere_aprobacion_no_aplica: true, activo: true };
+        const datos = datosRequisito(formularioRequisito(r, 'sgr'), 'sgr');
+        expect(datos.condicion).toBeNull();
+        expect(datos).toMatchObject({ seccion: 'C', sector_id: 3, tipo_id: 9 });
     });
 });
 

@@ -19,18 +19,18 @@ export const TIPOS_REQUISITO = [
     ['condicion', 'Condición'],
 ];
 
+export const CONDICIONADO = 'condicionado';
+
 export const CARACTERES = [
     ['obligatorio', 'Obligatorio'],
     ['opcional', 'Opcional'],
-    ['condicionado', 'Condicionado'],
+    [CONDICIONADO, 'Condicionado'],
 ];
 
 export const ALCANCES = [
     ['general', 'General'],
     ['especifica', 'Específica'],
 ];
-
-const CONDICIONADO = CARACTERES.find(([v]) => v === 'condicionado')[0];
 
 const etiqueta = (lista, valor) => lista.find(([v]) => v === valor)?.[1] ?? '';
 
@@ -95,15 +95,17 @@ export const requisitoVacio = (motor) => ({
 
 export const formularioRequisito = (requisito, motor) => {
     const base = requisitoVacio(motor);
-    const valor = (campo) => requisito[campo] ?? base[campo];
+    // El respaldo solo cubre un campo que no viene (undefined); un null del servidor es un dato real.
+    const texto = (campo) => (requisito[campo] === undefined ? base[campo] : requisito[campo]) ?? '';
+    const conRespaldo = (campo) => requisito[campo] ?? base[campo];
     return {
         ...base,
-        ...Object.fromEntries(CAMPOS_TEXTO.map((c) => [c, valor(c)])),
-        caracter: valor('caracter'),
-        requiere_aprobacion_no_aplica: Boolean(valor('requiere_aprobacion_no_aplica')),
-        activo: valor('activo'),
-        sector_id: valor('sector_id'),
-        tipo_id: valor('tipo_id'),
+        ...Object.fromEntries(CAMPOS_TEXTO.map((c) => [c, texto(c)])),
+        caracter: conRespaldo('caracter'),
+        requiere_aprobacion_no_aplica: Boolean(conRespaldo('requiere_aprobacion_no_aplica')),
+        activo: conRespaldo('activo'),
+        sector_id: texto('sector_id'),
+        tipo_id: texto('tipo_id'),
     };
 };
 
