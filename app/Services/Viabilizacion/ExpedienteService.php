@@ -14,6 +14,7 @@ use App\Models\RequisitoComponente;
 use App\Models\RequisitoSector;
 use App\Models\RequisitoTipo;
 use App\Models\RequisitoTipologia;
+use App\Models\Responsable;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -158,7 +159,7 @@ final class ExpedienteService
         });
     }
 
-    /** @param array{cumplido?: bool, observacion?: ?string} $datos */
+    /** @param array{cumplido?: bool, observacion?: ?string, responsable_id?: ?int} $datos */
     public function marcar(ProyectoExpediente $expediente, ProyectoRequisito $fila, array $datos, ?User $usuario): ProyectoRequisito
     {
         $this->exigirEditable($expediente, $fila);
@@ -178,6 +179,9 @@ final class ExpedienteService
             $fila->observacion = $datos['observacion'] !== null && trim($datos['observacion']) !== ''
                 ? trim($datos['observacion'])
                 : null;
+        }
+        if (array_key_exists('responsable_id', $datos)) {
+            $fila->responsable_id = $this->responsableValido($datos['responsable_id'], $fila);
         }
 
         DB::transaction(function () use ($expediente, $fila, $usuario) {
@@ -640,9 +644,36 @@ final class ExpedienteService
                 $usuario
             );
         }
+        if ($fila->isDirty('responsable_id')) {
+            // Se guarda el nombre: el historial debe leerse aunque el responsable se elimine.
+            $nombre = fn ($id) => $id ? Responsable::whereKey($id)->value('nombre') : null;
+            $this->historial->registrarFila(
+                $fila,
+                'responsable_cambiado',
+                ['responsable' => $nombre($fila->getOriginal('responsable_id'))],
+                ['responsable' => $nombre($fila->responsable_id)],
+                $usuario
+            );
+        }
     }
 
-    private function exigirEditable(ProyectoExpediente $expediente, ProyectoRequisito $fila): void
+    /** Acepta un responsable inactivo solo si la fila ya lo tenía. */
+    private function responsableValido(mixed $id, ProyectoRequisito $fila): ?int
+    {
+        if ($id === null) {
+            return null;
+        }
+
+        $responsable = Responsable::find((int) $id)
+            ?? throw new ReglaNegocioException('El responsable no existe.');
+        if (! $responsable->activo && $responsable->id !== $fila->responsable_id) {
+            throw new ReglaNegocioException("El responsable \"{$responsable->nombre}\" está inactivo.");
+        }
+
+        return $responsable->id;
+    }
+
+    public function exigirEditable(ProyectoExpediente $expediente, ProyectoRequisito $fila): void
     {
         $this->exigirBorrador($expediente);
         $this->exigirConfigurado($expediente);

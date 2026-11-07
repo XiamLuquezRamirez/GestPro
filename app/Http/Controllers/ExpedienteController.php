@@ -99,6 +99,7 @@ class ExpedienteController extends Controller
         $datos = $request->validate([
             'cumplido' => ['sometimes', 'boolean'],
             'observacion' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'responsable_id' => ['sometimes', 'nullable', 'integer'],
         ]);
         $fila = $this->servicio->marcar($expediente, $requisito, $datos, $request->user());
 

@@ -8,6 +8,7 @@
 
 use App\Http\Controllers\CatalogoRequisitosController;
 use App\Http\Controllers\ExpedienteController;
+use App\Http\Controllers\NoAplicaRequisitoController;
 use Illuminate\Support\Facades\Route;
 
 // Lectura: cualquier usuario autenticado.
@@ -46,6 +47,15 @@ Route::middleware('can:editar-datos')->group(function () {
             ->name('expedientes.requisitos.soporte.subir');
         Route::delete('/expedientes/{expediente}/requisitos/{requisito}/soporte', [ExpedienteController::class, 'eliminarSoporte'])
             ->name('expedientes.requisitos.soporte.eliminar');
+
+        Route::post('/expedientes/{expediente}/requisitos/{requisito}/no-aplica', [NoAplicaRequisitoController::class, 'marcar'])
+            ->name('expedientes.requisitos.no-aplica.marcar');
+        Route::delete('/expedientes/{expediente}/requisitos/{requisito}/no-aplica', [NoAplicaRequisitoController::class, 'retirar'])
+            ->name('expedientes.requisitos.no-aplica.retirar');
+        Route::post('/expedientes/{expediente}/requisitos/{requisito}/no-aplica/aprobar', [NoAplicaRequisitoController::class, 'aprobar'])
+            ->name('expedientes.requisitos.no-aplica.aprobar');
+        Route::post('/expedientes/{expediente}/requisitos/{requisito}/no-aplica/rechazar', [NoAplicaRequisitoController::class, 'rechazar'])
+            ->name('expedientes.requisitos.no-aplica.rechazar');
     });
 });
 
