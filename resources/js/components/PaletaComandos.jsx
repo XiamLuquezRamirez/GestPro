@@ -4,10 +4,10 @@ import axios from 'axios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faArrowTurnDown, faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
 import { ICONOS } from '../utils/iconosNavegacion';
-import { DESTINOS, buscarEnPaleta } from '../utils/navegacion';
+import { buscarEnPaleta } from '../utils/navegacion';
 
 /** Ctrl+K: escribir a dónde se quiere ir, sea una sección o un proyecto. */
-const PaletaComandos = ({ onCerrar }) => {
+const PaletaComandos = ({ destinos, onCerrar }) => {
     const navigate = useNavigate();
     const [consulta, setConsulta] = useState('');
     const [proyectos, setProyectos] = useState([]);
@@ -21,7 +21,7 @@ const PaletaComandos = ({ onCerrar }) => {
         return () => { vigente = false; };
     }, []);
 
-    const resultados = useMemo(() => buscarEnPaleta(consulta, DESTINOS, proyectos), [consulta, proyectos]);
+    const resultados = useMemo(() => buscarEnPaleta(consulta, destinos, proyectos), [consulta, destinos, proyectos]);
 
     useEffect(() => setIndice(0), [consulta]);
 

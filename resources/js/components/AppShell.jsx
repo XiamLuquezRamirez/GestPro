@@ -7,7 +7,7 @@ import {
 import PaletaComandos from './PaletaComandos';
 import { getImageUrl } from '../utils/assetHelper';
 import { ICONOS } from '../utils/iconosNavegacion';
-import { DESTINOS, GRUPO, destinoActivo, tituloDeRuta } from '../utils/navegacion';
+import { DESTINOS, GRUPO, destinoActivo, destinosPara, tituloDeRuta } from '../utils/navegacion';
 import '../../css/Shell.css';
 
 const GRUPOS = [GRUPO.TRABAJO, GRUPO.ANALISIS, GRUPO.CATALOGOS];
@@ -43,10 +43,10 @@ const Enlace = ({ destino, activo, plegado, onClick }) => (
     </Link>
 );
 
-const ListaDestinos = ({ activo, plegado, onNavegar }) => GRUPOS.map((grupo) => (
+const ListaDestinos = ({ destinos, activo, plegado, onNavegar }) => GRUPOS.map((grupo) => (
     <div className="gp-nav-grupo" key={grupo}>
         <div className="gp-nav-titulo gp-etiqueta">{grupo}</div>
-        {DESTINOS.filter((d) => d.grupo === grupo).map((destino) => (
+        {destinos.filter((d) => d.grupo === grupo).map((destino) => (
             <Enlace key={destino.id} destino={destino} activo={activo === destino.id} plegado={plegado} onClick={onNavegar} />
         ))}
     </div>
@@ -87,6 +87,7 @@ const AppShell = ({ user, onLogout }) => {
     };
 
     const enBarraInferior = IDS_BARRA_INFERIOR.includes(activo);
+    const destinos = destinosPara(user);
 
     return (
         <div className={`gp-app${plegado ? ' riel-plegado' : ''}`}>
@@ -107,7 +108,7 @@ const AppShell = ({ user, onLogout }) => {
                 </button>
 
                 <nav className="gp-nav">
-                    <ListaDestinos activo={activo} plegado={plegado} />
+                    <ListaDestinos destinos={destinos} activo={activo} plegado={plegado} />
                 </nav>
 
                 <div className="gp-riel-pie">
@@ -179,7 +180,7 @@ const AppShell = ({ user, onLogout }) => {
                                 <FontAwesomeIcon icon={faXmark} />
                             </button>
                         </div>
-                        <ListaDestinos activo={activo} onNavegar={() => setMasAbierto(false)} />
+                        <ListaDestinos destinos={destinos} activo={activo} onNavegar={() => setMasAbierto(false)} />
                         <div className="gp-hoja-pie">
                             <Link to="/sala" className="gp-boton"><FontAwesomeIcon icon={faTv} /> Modo sala</Link>
                             <button type="button" className="gp-boton" onClick={onLogout}><FontAwesomeIcon icon={faRightFromBracket} /> Cerrar sesión</button>
@@ -188,7 +189,7 @@ const AppShell = ({ user, onLogout }) => {
                 </div>
             )}
 
-            {paletaAbierta && <PaletaComandos onCerrar={() => setPaletaAbierta(false)} />}
+            {paletaAbierta && <PaletaComandos destinos={destinos} onCerrar={() => setPaletaAbierta(false)} />}
         </div>
     );
 };

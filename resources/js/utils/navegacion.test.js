@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DESTINOS, buscarEnPaleta, destinoActivo, seccionDesdeSlug, tituloDeRuta } from './navegacion';
+import { DESTINOS, buscarEnPaleta, destinoActivo, destinosPara, seccionDesdeSlug, tituloDeRuta } from './navegacion';
 
 const proyectos = [
     { id: 1, nombre: 'Construcción sede educativa', descripcion_municipio: 'MEDELLÍN' },
@@ -31,6 +31,23 @@ describe('DESTINOS', () => {
     it('no repite identificadores ni rutas', () => {
         expect(new Set(DESTINOS.map((d) => d.id)).size).toBe(DESTINOS.length);
         expect(new Set(DESTINOS.map((d) => d.ruta)).size).toBe(DESTINOS.length);
+    });
+});
+
+describe('destinosPara', () => {
+    it('las plantillas de checklist solo se muestran a un Administrador', () => {
+        const ids = (usuario) => destinosPara(usuario).map((d) => d.id);
+
+        expect(ids({ rol: 'Administrador' })).toContain('plantillas');
+        expect(ids({ rol: 'Gestor' })).not.toContain('plantillas');
+        expect(ids(null)).not.toContain('plantillas');
+        expect(ids({ rol: 'Gestor' })).toContain('tablero');
+    });
+
+    it('la ruta de plantillas y su detalle marcan el destino', () => {
+        expect(destinoActivo('/plantillas', '')).toBe('plantillas');
+        expect(destinoActivo('/plantillas/7', '')).toBe('plantillas');
+        expect(tituloDeRuta('/plantillas/7', '')).toBe('Plantillas de checklist');
     });
 });
 

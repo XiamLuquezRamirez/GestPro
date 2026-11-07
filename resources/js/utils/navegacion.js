@@ -29,7 +29,11 @@ export const DESTINOS = [
     { id: 'contratos', titulo: 'Contratos', ruta: '/dashboard?vista=contratos', grupo: GRUPO.ANALISIS, icono: 'faFileSignature', palabras: 'avance fisico financiero desfase' },
     { id: 'estadisticas', titulo: 'Estadísticas', ruta: '/dashboard?vista=estadisticas', grupo: GRUPO.ANALISIS, icono: 'faChartColumn', palabras: 'graficas filtros cadena presupuestal' },
     ...SECCIONES_PARAMETROS.filter((s) => s.grupo === GRUPO.CATALOGOS).map((s) => ({ ...s, id: s.slug, ruta: `/parametros/${s.slug}` })),
+    { id: 'plantillas', titulo: 'Plantillas de checklist', ruta: '/plantillas', grupo: GRUPO.CATALOGOS, icono: 'faListCheck', palabras: 'requisitos checklist fuentes sectores versiones catalogo', soloRol: 'Administrador' },
 ];
+
+/** Los destinos que puede abrir el usuario: algunos son solo de un rol. */
+export const destinosPara = (usuario) => DESTINOS.filter((d) => !d.soloRol || d.soloRol === usuario?.rol);
 
 const MAX_PROYECTOS = 8;
 
@@ -70,6 +74,7 @@ export const buscarEnPaleta = (consulta, destinos, proyectos) => {
 
 export const destinoActivo = (pathname, search) => {
     if (pathname.startsWith('/viabilizacion/')) return 'expedientes';
+    if (pathname === '/plantillas' || pathname.startsWith('/plantillas/')) return 'plantillas';
     if (pathname.startsWith('/parametros/')) return pathname.split('/')[2];
     if (pathname.startsWith('/dashboard')) {
         const vista = new URLSearchParams(search).get('vista');

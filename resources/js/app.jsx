@@ -6,6 +6,8 @@ import AppShell from './components/AppShell';
 import Dashboard from './components/Dashboard';
 import Parametros from './components/Parametros';
 import ExpedienteViabilizacion from './components/ExpedienteViabilizacion';
+import PlantillasChecklist from './components/PlantillasChecklist';
+import PlantillaDetalle from './components/PlantillaDetalle';
 import axios from './axios';
 import '../css/app.css';
 
@@ -66,6 +68,9 @@ function App() {
           <Route path="/parametros/:seccion" element={<Parametros />} />
           {/* No usar /expedientes/...: bajo /GestPro chocaría con la API del mismo nombre. */}
           <Route path="/viabilizacion/:proyectoId" element={<ExpedienteViabilizacion user={user} />} />
+          {/* Solo Administrador: el backend también lo exige. */}
+          <Route path="/plantillas" element={user?.rol === 'Administrador' ? <PlantillasChecklist /> : <Navigate to={INICIO} replace />} />
+          <Route path="/plantillas/:plantillaId" element={user?.rol === 'Administrador' ? <PlantillaDetalle /> : <Navigate to={INICIO} replace />} />
         </Route>
 
         <Route path="*" element={<Navigate to={user ? INICIO : '/'} replace />} />
