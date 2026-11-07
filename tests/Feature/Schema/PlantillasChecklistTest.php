@@ -382,4 +382,15 @@ class PlantillasChecklistTest extends TestCase
         DB::table('proyectos_expedientes')->where('id', $expediente)->delete();
         $this->assertDatabaseCount('expediente_plantillas', 0);
     }
+
+    public function test_el_rollback_de_plantillas_se_detiene_si_la_sgr_pierde_su_fuente(): void
+    {
+        $this->migracionExpedientes()->down();
+        $this->migracionVersiones()->down();
+        DB::table('plantilla_fuentes')->delete();
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('la plantilla SGR fue editada (fuentes)');
+        $this->migracionPlantillas()->down();
+    }
 }
