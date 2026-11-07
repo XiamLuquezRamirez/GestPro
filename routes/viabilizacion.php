@@ -9,6 +9,7 @@
 use App\Http\Controllers\CatalogoRequisitosController;
 use App\Http\Controllers\ExpedienteController;
 use App\Http\Controllers\NoAplicaRequisitoController;
+use App\Http\Controllers\PlantillaChecklistController;
 use Illuminate\Support\Facades\Route;
 
 // Lectura: cualquier usuario autenticado.
@@ -57,6 +58,17 @@ Route::middleware('can:editar-datos')->group(function () {
         Route::post('/expedientes/{expediente}/requisitos/{requisito}/no-aplica/rechazar', [NoAplicaRequisitoController::class, 'rechazar'])
             ->name('expedientes.requisitos.no-aplica.rechazar');
     });
+});
+
+// Plantillas de checklist: solo Administrador. Sus requisitos y versiones se
+// administran con las rutas de /catalogo-requisitos/versiones/{version}.
+Route::middleware('can:gestionar-catalogos')->prefix('plantillas')->name('plantillas.')->group(function () {
+    Route::get('/', [PlantillaChecklistController::class, 'index'])->name('index');
+    Route::post('/', [PlantillaChecklistController::class, 'store'])->name('store');
+    Route::get('/{plantilla}', [PlantillaChecklistController::class, 'show'])->name('show');
+    Route::put('/{plantilla}', [PlantillaChecklistController::class, 'update'])->name('update');
+    Route::post('/{plantilla}/activar', [PlantillaChecklistController::class, 'activar'])->name('activar');
+    Route::post('/{plantilla}/versiones', [PlantillaChecklistController::class, 'crearVersion'])->name('versiones.store');
 });
 
 // Administración del catálogo maestro: solo Administrador.

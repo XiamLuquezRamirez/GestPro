@@ -1,0 +1,211 @@
+<?php
+
+namespace App\Services\Viabilizacion;
+
+use App\Exceptions\ReglaNegocioException;
+use App\Models\CatalogoVersion;
+use App\Models\FuenteFinanciacion;
+use App\Models\PlantillaChecklist;
+use App\Models\Sector;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Administración de plantillas de checklist (rol Administrador): datos generales,
+ * fuentes y sectores a los que aplican, y activación. Los requisitos y las versiones
+ * se administran con CatalogoService.
+ */
+final class PlantillaService
+{
+    public const ALCANCES = ['general', 'especifica'];
+
+    public function __construct(private readonly CatalogoService $catalogo)
+    {
+    }
+
+    public function listar(?string $buscar): array
+    {
+        $buscar = trim((string) $buscar);
+
+        return PlantillaChecklist::query()
+            ->with(['fuentes:id,nombre', 'sectores:id,nombre', 'versiones' => fn ($q) => $q->withCount('requisitos')])
+            ->when($buscar !== '', function ($q) use ($buscar) {
+                $patron = '%' . addcslashes($buscar, '%_\\') . '%';
+                $q->where(fn ($w) => $w->where('nombre', 'like', $patron)->orWhere('descripcion', 'like', $patron));
+            })
+            ->orderByDesc('activo')
+            ->orderBy('nombre')
+            ->get()
+            ->map(fn (PlantillaChecklist $p) => $this->resumen($p))
+            ->all();
+    }
+
+    public function presentar(PlantillaChecklist $plantilla): array
+    {
+        $plantilla->load([
+            'fuentes:id,nombre', 'sectores:id,nombre',
+            'versiones' => fn ($q) => $q->withCount(['requisitos', 'expedientes'])->with('usuarioPublico:id,name')->orderByDesc('numero'),
+        ]);
+
+        return [
+            ...$this->resumen($plantilla),
+            'versiones' => $plantilla->versiones->map(fn (CatalogoVersion $v) => [
+                'id' => $v->id,
+                'numero' => $v->numero,
+                'estado' => $v->estado,
+                'vigente' => $v->vigente,
+                'descripcion' => $v->descripcion,
+                'fecha_publicacion' => $v->fecha_publicacion?->toIso8601String(),
+                'publicada_por' => $v->usuarioPublico?->name,
+                'requisitos' => $v->requisitos_count,
+                'expedientes' => $v->expedientes_count,
+            ])->values()->all(),
+        ];
+    }
+
+    /** Las plantillas nuevas usan el motor simple y nacen con su primera versión en borrador. */
+    public function crear(array $datos, ?User $usuario): PlantillaChecklist
+    {
+        $asociaciones = $this->validar($datos, null);
+
+        return DB::transaction(function () use ($datos, $asociaciones, $usuario) {
+            $plantilla = PlantillaChecklist::create([
+                ...$this->datosGenerales($datos),
+                'motor' => PlantillaChecklist::MOTOR_SIMPLE,
+                'activo' => true,
+                'usuario_creo_id' => $usuario?->id,
+            ]);
+            $this->asociar($plantilla, $asociaciones);
+            $this->catalogo->crearBorrador('Versión inicial', $plantilla);
+
+            return $plantilla;
+        });
+    }
+
+    public function actualizar(PlantillaChecklist $plantilla, array $datos): PlantillaChecklist
+    {
+        $asociaciones = $this->validar($datos, $plantilla);
+
+        return DB::transaction(function () use ($plantilla, $datos, $asociaciones) {
+            $plantilla->update($this->datosGenerales($datos));
+            $this->asociar($plantilla, $asociaciones);
+
+            return $plantilla;
+        });
+    }
+
+    public function activar(PlantillaChecklist $plantilla, bool $activo): PlantillaChecklist
+    {
+        if (! $activo && $plantilla->clave === PlantillaChecklist::CLAVE_SGR) {
+            throw new ReglaNegocioException('La plantilla SGR no se puede desactivar: la usan los expedientes de regalías.');
+        }
+        $plantilla->update(['activo' => $activo]);
+
+        return $plantilla;
+    }
+
+    // ------------------------------------------------------------- internos
+
+    private function resumen(PlantillaChecklist $plantilla): array
+    {
+        $vigente = $plantilla->versiones->firstWhere('vigente', true);
+        $borrador = $plantilla->versiones->firstWhere('estado', CatalogoVersion::BORRADOR);
+        $version = fn (?CatalogoVersion $v) => $v ? ['id' => $v->id, 'numero' => $v->numero, 'requisitos' => $v->requisitos_count] : null;
+
+        return [
+            'id' => $plantilla->id,
+            'clave' => $plantilla->clave,
+            'es_sgr' => $plantilla->clave === PlantillaChecklist::CLAVE_SGR,
+            'nombre' => $plantilla->nombre,
+            'descripcion' => $plantilla->descripcion,
+            'alcance' => $plantilla->alcance,
+            'motor' => $plantilla->motor,
+            'activo' => $plantilla->activo,
+            'todas_fuentes' => $plantilla->todas_fuentes,
+            'todos_sectores' => $plantilla->todos_sectores,
+            'fuentes' => $plantilla->fuentes->map(fn ($f) => ['id' => $f->id, 'nombre' => $f->nombre])->values()->all(),
+            'sectores' => $plantilla->sectores->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre])->values()->all(),
+            'vigente' => $version($vigente),
+            'borrador' => $version($borrador),
+        ];
+    }
+
+    private function datosGenerales(array $datos): array
+    {
+        return [
+            'nombre' => trim($datos['nombre']),
+            'descripcion' => trim((string) ($datos['descripcion'] ?? '')) ?: null,
+            'alcance' => $datos['alcance'] ?? null,
+            'todas_fuentes' => (bool) ($datos['todas_fuentes'] ?? false),
+            'todos_sectores' => (bool) ($datos['todos_sectores'] ?? false),
+        ];
+    }
+
+    /** @return array{fuente_ids: list<int>, sector_ids: list<int>} */
+    private function validar(array $datos, ?PlantillaChecklist $plantilla): array
+    {
+        $errores = [];
+
+        $nombre = trim((string) ($datos['nombre'] ?? ''));
+        $repetido = PlantillaChecklist::query()
+            ->whereRaw('LOWER(nombre) = ?', [mb_strtolower($nombre)])
+            ->when($plantilla, fn ($q) => $q->whereKeyNot($plantilla->id))
+            ->exists();
+        if ($repetido) {
+            $errores[] = "Ya existe una plantilla llamada \"{$nombre}\".";
+        }
+
+        $todasFuentes = (bool) ($datos['todas_fuentes'] ?? false);
+        $todosSectores = (bool) ($datos['todos_sectores'] ?? false);
+        $fuenteIds = $todasFuentes ? [] : $this->idsValidos(FuenteFinanciacion::class, $datos['fuente_ids'] ?? [], $plantilla?->fuentes()->pluck('fuentes_financiacion.id')->all() ?? [], ['La fuente', 'inactiva'], $errores);
+        $sectorIds = $todosSectores ? [] : $this->idsValidos(Sector::class, $datos['sector_ids'] ?? [], $plantilla?->sectores()->pluck('sectores.id')->all() ?? [], ['El sector', 'inactivo'], $errores);
+
+        if (! $todasFuentes && ! $fuenteIds) {
+            $errores[] = 'Elige al menos una fuente de financiación o marca "Todas las fuentes".';
+        }
+        if (! $todosSectores && ! $sectorIds) {
+            $errores[] = 'Elige al menos un sector o marca "Todos los sectores".';
+        }
+
+        // La plantilla SGR debe seguir ofreciéndose a los proyectos de regalías.
+        if ($plantilla?->clave === PlantillaChecklist::CLAVE_SGR && ! $todasFuentes) {
+            $sgr = FuenteFinanciacion::where('clave', FuenteFinanciacion::SGR)->value('id');
+            if (! in_array($sgr, $fuenteIds, true)) {
+                $errores[] = 'La plantilla SGR debe seguir asociada a la fuente SGR.';
+            }
+        }
+
+        if ($errores) {
+            throw new ReglaNegocioException('La plantilla no es válida.', $errores);
+        }
+
+        return ['fuente_ids' => $fuenteIds, 'sector_ids' => $sectorIds];
+    }
+
+    /** Ids que existen; uno inactivo solo si la plantilla ya lo tenía. */
+    /** @param array{0: string, 1: string} $etiqueta p. ej. ['La fuente', 'inactiva'] */
+    private function idsValidos(string $modelo, array $ids, array $previos, array $etiqueta, array &$errores): array
+    {
+        [$nombre, $inactivo] = $etiqueta;
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        $previos = array_map('intval', $previos);
+        $encontrados = $modelo::query()->whereIn('id', $ids)->get()->keyBy('id');
+
+        foreach ($ids as $id) {
+            $item = $encontrados->get($id);
+            if (! $item) {
+                $errores[] = "{$nombre} con id {$id} no existe.";
+            } elseif (! $item->activo && ! in_array($id, $previos, true)) {
+                $errores[] = "{$nombre} \"{$item->nombre}\" está {$inactivo}.";
+            }
+        }
+
+        return $ids;
+    }
+
+    private function asociar(PlantillaChecklist $plantilla, array $asociaciones): void
+    {
+        $plantilla->fuentes()->sync($asociaciones['fuente_ids']);
+        $plantilla->sectores()->sync($asociaciones['sector_ids']);
+    }
+}

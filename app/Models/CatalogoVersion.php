@@ -27,6 +27,11 @@ class CatalogoVersion extends Model
         return $this->belongsTo(PlantillaChecklist::class, 'plantilla_id');
     }
 
+    public function usuarioPublico(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'usuario_publico_id');
+    }
+
     public function requisitos(): HasMany
     {
         return $this->hasMany(RequisitoCatalogo::class, 'catalogo_version_id');
