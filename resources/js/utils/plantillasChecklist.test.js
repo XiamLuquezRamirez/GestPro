@@ -271,6 +271,17 @@ describe('porRedactar, mensajeApi y htmlErrores', () => {
         expect(porRedactar({ caracter: 'condicionado', condicion_descripcion: 'Si hay predios' })).toBe(false);
         expect(porRedactar({ caracter: 'obligatorio', condicion_descripcion: 'Condición original: x' })).toBe(false);
         expect(porRedactar({ caracter: 'condicionado', condicion_descripcion: null })).toBe(false);
+    });
+
+    it('reconoce la marca sin importar mayúsculas ni tildes, como el servidor', () => {
+        const cond = (texto) => porRedactar({ caracter: 'condicionado', condicion_descripcion: texto });
+        expect(cond('condicion original: x')).toBe(true);
+        expect(cond('CONDICIÓN ORIGINAL: x')).toBe(true);
+        expect(cond('(condición original: x)')).toBe(true);
+        expect(cond('Condición original x')).toBe(false);
+    });
+
+    it('sigue exigiendo condicionado y tolera valores vacíos', () => {
         expect(porRedactar(null)).toBe(false);
     });
 

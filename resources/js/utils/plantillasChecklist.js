@@ -244,10 +244,14 @@ export const filtrarPlantillas = (plantillas, { soloActivas }) =>
 /** Texto que deja el duplicado del SGR cuando una condición del evaluador no se puede traducir. */
 export const MARCA_CONDICION_ORIGINAL = 'Condición original:';
 
+/** Minúsculas y sin tildes, como Str::lower(Str::ascii()) del servidor. */
+const normalizar = (texto) => String(texto ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const MARCA_NORMALIZADA = normalizar(MARCA_CONDICION_ORIGINAL);
+
 /** Condicionado cuya descripción aún es la condición del evaluador SGR: falta redactarla en palabras. */
 export const porRedactar = (requisito) =>
     requisito?.caracter === CONDICIONADO
-    && String(requisito.condicion_descripcion ?? '').includes(MARCA_CONDICION_ORIGINAL);
+    && normalizar(requisito.condicion_descripcion).includes(MARCA_NORMALIZADA);
 
 /** Mensaje en español de un error de la API. Reglas de negocio y validación (422) van a mensajeError. */
 export const mensajeApi = (error) => {
