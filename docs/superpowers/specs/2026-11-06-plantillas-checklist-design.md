@@ -357,8 +357,10 @@ Reglas para este cambio:
 
 - **Etapa 3:** `CatalogoService::crearBorrador` copia una lista fija de columnas. Hay que agregar las de la migración 7, o cada borrador las perderá.
 - **Etapa 4:** `crearBorrador` exige una versión vigente que copiar, así que hace falta un camino para la primera versión de una plantilla nueva. También hay que decidir qué hace el rollback con lo editado en la plantilla SGR, porque hoy `down()` lo borraría.
+- **Etapa 4 (catálogo SGR):** `guardarRequisito` escribe `codigo_comun` y la aprobación del "no aplica" solo al crear. Si se edita la `clave` de un requisito SGR, hay que decidir si `codigo_comun` la sigue; hoy conserva la anterior, y eso además detiene el rollback de la migración 7. Cuando la aprobación se edite por requisito, el rollback de la migración 7 debe volver a revisarla.
 - **Etapa 5:** la base no impide dos `es_principal` por expediente ni dos versiones de una misma plantilla, así que el servicio debe validarlo. La migración 10 debe fallar si algún expediente tiene más de una plantilla: al revertir, `expediente_plantillas` se reconstruye solo con la versión de `catalogo_version_id`, y las complementarias se perderían sin aviso.
 - **Etapa 5:** al retirar o rechazar un "no aplica", el requisito vuelve a `aplica`. En un requisito que nació `por_definir` (motor `simple`) debería volver a `por_definir`: hay que guardar el estado anterior.
+- **Etapa 5 (requisitos propios y orígenes):** `NoAplicaRequisito::marcar` y `ExpedienteService::presentarFila` suponen que la fila tiene requisito de catálogo; con `requisito_catalogo_id = null` fallarían. Con varias plantillas, la exigencia de aprobación del "no aplica" debe salir de los orígenes (si alguno la exige), no de una sola fila del catálogo. El estado previo a un "no aplica" queda en `antes.estado` del evento `no_aplica_marcado`.
 - **Etapa 6:** antes de retirar `catalogo_version_id`, la migración 11 debe comprobar que todo expediente tiene su fila en `expediente_plantillas`. Una rama anterior que cree expedientes sobre la base ya migrada no la escribiría.
 
 ---
