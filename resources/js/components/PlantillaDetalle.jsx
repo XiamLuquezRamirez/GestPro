@@ -1,15 +1,17 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import Swal from 'sweetalert2';
 import { faArrowLeft, faFloppyDisk } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import Swal from 'sweetalert2';
 import axios from '../axios';
-import { alternarId, mensajeError } from '../utils/expedienteChecklist';
-import { ALCANCES, datosPlantilla, formularioPlantilla, opcionesCatalogo, resumenVersiones, versionDeTrabajo } from '../utils/plantillasChecklist';
+import { alternarId } from '../utils/expedienteChecklist';
+import { avisarError } from '../utils/avisosPlantillas';
+import { ALCANCES, datosPlantilla, formularioPlantilla, mensajeApi, opcionesCatalogo, resumenVersiones, versionDeTrabajo } from '../utils/plantillasChecklist';
 import PlantillaRequisitos from './PlantillaRequisitos';
 import PlantillaVistaPrevia from './PlantillaVistaPrevia';
 import PlantillaVersiones from './PlantillaVersiones';
 import { RUTA_PLANTILLAS } from '../utils/navegacion';
+import useOcupado from './useOcupado';
 import '../../css/Plantillas.css';
 
 const PESTANAS = [
@@ -19,20 +21,21 @@ const PESTANAS = [
     ['versiones', 'Versiones'],
 ];
 
-const avisarError = (titulo, error) => Swal.fire({ icon: 'error', title: titulo, text: mensajeError(error) });
+const NOTA_SGR = 'La plantilla SGR aplica a todos los sectores y siempre incluye la fuente SGR.';
 
-const ListaChequeo = ({ titulo, todas, textoTodas, onTodas, items, elegidos, onAlternar }) => (
+const ListaChequeo = ({ titulo, todas, textoTodas, onTodas, bloquearTodas, items, elegidos, onAlternar, sufijoInactivo, fijos = [], nota }) => (
     <fieldset className="pl-asociacion">
         <legend>{titulo}</legend>
         <label className="pl-check">
-            <input type="checkbox" checked={todas} onChange={(e) => onTodas(e.target.checked)} /> {textoTodas}
+            <input type="checkbox" checked={todas} disabled={bloquearTodas} onChange={(e) => onTodas(e.target.checked)} /> {textoTodas}
         </label>
+        {nota && <p className="pl-ayuda">{nota}</p>}
         {!todas && (
             <div className="pl-opciones">
                 {opcionesCatalogo(items, elegidos).map((item) => (
                     <label key={item.id} className="pl-check">
-                        <input type="checkbox" checked={elegidos.includes(item.id)} onChange={() => onAlternar(item.id)} />
-                        {item.nombre}{!item.activo && ' (inactiva)'}
+                        <input type="checkbox" checked={elegidos.includes(item.id)} disabled={fijos.includes(item.id)} onChange={() => onAlternar(item.id)} />
+                        {item.nombre}{!item.activo && ` (${sufijoInactivo})`}
                     </label>
                 ))}
             </div>
@@ -49,47 +52,80 @@ const PlantillaDetalle = () => {
     const [sectores, setSectores] = useState([]);
     const [requisitos, setRequisitos] = useState([]);
     const [pestana, setPestana] = useState('general');
-    const [guardando, setGuardando] = useState(false);
+    const [guardando, guardarUnaVez] = useOcupado();
     const [error, setError] = useState(null);
+    const peticion = useRef(0);
+    const cargada = useRef(false);
 
     const version = versionDeTrabajo(plantilla);
 
-    const cargar = useCallback(async () => {
+    // `reiniciar` vuelve a llenar el formulario de General; las recargas por requisitos o versiones lo respetan.
+    // Solo vale la última petición, y solo el fallo de la carga inicial reemplaza la página.
+    const cargar = useCallback(async ({ reiniciar = false } = {}) => {
+        const numero = ++peticion.current;
+        const fallo = (e, mensaje) => {
+            if (numero !== peticion.current) return;
+            if (cargada.current) avisarError('No se pudo recargar la plantilla', e);
+            else setError(mensaje);
+        };
+
+        let datos;
         try {
-            const { data } = await axios.get(`/plantillas/${plantillaId}`);
-            setPlantilla(data);
-            setFormulario(formularioPlantilla(data));
-            const trabajo = versionDeTrabajo(data);
-            setRequisitos(trabajo ? (await axios.get(`/catalogo-requisitos/versiones/${trabajo.id}/requisitos`)).data : []);
+            datos = (await axios.get(`/plantillas/${plantillaId}`)).data;
         } catch (e) {
-            setError(e?.response?.status === 404 ? 'La plantilla no existe.' : mensajeError(e));
+            fallo(e, e?.response?.status === 404 ? 'La plantilla no existe.' : mensajeApi(e));
+            return;
         }
+
+        let lista = [];
+        const trabajo = versionDeTrabajo(datos);
+        try {
+            if (trabajo) lista = (await axios.get(`/catalogo-requisitos/versiones/${trabajo.id}/requisitos`)).data;
+        } catch (e) {
+            fallo(e, mensajeApi(e));
+            return;
+        }
+
+        if (numero !== peticion.current) return;
+        cargada.current = true;
+        setPlantilla(datos);
+        setRequisitos(lista);
+        if (reiniciar) setFormulario(formularioPlantilla(datos));
+        setError(null);
     }, [plantillaId]);
 
-    useEffect(() => { cargar(); }, [cargar]);
+    useEffect(() => {
+        cargada.current = false;
+        setPlantilla(null);
+        setFormulario(null);
+        setRequisitos([]);
+        setError(null);
+        setPestana('general');
+        cargar({ reiniciar: true });
+    }, [cargar]);
 
     useEffect(() => {
         let vigente = true;
         Promise.all([axios.get('/fuentesFinanciacion'), axios.get('/sectores')])
             .then(([f, s]) => { if (vigente) { setFuentes(f.data); setSectores(s.data); } })
-            .catch(() => {});
+            .catch((e) => { if (vigente) avisarError('No se pudieron cargar las fuentes y los sectores', e); });
         return () => { vigente = false; };
     }, []);
 
     const cambiar = (campo, valor) => setFormulario((f) => ({ ...f, [campo]: valor }));
 
-    const guardar = async (e) => {
+    const guardar = (e) => {
         e.preventDefault();
-        setGuardando(true);
-        try {
-            await axios.put(`/plantillas/${plantilla.id}`, datosPlantilla(formulario));
-            await cargar();
-            Swal.fire({ icon: 'success', title: 'Plantilla guardada', timer: 1400, showConfirmButton: false });
-        } catch (err) {
-            avisarError('No se pudo guardar la plantilla', err);
-        } finally {
-            setGuardando(false);
-        }
+        return guardarUnaVez(async () => {
+            try {
+                await axios.put(`/plantillas/${plantilla.id}`, datosPlantilla(formulario));
+            } catch (err) {
+                avisarError('No se pudo guardar la plantilla', err);
+                return;
+            }
+            await cargar({ reiniciar: true });
+            Swal.fire({ icon: 'success', titleText: 'Plantilla guardada', timer: 1400, showConfirmButton: false });
+        });
     };
 
     if (error) {
@@ -141,6 +177,8 @@ const PlantillaDetalle = () => {
                     </label>
                     <ListaChequeo
                         titulo="Fuentes de financiación"
+                        sufijoInactivo="inactiva"
+                        fijos={plantilla.es_sgr ? fuentes.filter((f) => f.clave === 'sgr').map((f) => f.id) : []}
                         todas={formulario.todas_fuentes}
                         textoTodas="Todas las fuentes"
                         onTodas={(v) => cambiar('todas_fuentes', v)}
@@ -150,7 +188,10 @@ const PlantillaDetalle = () => {
                     />
                     <ListaChequeo
                         titulo="Sectores"
-                        todas={formulario.todos_sectores}
+                        sufijoInactivo="inactivo"
+                        nota={plantilla.es_sgr ? NOTA_SGR : undefined}
+                        bloquearTodas={plantilla.es_sgr}
+                        todas={plantilla.es_sgr || formulario.todos_sectores}
                         textoTodas="Todos los sectores"
                         onTodas={(v) => cambiar('todos_sectores', v)}
                         items={sectores}
@@ -166,12 +207,12 @@ const PlantillaDetalle = () => {
             )}
 
             {pestana === 'requisitos' && (
-                <PlantillaRequisitos plantilla={plantilla} version={version} requisitos={requisitos} onCambio={cargar} />
+                <PlantillaRequisitos plantilla={plantilla} version={version} requisitos={requisitos} onCambio={() => cargar()} />
             )}
 
             {pestana === 'vista' && <PlantillaVistaPrevia plantilla={plantilla} version={version} requisitos={requisitos} />}
 
-            {pestana === 'versiones' && <PlantillaVersiones plantilla={plantilla} onCambio={cargar} />}
+            {pestana === 'versiones' && <PlantillaVersiones plantilla={plantilla} onCambio={() => cargar()} />}
         </div>
     );
 };

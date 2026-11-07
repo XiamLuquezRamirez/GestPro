@@ -1,7 +1,7 @@
 // Lógica de presentación de la administración de plantillas de checklist.
 // Funciones puras, probadas en plantillasChecklist.test.js. Las reglas las valida el backend.
 
-import { ORDEN_SECCIONES, SECCIONES } from './expedienteChecklist';
+import { ORDEN_SECCIONES, SECCIONES, mensajeError } from './expedienteChecklist';
 
 export const CATEGORIAS = [
     ['tecnico', 'Técnico'],
@@ -201,3 +201,33 @@ export const versionDeTrabajo = (plantilla) => {
 
 export const filtrarPlantillas = (plantillas, { soloActivas }) =>
     plantillas.filter((p) => !soloActivas || p.activo);
+
+/** Texto que deja el duplicado del SGR cuando una condición del evaluador no se puede traducir. */
+export const MARCA_CONDICION_ORIGINAL = 'Condición original:';
+
+/** Condicionado cuya descripción aún es la condición del evaluador SGR: falta redactarla en palabras. */
+export const porRedactar = (requisito) =>
+    requisito?.caracter === CONDICIONADO
+    && String(requisito.condicion_descripcion ?? '').includes(MARCA_CONDICION_ORIGINAL);
+
+/** Mensaje en español de un error de la API. Reglas de negocio y validación (422) van a mensajeError. */
+export const mensajeApi = (error) => {
+    const estado = error?.response?.status;
+    if (estado === 401) return 'Tu sesión expiró. Vuelve a iniciar sesión.';
+    if (estado === 403) return 'No tienes permiso para esta acción.';
+    if (estado === 404) return 'El registro ya no existe. Recarga la página.';
+    if (estado >= 500) return 'Error del servidor. Inténtalo de nuevo.';
+    if (!error?.response && (error?.request || error?.isAxiosError)) return 'No hay conexión con el servidor.';
+    return mensajeError(error);
+};
+
+export const escaparHtml = (texto) => String(texto ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+/** HTML para Swal: el mensaje y, si hay, la lista de errores (escapada y limitada a `maximo`). */
+export const htmlErrores = (mensaje, errores = [], maximo = 20) => {
+    const visibles = errores.slice(0, maximo).map((e) => `<li>${escaparHtml(e)}</li>`);
+    if (errores.length > maximo) visibles.push(`<li>y ${errores.length - maximo} más</li>`);
+    return `<p>${escaparHtml(mensaje)}</p>${visibles.length ? `<ul style="text-align:left">${visibles.join('')}</ul>` : ''}`;
+};

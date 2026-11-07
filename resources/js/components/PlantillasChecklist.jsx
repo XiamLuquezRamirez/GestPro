@@ -1,15 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { faCopy, faPlus, faPowerOff } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
-import { mensajeError } from '../utils/expedienteChecklist';
-import { filtrarPlantillas, resumenVersiones, textoAsociaciones } from '../utils/plantillasChecklist';
+import { avisarError } from '../utils/avisosPlantillas';
+import { filtrarPlantillas, mensajeApi, resumenVersiones, textoAsociaciones } from '../utils/plantillasChecklist';
 import { RUTA_PLANTILLAS } from '../utils/navegacion';
+import useOcupado from './useOcupado';
 import '../../css/Plantillas.css';
-
-const avisarError = (titulo, error) => Swal.fire({ icon: 'error', title: titulo, text: mensajeError(error) });
 
 /** Lista de plantillas de checklist (solo Administrador). */
 const PlantillasChecklist = () => {
@@ -18,30 +17,37 @@ const PlantillasChecklist = () => {
     const [buscar, setBuscar] = useState('');
     const [soloActivas, setSoloActivas] = useState(false);
     const [error, setError] = useState(null);
+    const [ocupado, ejecutar] = useOcupado();
+    const peticion = useRef(0);
+    const primera = useRef(true);
 
+    // Solo vale la respuesta de la última petición: las anteriores llegan desordenadas y se descartan.
     const cargar = useCallback(async (texto) => {
+        const numero = ++peticion.current;
         try {
             const { data } = await axios.get('/plantillas', { params: texto ? { buscar: texto } : {} });
+            if (numero !== peticion.current) return;
             setPlantillas(data);
             setError(null);
         } catch (e) {
-            setError(mensajeError(e));
+            if (numero === peticion.current) setError(mensajeApi(e));
         }
     }, []);
 
-    // La búsqueda espera a que se deje de escribir.
+    // La primera carga es inmediata; la búsqueda espera a que se deje de escribir.
     useEffect(() => {
-        const temporizador = setTimeout(() => cargar(buscar.trim()), 300);
+        const espera = primera.current ? 0 : 300;
+        primera.current = false;
+        const temporizador = setTimeout(() => cargar(buscar.trim()), espera);
         return () => clearTimeout(temporizador);
     }, [buscar, cargar]);
 
     const visibles = useMemo(() => filtrarPlantillas(plantillas ?? [], { soloActivas }), [plantillas, soloActivas]);
 
-    const pedirNombre = (titulo, texto, valor = '') => Swal.fire({
-        title: titulo,
+    const pedirNombre = (titulo, texto) => Swal.fire({
+        titleText: titulo,
         text: texto,
         input: 'text',
-        inputValue: valor,
         inputLabel: 'Nombre',
         inputAttributes: { maxlength: '199' },
         inputValidator: (nombre) => (!nombre?.trim() ? 'Escribe el nombre de la plantilla.' : undefined),
@@ -50,7 +56,7 @@ const PlantillasChecklist = () => {
         cancelButtonText: 'Cancelar',
     });
 
-    const crear = async () => {
+    const crear = () => ejecutar(async () => {
         const { isConfirmed, value } = await pedirNombre(
             'Nueva plantilla',
             'Nace para todas las fuentes y sectores, con su primera versión en borrador. Ajústalo en el detalle.'
@@ -62,17 +68,18 @@ const PlantillasChecklist = () => {
         } catch (e) {
             avisarError('No se pudo crear la plantilla', e);
         }
-    };
+    });
 
-    const duplicar = async (plantilla) => {
+    const duplicar = (plantilla) => ejecutar(async () => {
         const { isConfirmed, value } = await Swal.fire({
-            title: `Duplicar "${plantilla.nombre}"`,
+            titleText: `Duplicar "${plantilla.nombre}"`,
             html: plantilla.motor === 'sgr'
                 ? 'Copia los requisitos activos de la versión vigente en una plantilla nueva, en borrador. Puedes quitar los que no sirvan antes de publicar.'
                 : 'Copia los requisitos activos de la versión vigente en una plantilla nueva, en borrador.',
             input: 'text',
             inputValue: `Copia de ${plantilla.nombre}`,
             inputLabel: 'Nombre de la copia',
+            inputAttributes: { maxlength: '199' },
             inputValidator: (nombre) => (!nombre?.trim() ? 'Escribe el nombre de la plantilla.' : undefined),
             showCancelButton: true,
             confirmButtonText: 'Duplicar',
@@ -83,8 +90,9 @@ const PlantillasChecklist = () => {
         let motor = plantilla.motor;
         if (plantilla.motor === 'sgr') {
             const eleccion = await Swal.fire({
-                title: '¿Cómo deciden si aplica cada requisito?',
-                text: 'Simple: una persona decide los condicionados. SGR: el evaluador automático de regalías.',
+                titleText: '¿Cómo deciden si aplica cada requisito?',
+                html: 'Simple: una persona decide los condicionados. SGR: el evaluador automático de regalías.'
+                    + '<br><br><b>Con Simple</b>, los requisitos condicionados quedarán "por redactar": tendrás que describir en palabras cuándo aplica cada uno antes de publicar.',
                 input: 'select',
                 inputOptions: { simple: 'Simple (recomendado para otras fuentes)', sgr: 'SGR (evaluador automático)' },
                 inputValue: 'simple',
@@ -102,13 +110,13 @@ const PlantillasChecklist = () => {
         } catch (e) {
             avisarError('No se pudo duplicar la plantilla', e);
         }
-    };
+    });
 
-    const alternarActiva = async (plantilla) => {
+    const alternarActiva = (plantilla) => ejecutar(async () => {
         if (plantilla.activo) {
             const { isConfirmed } = await Swal.fire({
                 icon: 'warning',
-                title: `¿Desactivar "${plantilla.nombre}"?`,
+                titleText: `¿Desactivar "${plantilla.nombre}"?`,
                 text: 'No se ofrecerá en expedientes nuevos. Los que ya la usan no cambian.',
                 showCancelButton: true,
                 confirmButtonText: 'Sí, desactivar',
@@ -122,7 +130,7 @@ const PlantillasChecklist = () => {
         } catch (e) {
             avisarError('No se pudo cambiar el estado', e);
         }
-    };
+    });
 
     return (
         <div className="pl-pagina">
@@ -144,7 +152,7 @@ const PlantillasChecklist = () => {
                 <label className="pl-check">
                     <input type="checkbox" checked={soloActivas} onChange={(e) => setSoloActivas(e.target.checked)} /> Solo activas
                 </label>
-                <button type="button" className="gp-boton gp-boton-primario" onClick={crear}>
+                <button type="button" className="gp-boton gp-boton-primario" onClick={crear} disabled={ocupado}>
                     <FontAwesomeIcon icon={faPlus} /> Nueva plantilla
                 </button>
             </div>
@@ -172,12 +180,12 @@ const PlantillasChecklist = () => {
                             </dl>
                         </div>
                         <div className="pl-tarjeta-acciones">
-                            <button type="button" className="gp-boton" onClick={() => duplicar(p)} disabled={!p.vigente}
+                            <button type="button" className="gp-boton" onClick={() => duplicar(p)} disabled={!p.vigente || ocupado}
                                 title={p.vigente ? undefined : 'Publica una versión antes de duplicar'}>
                                 <FontAwesomeIcon icon={faCopy} /> Duplicar
                             </button>
                             {!p.es_sgr && (
-                                <button type="button" className="gp-boton" onClick={() => alternarActiva(p)}>
+                                <button type="button" className="gp-boton" onClick={() => alternarActiva(p)} disabled={ocupado}>
                                     <FontAwesomeIcon icon={faPowerOff} /> {p.activo ? 'Desactivar' : 'Activar'}
                                 </button>
                             )}

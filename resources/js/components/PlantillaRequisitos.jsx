@@ -3,13 +3,13 @@ import Swal from 'sweetalert2';
 import { faArrowDown, faArrowUp, faPen, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
-import { SECCIONES, mensajeError } from '../utils/expedienteChecklist';
+import { ORDEN_SECCIONES, SECCIONES } from '../utils/expedienteChecklist';
+import { avisarError } from '../utils/avisosPlantillas';
 import {
-    CARACTERES, CATEGORIAS, TIPOS_REQUISITO, datosRequisito, etiquetaCaracter, etiquetaCategoria, formularioRequisito,
-    mover, requisitoVacio,
+    CARACTERES, CATEGORIAS, CONDICIONADO, TIPOS_REQUISITO, datosRequisito, etiquetaCaracter, etiquetaCategoria, formularioRequisito,
+    mensajeApi, mover, porRedactar, requisitoVacio,
 } from '../utils/plantillasChecklist';
-
-const avisarError = (titulo, error) => Swal.fire({ icon: 'error', title: titulo, text: mensajeError(error) });
+import useOcupado from './useOcupado';
 
 const Campo = ({ etiqueta, children, ancho }) => (
     <label className={`pl-campo${ancho ? ' pl-campo-ancho' : ''}`}>
@@ -19,7 +19,7 @@ const Campo = ({ etiqueta, children, ancho }) => (
 );
 
 /** Formulario de un requisito. En el motor sgr agrega sección, sector, tipo y condición. */
-const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, onGuardar, onCancelar }) => {
+const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, guardando, onGuardar, onCancelar }) => {
     const [f, setF] = useState(inicial);
     const [revisionCondicion, setRevisionCondicion] = useState(null);
     const cambiar = (campo, valor) => setF((actual) => ({ ...actual, [campo]: valor }));
@@ -32,14 +32,14 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, onGuardar, on
             const { data } = await axios.post('/catalogo-requisitos/validar-condicion', { condicion: f.condicion });
             setRevisionCondicion(data.valida ? 'La condición es válida.' : data.errores.join(' '));
         } catch (e) {
-            setRevisionCondicion(mensajeError(e));
+            setRevisionCondicion(mensajeApi(e));
         }
     };
 
     return (
         <form className="gp-panel pl-formulario pl-formulario-requisito" onSubmit={(e) => { e.preventDefault(); onGuardar(f); }}>
             <Campo etiqueta="Nombre del requisito" ancho>
-                <textarea rows={2} required value={f.texto} onChange={(e) => cambiar('texto', e.target.value)} />
+                <textarea rows={2} required autoFocus value={f.texto} onChange={(e) => cambiar('texto', e.target.value)} />
             </Campo>
             <Campo etiqueta="Descripción" ancho>
                 <textarea rows={2} value={f.descripcion} onChange={(e) => cambiar('descripcion', e.target.value)} />
@@ -47,11 +47,11 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, onGuardar, on
 
             {motor === 'sgr' && (
                 <>
-                    <Campo etiqueta="Clave">{texto('clave', { required: true, maxLength: 40, pattern: '[a-z0-9_]+' })}</Campo>
+                    <Campo etiqueta="Clave">{texto('clave', { required: true, maxLength: 40, pattern: '[a-z0-9_]+', title: 'Solo minúsculas, números y guion bajo.' })}</Campo>
                     <Campo etiqueta="Código">{texto('codigo', { required: true, maxLength: 60 })}</Campo>
                     <Campo etiqueta="Sección">
                         <select value={f.seccion} onChange={(e) => cambiar('seccion', e.target.value)}>
-                            {['A', 'B', 'D', 'C'].map((s) => <option key={s} value={s}>{SECCIONES[s].num} {SECCIONES[s].titulo}</option>)}
+                            {ORDEN_SECCIONES.map((s) => <option key={s} value={s}>{SECCIONES[s].num} {SECCIONES[s].titulo}</option>)}
                         </select>
                     </Campo>
                     <Campo etiqueta="Fuente normativa">
@@ -65,25 +65,32 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, onGuardar, on
                             <Campo etiqueta="Sector SGR">
                                 <select value={f.sector_id} onChange={(e) => setF((a) => ({ ...a, sector_id: e.target.value, tipo_id: '' }))}>
                                     <option value="">Elige un sector</option>
-                                    {(catalogoSgr?.sectores ?? []).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                                    {(catalogoSgr?.sectores ?? []).map((s) => <option key={s.id} value={s.id}>{s.nombre}{!s.activo && ' (inactivo)'}</option>)}
                                 </select>
                             </Campo>
                             <Campo etiqueta="Tipo de proyecto">
                                 <select value={f.tipo_id} onChange={(e) => cambiar('tipo_id', e.target.value)}>
                                     <option value="">Todo el sector</option>
-                                    {(sector?.tipos ?? []).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                                    {(sector?.tipos ?? []).map((t) => <option key={t.id} value={t.id}>{t.nombre}{!t.activo && ' (inactivo)'}</option>)}
                                 </select>
                             </Campo>
                         </>
                     )}
                     <Campo etiqueta="Subtítulo">{texto('subtitulo', { maxLength: 255 })}</Campo>
-                    <Campo etiqueta="Condición (evaluador SGR)">
+                    <div className="pl-campo">
+                        <span id="pl-condicion-etiqueta">Condición (evaluador SGR)</span>
                         <span className="pl-en-linea">
-                            {texto('condicion', { maxLength: 255, placeholder: 'siempre, fase=3, comp=predios…' })}
+                            <input
+                                aria-labelledby="pl-condicion-etiqueta"
+                                value={f.condicion}
+                                maxLength={255}
+                                placeholder="siempre, fase=3, comp=predios…"
+                                onChange={(e) => { cambiar('condicion', e.target.value); setRevisionCondicion(null); }}
+                            />
                             <button type="button" className="gp-boton" onClick={validarCondicion}>Validar</button>
                         </span>
                         {revisionCondicion && <small className="pl-ayuda" role="status">{revisionCondicion}</small>}
-                    </Campo>
+                    </div>
                 </>
             )}
 
@@ -107,9 +114,12 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, onGuardar, on
                             {CARACTERES.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
                         </select>
                     </Campo>
-                    {f.caracter === 'condicionado' && (
+                    {f.caracter === CONDICIONADO && (
                         <Campo etiqueta="¿Cuándo aplica?" ancho>
                             <textarea rows={2} required value={f.condicion_descripcion} onChange={(e) => cambiar('condicion_descripcion', e.target.value)} />
+                            {porRedactar(f) && (
+                                <small className="pl-ayuda">Reemplaza la "Condición original" por una descripción en palabras de cuándo aplica este requisito.</small>
+                            )}
                         </Campo>
                     )}
                 </>
@@ -137,7 +147,7 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, onGuardar, on
 
             <div className="pl-formulario-acciones">
                 <button type="button" className="gp-boton" onClick={onCancelar}>Cancelar</button>
-                <button type="submit" className="gp-boton gp-boton-primario">Guardar requisito</button>
+                <button type="submit" className="gp-boton gp-boton-primario" disabled={guardando}>Guardar requisito</button>
             </div>
         </form>
     );
@@ -147,6 +157,7 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, onGuardar, on
 const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
     const [editando, setEditando] = useState(null); // null, 'nuevo' o el requisito
     const [catalogoSgr, setCatalogoSgr] = useState(null);
+    const [ocupado, ejecutar] = useOcupado();
     const editable = version?.estado === 'borrador';
     const esSgr = plantilla.es_sgr;
     const url = version ? `/catalogo-requisitos/versiones/${version.id}` : null;
@@ -160,16 +171,16 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
         return () => { vigente = false; };
     }, [plantilla.motor]);
 
-    const crearBorrador = async () => {
+    const crearBorrador = () => ejecutar(async () => {
         try {
             await axios.post(`/plantillas/${plantilla.id}/versiones`, { descripcion: null });
             await onCambio();
         } catch (e) {
             avisarError('No se pudo crear el borrador', e);
         }
-    };
+    });
 
-    const guardar = async (formulario) => {
+    const guardar = (formulario) => ejecutar(async () => {
         const datos = datosRequisito(formulario, plantilla.motor);
         try {
             if (editando === 'nuevo') {
@@ -182,12 +193,12 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
         } catch (e) {
             avisarError('No se pudo guardar el requisito', e);
         }
-    };
+    });
 
-    const eliminar = async (requisito) => {
+    const eliminar = (requisito) => ejecutar(async () => {
         const { isConfirmed } = await Swal.fire({
             icon: 'warning',
-            title: '¿Eliminar este requisito del borrador?',
+            titleText: '¿Eliminar este requisito del borrador?',
             text: requisito.texto,
             showCancelButton: true,
             confirmButtonText: 'Sí, eliminar',
@@ -200,9 +211,10 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
         } catch (e) {
             avisarError('No se pudo eliminar el requisito', e);
         }
-    };
+    });
 
-    const moverRequisito = async (indice, delta) => {
+    // Los botones quedan deshabilitados hasta que llega la recarga con el orden nuevo.
+    const moverRequisito = (indice, delta) => ejecutar(async () => {
         const ids = mover(requisitos.map((r) => r.id), indice, delta);
         try {
             await axios.put(`${url}/requisitos-orden`, { ids });
@@ -210,13 +222,15 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
         } catch (e) {
             avisarError('No se pudo cambiar el orden', e);
         }
-    };
+    });
+
+    const porRedactarTotal = requisitos.filter((r) => r.activo && porRedactar(r)).length;
 
     if (!version) {
         return (
             <div className="gp-panel pl-aviso">
                 <p>La plantilla no tiene versiones.</p>
-                <button type="button" className="gp-boton gp-boton-primario" onClick={crearBorrador}>Crear borrador</button>
+                <button type="button" className="gp-boton gp-boton-primario" onClick={crearBorrador} disabled={ocupado}>Crear borrador</button>
             </div>
         );
     }
@@ -227,6 +241,7 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
                 motor={plantilla.motor}
                 esSgr={esSgr}
                 catalogoSgr={catalogoSgr}
+                guardando={ocupado}
                 inicial={editando === 'nuevo' ? requisitoVacio(plantilla.motor) : formularioRequisito(editando, plantilla.motor)}
                 onGuardar={guardar}
                 onCancelar={() => setEditando(null)}
@@ -247,9 +262,15 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
                         <FontAwesomeIcon icon={faPlus} /> Agregar requisito
                     </button>
                 ) : (
-                    <button type="button" className="gp-boton gp-boton-primario" onClick={crearBorrador}>Crear borrador para editar</button>
+                    <button type="button" className="gp-boton gp-boton-primario" onClick={crearBorrador} disabled={ocupado}>Crear borrador para editar</button>
                 )}
             </div>
+
+            {porRedactarTotal > 0 && (
+                <p className="pl-error" role="status">
+                    {porRedactarTotal} {porRedactarTotal === 1 ? 'condicionado por redactar' : 'condicionados por redactar'}: describe en palabras cuándo aplica cada uno antes de publicar.
+                </p>
+            )}
 
             {requisitos.length === 0 && <p className="gp-vacio">Esta versión aún no tiene requisitos.</p>}
 
@@ -262,21 +283,22 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
                             <span className="pl-fila-etiquetas">
                                 {r.categoria && <span className="pl-insignia pl-insignia-suave">{etiquetaCategoria(r.categoria)}</span>}
                                 {plantilla.motor === 'simple' && <span className="pl-insignia pl-insignia-suave">{etiquetaCaracter(r.caracter)}</span>}
+                                {porRedactar(r) && <span className="pl-insignia pl-insignia-alerta">Por redactar</span>}
                                 {!r.activo && <span className="pl-insignia pl-insignia-alerta">Inactivo</span>}
                             </span>
                         </div>
                         {editable && (
                             <div className="pl-fila-acciones">
-                                <button type="button" className="gp-icono" aria-label={`Subir ${r.texto}`} disabled={indice === 0} onClick={() => moverRequisito(indice, -1)}>
+                                <button type="button" className="gp-icono" aria-label={`Subir ${r.texto}`} disabled={ocupado || indice === 0} onClick={() => moverRequisito(indice, -1)}>
                                     <FontAwesomeIcon icon={faArrowUp} />
                                 </button>
-                                <button type="button" className="gp-icono" aria-label={`Bajar ${r.texto}`} disabled={indice === requisitos.length - 1} onClick={() => moverRequisito(indice, 1)}>
+                                <button type="button" className="gp-icono" aria-label={`Bajar ${r.texto}`} disabled={ocupado || indice === requisitos.length - 1} onClick={() => moverRequisito(indice, 1)}>
                                     <FontAwesomeIcon icon={faArrowDown} />
                                 </button>
-                                <button type="button" className="gp-icono" aria-label={`Editar ${r.texto}`} onClick={() => setEditando(r)}>
+                                <button type="button" className="gp-icono" aria-label={`Editar ${r.texto}`} disabled={ocupado} onClick={() => setEditando(r)}>
                                     <FontAwesomeIcon icon={faPen} />
                                 </button>
-                                <button type="button" className="gp-icono" aria-label={`Eliminar ${r.texto}`} onClick={() => eliminar(r)}>
+                                <button type="button" className="gp-icono" aria-label={`Eliminar ${r.texto}`} disabled={ocupado} onClick={() => eliminar(r)}>
                                     <FontAwesomeIcon icon={faTrash} />
                                 </button>
                             </div>

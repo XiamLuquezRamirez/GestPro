@@ -7,6 +7,10 @@ import {
     PLANTILLA_VACIA,
     TIPOS_REQUISITO,
     agruparVistaPrevia,
+    escaparHtml,
+    htmlErrores,
+    mensajeApi,
+    porRedactar,
     datosPlantilla,
     datosRequisito,
     etiquetaCategoria,
@@ -252,5 +256,40 @@ describe('refuerzo: resto', () => {
         expect(mover([1, 2, 3], 3, -1)).toEqual([1, 2, 3]);
         const original = [1, 2, 3];
         expect(mover(original, 5, 0)).not.toBe(original);
+    });
+});
+
+describe('porRedactar, mensajeApi y htmlErrores', () => {
+    it('detecta los condicionados con la condición original', () => {
+        expect(porRedactar({ caracter: 'condicionado', condicion_descripcion: 'Condición original: fase=3' })).toBe(true);
+        expect(porRedactar({ caracter: 'condicionado', condicion_descripcion: 'Si hay predios' })).toBe(false);
+        expect(porRedactar({ caracter: 'obligatorio', condicion_descripcion: 'Condición original: x' })).toBe(false);
+        expect(porRedactar({ caracter: 'condicionado', condicion_descripcion: null })).toBe(false);
+        expect(porRedactar(null)).toBe(false);
+    });
+
+    it('traduce los errores de la API', () => {
+        const con = (status, data) => ({ response: { status, data } });
+        expect(mensajeApi(con(401))).toBe('Tu sesión expiró. Vuelve a iniciar sesión.');
+        expect(mensajeApi(con(403))).toBe('No tienes permiso para esta acción.');
+        expect(mensajeApi(con(404))).toBe('El registro ya no existe. Recarga la página.');
+        expect(mensajeApi(con(500))).toBe('Error del servidor. Inténtalo de nuevo.');
+        expect(mensajeApi(con(503))).toBe('Error del servidor. Inténtalo de nuevo.');
+        expect(mensajeApi({ isAxiosError: true, request: {}, message: 'Network Error' })).toBe('No hay conexión con el servidor.');
+        expect(mensajeApi(con(422, { mensaje: 'No se puede', errores: ['a'] }))).toBe('No se puede a');
+        expect(mensajeApi(con(422, { errors: { nombre: ['Falta el nombre.'] } }))).toBe('Falta el nombre.');
+        expect(mensajeApi(new Error('fallo'))).toBe('fallo');
+    });
+
+    it('escapa y limita la lista de errores', () => {
+        expect(escaparHtml('<b>"a" & \'b\'</b>')).toBe('&lt;b&gt;&quot;a&quot; &amp; &#39;b&#39;&lt;/b&gt;');
+        const html = htmlErrores('Falla <x>', ['<img>', 'dos']);
+        expect(html).toContain('<p>Falla &lt;x&gt;</p>');
+        expect(html).toContain('<li>&lt;img&gt;</li>');
+        expect(html).not.toContain('<img>');
+        expect(htmlErrores('Solo mensaje')).not.toContain('<ul');
+        const muchos = htmlErrores('m', Array.from({ length: 25 }, (_, i) => `e${i}`));
+        expect(muchos.match(/<li>/g)).toHaveLength(21);
+        expect(muchos).toContain('<li>y 5 más</li>');
     });
 });
