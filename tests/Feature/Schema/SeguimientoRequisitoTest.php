@@ -4,6 +4,7 @@ namespace Tests\Feature\Schema;
 
 use App\Models\PlantillaChecklist;
 use App\Models\RequisitoCatalogo;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -17,6 +18,25 @@ class SeguimientoRequisitoTest extends TestCase
     private function migracionCatalogo(): object
     {
         return require database_path('migrations/2026_11_06_100006_add_seguimiento_to_requisitos_catalogo_table.php');
+    }
+
+    private function migracionFilas(): object
+    {
+        return require database_path('migrations/2026_11_06_100007_add_seguimiento_to_proyectos_requisitos_table.php');
+    }
+
+    private function fila(array $cambios = []): int
+    {
+        $version = DB::table('catalogo_versiones')->value('id') ?? $this->versionSgr();
+        $requisito = DB::table('requisitos_catalogo')->value('id') ?? $this->requisito($version);
+        $expediente = DB::table('proyectos_expedientes')->insertGetId([
+            'proyecto_id' => DB::table('proyectos')->insertGetId(['nombre' => 'Prueba']),
+            'catalogo_version_id' => $version, 'fase_sgr' => 3, 'estado' => 'borrador',
+        ]);
+
+        return DB::table('proyectos_requisitos')->insertGetId([
+            'expediente_id' => $expediente, 'requisito_catalogo_id' => $requisito, ...$cambios,
+        ]);
     }
 
     private function versionSgr(): int
@@ -101,5 +121,65 @@ class SeguimientoRequisitoTest extends TestCase
                 $this->assertStringContainsString('se perderían', $e->getMessage());
             }
         }
+    }
+
+    // ------------------------------------------------------------ checklist
+
+    public function test_migrar_deja_las_filas_existentes_en_aplica_y_obligatorias(): void
+    {
+        $migracion = $this->migracionFilas();
+        $migracion->down();
+        $this->assertFalse(Schema::hasColumn('proyectos_requisitos', 'estado_aplicabilidad'));
+        $id = $this->fila(['cumplido' => true]);
+
+        $migracion->up();
+        $migracion->up(); // repetirla no falla
+
+        $fila = DB::table('proyectos_requisitos')->where('id', $id)->first();
+        $this->assertSame('aplica', $fila->estado_aplicabilidad);
+        $this->assertSame('obligatorio', $fila->caracter);
+        $this->assertEquals(1, $fila->cumplido);
+    }
+
+    public function test_borrar_un_responsable_o_un_usuario_conserva_la_fila(): void
+    {
+        $responsable = DB::table('responsable')->insertGetId(['nombre' => 'Ana', 'activo' => true]);
+        $usuario = User::factory()->create();
+        $id = $this->fila(['responsable_id' => $responsable, 'usuario_no_aplica_id' => $usuario->id, 'usuario_aprobo_id' => $usuario->id]);
+
+        DB::table('responsable')->where('id', $responsable)->delete();
+        DB::table('users')->where('id', $usuario->id)->delete();
+
+        $fila = DB::table('proyectos_requisitos')->where('id', $id)->first();
+        $this->assertNull($fila->responsable_id);
+        $this->assertNull($fila->usuario_no_aplica_id);
+        $this->assertNull($fila->usuario_aprobo_id);
+    }
+
+    public function test_el_rollback_del_checklist_se_detiene_si_se_perderian_datos(): void
+    {
+        $responsable = DB::table('responsable')->insertGetId(['nombre' => 'Ana', 'activo' => true]);
+        foreach ([['estado_aplicabilidad' => 'no_aplica'], ['caracter' => 'opcional'], ['responsable_id' => $responsable]] as $datos) {
+            DB::table('proyectos_requisitos')->delete();
+            $this->fila($datos);
+
+            try {
+                $this->migracionFilas()->down();
+                $this->fail('El rollback debía detenerse con ' . json_encode($datos));
+            } catch (RuntimeException $e) {
+                $this->assertStringContainsString('se perderían', $e->getMessage());
+            }
+        }
+
+        $this->assertTrue(Schema::hasColumn('proyectos_requisitos', 'estado_aplicabilidad'));
+    }
+
+    public function test_el_rollback_del_checklist_avanza_sin_datos_de_seguimiento(): void
+    {
+        $this->fila();
+
+        $this->migracionFilas()->down();
+
+        $this->assertFalse(Schema::hasColumn('proyectos_requisitos', 'responsable_id'));
     }
 }

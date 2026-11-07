@@ -40,6 +40,11 @@ final class ExpedienteService
 
     private const ORDEN_SECCION = ['A' => 1, 'B' => 2, 'D' => 3, 'C' => 4];
 
+    private const RELACIONES_FILA = [
+        'requisito.sector:id,clave,nombre,fuente', 'requisito.tipo:id,clave,nombre', 'usuarioCumplido:id,name',
+        'usuarioNoAplica:id,name', 'usuarioAprobo:id,name', 'responsable:id,nombre,cargo',
+    ];
+
     public function __construct(private readonly EvaluadorRequisitos $evaluador)
     {
     }
@@ -151,6 +156,9 @@ final class ExpedienteService
 
         if (array_key_exists('cumplido', $datos)) {
             $cumplido = (bool) $datos['cumplido'];
+            if ($cumplido && $fila->estado_aplicabilidad !== ProyectoRequisito::APLICA) {
+                throw new ReglaNegocioException('Este requisito está marcado como no aplica o por definir: resuelva eso antes de cumplirlo.');
+            }
             if ($cumplido && ! $fila->cumplido) {
                 $fila->fill(['cumplido' => true, 'fecha_cumplido' => now(), 'usuario_cumplido_id' => $usuario?->id]);
             } elseif (! $cumplido) {
@@ -279,6 +287,7 @@ final class ExpedienteService
                 $expediente->requisitos()->create([
                     'requisito_catalogo_id' => $requisito->id,
                     'aplica' => true,
+                    'caracter' => $requisito->caracter,
                     'orden' => $orden,
                 ]);
             }
@@ -320,11 +329,9 @@ final class ExpedienteService
 
         $filas = $expediente->requisitos()
             ->where('aplica', true)
-            ->with(['requisito.sector:id,clave,nombre,fuente', 'requisito.tipo:id,clave,nombre', 'usuarioCumplido:id,name'])
+            ->with(self::RELACIONES_FILA)
             ->orderBy('orden')
             ->get();
-
-        $cumplidos = $filas->where('cumplido', true)->count();
 
         return [
             ...$this->presentarCabecera($expediente),
@@ -334,7 +341,7 @@ final class ExpedienteService
                 'componentes' => $this->opciones($expediente->componentes),
                 'tipologias' => $this->opciones($expediente->tipologias),
             ],
-            'progreso' => $this->progreso($filas->count(), $cumplidos),
+            'progreso' => $this->progresoDe($expediente),
             'requisitos' => $filas->map(fn (ProyectoRequisito $f) => $this->presentarFila($f))->values(),
             // Filas que dejaron de aplicar pero guardan trabajo hecho.
             'retenidos' => $expediente->requisitos()->where('aplica', false)
@@ -357,8 +364,8 @@ final class ExpedienteService
         return ProyectoExpediente::query()
             ->whereIn('id', $cantidades->keys())
             ->withCount([
-                'requisitos as requisitos_aplican' => fn ($q) => $q->where('aplica', true),
-                'requisitos as requisitos_cumplidos' => fn ($q) => $q->where('aplica', true)->where('cumplido', true),
+                'requisitos as requisitos_aplican' => fn ($q) => $q->cuenta(),
+                'requisitos as requisitos_cumplidos' => fn ($q) => $q->cumplidaQueCuenta(),
             ])
             ->orderBy('proyecto_id')
             ->get()
@@ -397,18 +404,32 @@ final class ExpedienteService
 
     public function progresoDe(ProyectoExpediente $expediente): array
     {
-        $base = $expediente->requisitos()->where('aplica', true);
-
-        return $this->progreso((clone $base)->count(), (clone $base)->where('cumplido', true)->count());
+        return $this->progreso(
+            $expediente->requisitos()->cuenta()->count(),
+            $expediente->requisitos()->cumplidaQueCuenta()->count()
+        );
     }
 
     public function presentarFila(ProyectoRequisito $fila): array
     {
-        $fila->loadMissing(['requisito.sector:id,clave,nombre,fuente', 'requisito.tipo:id,clave,nombre', 'usuarioCumplido:id,name']);
+        $fila->loadMissing(self::RELACIONES_FILA);
         $r = $fila->requisito;
 
         return [
             'id' => $fila->id,
+            'estado' => $fila->estadoVisible(),
+            'caracter' => $fila->caracter,
+            'cuenta' => $fila->cuenta(),
+            'no_aplica' => $fila->estado_aplicabilidad === ProyectoRequisito::APLICA ? null : [
+                'justificacion' => $fila->justificacion_no_aplica,
+                'usuario_id' => $fila->usuario_no_aplica_id,
+                'usuario' => $fila->usuarioNoAplica?->name,
+                'aprobado_por' => $fila->usuarioAprobo?->name,
+                'fecha_aprobacion' => $fila->fecha_aprobacion?->toIso8601String(),
+            ],
+            'responsable' => $fila->responsable
+                ? ['id' => $fila->responsable->id, 'nombre' => $fila->responsable->nombre, 'cargo' => $fila->responsable->cargo]
+                : null,
             'cumplido' => $fila->cumplido,
             'fecha_cumplido' => $fila->fecha_cumplido?->toIso8601String(),
             'usuario_cumplido' => $fila->usuarioCumplido?->name,
@@ -425,6 +446,9 @@ final class ExpedienteService
                 'codigo' => $r->codigo,
                 'texto' => $r->texto,
                 'nota' => $r->nota,
+                'cargo_cumplimiento' => $r->cargo_cumplimiento,
+                'cargo_revision' => $r->cargo_revision,
+                'requiere_aprobacion_no_aplica' => $r->requiere_aprobacion_no_aplica,
             ],
         ];
     }
