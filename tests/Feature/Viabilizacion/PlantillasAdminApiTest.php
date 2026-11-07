@@ -76,6 +76,21 @@ class PlantillasAdminApiTest extends TestCase
         $this->assertSame(['Requisitos generales de inversión pública'], array_column($buscada, 'nombre'));
     }
 
+    public function test_la_cuenta_de_requisitos_de_la_lista_solo_incluye_los_activos(): void
+    {
+        $sgr = PlantillaChecklist::sgr();
+        $sgr->versionVigente()->requisitos()->orderBy('id')->first()->update(['activo' => false]);
+
+        $lista = $this->como(Rol::Administrador)->getJson('/GestPro/plantillas')->assertOk()->json();
+        $this->assertSame(206, collect($lista)->firstWhere('es_sgr', true)['vigente']['requisitos']);
+
+        // El historial de versiones sigue contando todo lo que tiene la versión.
+        $this->como(Rol::Administrador)->getJson("/GestPro/plantillas/{$sgr->id}")->assertOk()
+            ->assertJsonPath('vigente.requisitos', 206)
+            ->assertJsonPath('versiones.0.requisitos', 207)
+            ->assertJsonPath('versiones.0.requisitos_activos', 206);
+    }
+
     public function test_el_nombre_no_se_repite(): void
     {
         $this->crear()->assertCreated();

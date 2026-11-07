@@ -30,12 +30,18 @@ final class PlantillaService
     {
     }
 
+    /** Cuentas de requisitos por versión: el total y solo los activos (los que verá el usuario). */
+    private function cuentasRequisitos(): array
+    {
+        return ['requisitos', 'requisitos as requisitos_activos_count' => fn ($q) => $q->where('activo', true)];
+    }
+
     public function listar(?string $buscar): array
     {
         $buscar = trim((string) $buscar);
 
         return PlantillaChecklist::query()
-            ->with(['fuentes:id,nombre', 'sectores:id,nombre', 'versiones' => fn ($q) => $q->withCount('requisitos')])
+            ->with(['fuentes:id,nombre', 'sectores:id,nombre', 'versiones' => fn ($q) => $q->withCount($this->cuentasRequisitos())])
             ->when($buscar !== '', function ($q) use ($buscar) {
                 $patron = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $buscar) . '%';
                 $q->where(fn ($w) => $w->whereRaw("nombre like ? escape '!'", [$patron])->orWhereRaw("descripcion like ? escape '!'", [$patron]));
@@ -51,7 +57,7 @@ final class PlantillaService
     {
         $plantilla->load([
             'fuentes:id,nombre', 'sectores:id,nombre',
-            'versiones' => fn ($q) => $q->withCount(['requisitos', 'expedientes'])->with('usuarioPublico:id,name')->orderByDesc('numero'),
+            'versiones' => fn ($q) => $q->withCount([...$this->cuentasRequisitos(), 'expedientes'])->with('usuarioPublico:id,name')->orderByDesc('numero'),
         ]);
 
         return [
@@ -65,6 +71,7 @@ final class PlantillaService
                 'fecha_publicacion' => $v->fecha_publicacion?->toIso8601String(),
                 'publicada_por' => $v->usuarioPublico?->name,
                 'requisitos' => $v->requisitos_count,
+                'requisitos_activos' => $v->requisitos_activos_count,
                 'expedientes' => $v->expedientes_count,
             ])->values()->all(),
         ];
@@ -235,7 +242,7 @@ final class PlantillaService
     {
         $vigente = $plantilla->versiones->firstWhere('vigente', true);
         $borrador = $plantilla->versiones->firstWhere('estado', CatalogoVersion::BORRADOR);
-        $version = fn (?CatalogoVersion $v) => $v ? ['id' => $v->id, 'numero' => $v->numero, 'requisitos' => $v->requisitos_count] : null;
+        $version = fn (?CatalogoVersion $v) => $v ? ['id' => $v->id, 'numero' => $v->numero, 'requisitos' => $v->requisitos_activos_count] : null;
 
         return [
             'id' => $plantilla->id,
