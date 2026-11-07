@@ -167,7 +167,7 @@ class CatalogoRequisitosController extends Controller
         'codigo' => 'el código', 'subtitulo' => 'el subtítulo', 'seccion' => 'la sección',
         'fuente' => 'la fuente normativa', 'sector_id' => 'el sector', 'tipo_id' => 'el tipo de proyecto',
         'condicion' => 'la condición', 'nota' => 'las observaciones', 'orden' => 'el orden',
-        'activo' => 'el estado activo', 'ids' => 'el orden de los requisitos',
+        'activo' => 'el estado activo', 'ids' => 'el orden de los requisitos', 'ids.*' => 'cada requisito',
     ];
 
     private const MENSAJES = [
@@ -177,6 +177,8 @@ class CatalogoRequisitosController extends Controller
         'integer' => 'Revisa :attribute: debe ser un número entero.',
         'array' => 'Revisa :attribute: debe ser una lista.',
         'in' => 'Revisa :attribute: no es un valor válido.',
+        'string' => 'Revisa :attribute: debe ser un texto.',
+        'min' => 'Revisa :attribute: el mínimo es :min.',
         'codigo_comun.regex' => 'El código común solo admite letras, números, punto, guion y guion bajo.',
         'texto.required' => 'Escribe el nombre del requisito.',
         'clave.regex' => 'La clave solo admite minúsculas, números y guion bajo.',

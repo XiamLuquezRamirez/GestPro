@@ -301,4 +301,33 @@ class PlantillasRequisitosApiTest extends TestCase
         $this->assertEquals(0, $editado->activo);
         $this->assertSame('Nota previa', $editado->nota);
     }
+
+    public function test_las_reglas_genericas_string_y_min_salen_en_espanol(): void
+    {
+        $this->crear(['descripcion' => ['no es texto']])->assertStatus(422)
+            ->assertJsonPath('errors.descripcion.0', 'Revisa la descripción: debe ser un texto.');
+        $this->crear(['orden' => -1])->assertStatus(422)
+            ->assertJsonPath('errors.orden.0', 'Revisa el orden: el mínimo es 0.');
+    }
+
+    public function test_ordenar_con_un_id_que_no_es_entero_nombra_el_campo_en_espanol(): void
+    {
+        $errores = $this->comoAdmin()->putJson($this->url('/requisitos-orden'), ['ids' => ['x']])->assertStatus(422)->json('errors');
+
+        $this->assertSame('Revisa cada requisito: debe ser un número entero.', $errores['ids.0'][0]);
+    }
+
+    public function test_editar_en_el_sgr_conserva_el_subtitulo_si_no_se_envia(): void
+    {
+        $borrador = app(CatalogoService::class)->crearBorrador(null);
+        $a1 = DB::table('requisitos_catalogo')->where('catalogo_version_id', $borrador->id)->where('clave', 'a1')->first();
+        DB::table('requisitos_catalogo')->where('id', $a1->id)->update(['subtitulo' => 'Subtítulo previo']);
+
+        $this->comoAdmin()->putJson("/GestPro/catalogo-requisitos/versiones/{$borrador->id}/requisitos/{$a1->id}", [
+            'clave' => $a1->clave, 'seccion' => $a1->seccion, 'fuente' => $a1->fuente, 'codigo' => $a1->codigo,
+            'texto' => 'Texto nuevo', 'condicion' => $a1->condicion,
+        ])->assertOk();
+
+        $this->assertSame('Subtítulo previo', DB::table('requisitos_catalogo')->where('id', $a1->id)->value('subtitulo'));
+    }
 }
