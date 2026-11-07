@@ -214,6 +214,7 @@ describe('Excel', () => {
             'Marcado por': 'Ana',
             'Responsable': 'Luis Gómez',
             'Justificación de no aplica': '',
+            'Aprobado por': '',
             'Observación': 'Ok',
             'Soporte': 'a.pdf',
         });
@@ -225,6 +226,8 @@ describe('Excel', () => {
             'Estado': 'No aplica',
             'Cumplido': 'No',
             'Fecha de cumplimiento': '',
+            'Marcado por': '',
+            'Responsable': '',
             'Justificación de no aplica': 'Sin predios',
         });
     });
@@ -268,12 +271,15 @@ describe('acciones sobre un requisito', () => {
         expect(puedeRevisarNoAplica(porAprobar, { id: 6, rol: 'Gestor' })).toBe(true);
         expect(puedeRevisarNoAplica(porAprobar, { id: 5, rol: 'Administrador' })).toBe(true);
         expect(puedeRevisarNoAplica({ ...porAprobar, estado: 'no_aplica' }, { id: 6, rol: 'Gestor' })).toBe(false);
+        expect(puedeRevisarNoAplica(porAprobar, null)).toBe(false);
+        expect(puedeRevisarNoAplica({ ...porAprobar, no_aplica: { usuario_id: null } }, { id: 6, rol: 'Gestor' })).toBe(true);
     });
 
     it('ofrece los responsables activos y conserva el actual aunque esté inactivo', () => {
         const lista = [{ id: 1, activo: true }, { id: 2, activo: false }, { id: 3, activo: false }];
         expect(responsablesDisponibles(lista, 2).map((r) => r.id)).toEqual([1, 2]);
         expect(responsablesDisponibles(lista, null).map((r) => r.id)).toEqual([1]);
+        expect(responsablesDisponibles(undefined, null)).toEqual([]);
     });
 });
 
@@ -289,6 +295,13 @@ describe('describirEvento', () => {
         expect(describirEvento({ evento: 'responsable_cambiado', antes: { responsable: 'Ana' }, despues: { responsable: null } }))
             .toBe('Cambió el responsable: lo quitó (era Ana)');
         expect(describirEvento({ evento: 'otro_evento' })).toBe('otro_evento');
+        expect(describirEvento({ evento: 'no_aplica_rechazado', despues: { motivo: 'Sí hay predios' } })).toBe('Rechazó el "no aplica": Sí hay predios');
+        expect(describirEvento({ evento: 'no_aplica_rechazado', despues: { motivo: null } })).toBe('Rechazó el "no aplica"');
+        expect(describirEvento({ evento: 'no_aplica_retirado', antes: null, despues: null })).toBe('Retiró el "no aplica"');
+        expect(describirEvento({ evento: 'soporte_subido', despues: { soporte_nombre: 'acta.pdf' } })).toBe('Adjuntó un soporte: acta.pdf');
+        expect(describirEvento({ evento: 'soporte_eliminado', antes: { soporte_nombre: null } })).toBe('Eliminó el soporte: soporte');
+        expect(describirEvento({ evento: 'observacion_cambiada', despues: { observacion: 'Falta firma' } })).toBe('Cambió la observación: "Falta firma"');
+        expect(describirEvento({ evento: 'observacion_cambiada', despues: { observacion: null } })).toBe('Cambió la observación: la quitó');
     });
 });
 

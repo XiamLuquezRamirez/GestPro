@@ -38,14 +38,16 @@ export const puedeMarcarNoAplica = (fila) => ['pendiente', 'por_definir'].includ
 /**
  * Igual que el backend: revisa otra persona, salvo un Administrador, que puede revisar
  * lo que él mismo marcó.
+ * No mira el rol ni el estado del expediente: la pantalla solo la usa cuando el expediente es editable.
  */
 export const puedeRevisarNoAplica = (fila, usuario) =>
-    fila.estado === 'no_aplica_pendiente'
-    && (usuario?.rol === 'Administrador' || fila.no_aplica?.usuario_id !== usuario?.id);
+    Boolean(usuario)
+    && fila.estado === 'no_aplica_pendiente'
+    && (usuario.rol === 'Administrador' || fila.no_aplica?.usuario_id !== usuario.id);
 
 /** Responsables que se pueden elegir: los activos y el que la fila ya tiene. */
 export const responsablesDisponibles = (responsables, actualId) =>
-    responsables.filter((r) => r.activo || r.id === actualId);
+    (responsables ?? []).filter((r) => r.activo || r.id === actualId);
 
 const EVENTOS = {
     cumplido_marcado: 'Marcó como cumplido',
@@ -72,13 +74,13 @@ export const describirEvento = (entrada) => {
         case 'responsable_cambiado':
             return d.responsable ? `${base}: ${d.responsable}` : `${base}: lo quitó (era ${a.responsable ?? '—'})`;
         case 'soporte_subido':
-            return `${base}: ${d.soporte_nombre}`;
+            return `${base}: ${d.soporte_nombre ?? 'soporte'}`;
         case 'soporte_reemplazado':
-            return `${base}: ${a.soporte_nombre} por ${d.soporte_nombre}`;
+            return `${base}: ${a.soporte_nombre ?? 'soporte'} por ${d.soporte_nombre ?? 'soporte'}`;
         case 'soporte_eliminado':
-            return `${base}: ${a.soporte_nombre}`;
+            return `${base}: ${a.soporte_nombre ?? 'soporte'}`;
         case 'no_aplica_marcado':
-            return `${base}: ${d.justificacion}`;
+            return `${base}: ${d.justificacion ?? '—'}`;
         case 'no_aplica_aprobado':
             return d.autoaprobado ? `${base} que él mismo marcó` : base;
         case 'no_aplica_rechazado':
@@ -229,6 +231,7 @@ export const construirHojasExcel = (expediente) => {
         'Marcado por': f.usuario_cumplido ?? '',
         'Responsable': f.responsable?.nombre ?? '',
         'Justificación de no aplica': f.no_aplica?.justificacion ?? '',
+        'Aprobado por': f.no_aplica?.aprobado_por ?? '',
         'Observación': f.observacion ?? '',
         'Soporte': f.soporte?.nombre ?? '',
     }));
