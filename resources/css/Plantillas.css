@@ -1,0 +1,85 @@
+/* Administración de plantillas de checklist. Usa los tokens --gp-* del armazón. */
+
+.pl-pagina { min-width: 0; }
+.pl-volver { display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .6rem; font-size: .85rem; color: var(--gp-azul-texto); text-decoration: none; }
+.pl-error { padding: .7rem .9rem; margin-bottom: 1rem; color: var(--gp-texto); background: var(--gp-coral-suave); border-left: 3px solid var(--gp-coral); border-radius: var(--gp-radio); }
+.pl-ayuda { margin: 0; font-size: .82rem; color: var(--gp-texto-3); }
+
+.pl-barra { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.pl-buscar, .pl-campo input, .pl-campo select, .pl-campo textarea {
+    min-width: 0;
+    padding: .5rem .65rem;
+    font: inherit;
+    font-size: .9rem;
+    color: var(--gp-texto);
+    background: var(--gp-superficie-2);
+    border: 1px solid var(--gp-linea-fuerte);
+    border-radius: var(--gp-radio);
+}
+.pl-buscar { flex: 1 1 18rem; }
+.pl-buscar:focus, .pl-campo input:focus, .pl-campo select:focus, .pl-campo textarea:focus { outline: none; box-shadow: var(--gp-enfoque); }
+.pl-check { display: inline-flex; align-items: center; gap: .45rem; font-size: .88rem; color: var(--gp-texto-2); cursor: pointer; }
+.pl-check input { width: 16px; height: 16px; accent-color: var(--gp-azul); }
+
+.pl-lista { display: grid; gap: .75rem; margin: 0; padding: 0; list-style: none; }
+.pl-tarjeta { display: flex; flex-wrap: wrap; gap: .8rem 1.2rem; align-items: flex-start; justify-content: space-between; padding: 1rem 1.1rem; }
+.pl-tarjeta.inactiva { opacity: .7; }
+.pl-tarjeta-cuerpo { flex: 1 1 22rem; min-width: 0; }
+.pl-tarjeta-titulo { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; font-size: 1.05rem; font-weight: 700; }
+.pl-tarjeta-titulo a { color: var(--gp-texto); text-decoration: none; }
+.pl-tarjeta-titulo a:hover { color: var(--gp-azul-texto); }
+.pl-tarjeta-descripcion { margin: .3rem 0 0; font-size: .88rem; color: var(--gp-texto-2); }
+.pl-tarjeta-acciones { display: flex; flex-wrap: wrap; gap: .4rem; }
+.pl-datos { display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; margin: .6rem 0 0; }
+.pl-datos div { min-width: 0; }
+.pl-datos dt { font-family: var(--gp-fuente-datos); font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; color: var(--gp-texto-3); }
+.pl-datos dd { margin: 0; font-size: .86rem; color: var(--gp-texto); overflow-wrap: anywhere; }
+
+.pl-insignia { padding: .08rem .45rem; font-family: var(--gp-fuente-datos); font-size: .68rem; font-weight: 500; color: var(--gp-sobre-acento); background: var(--gp-ambar); border-radius: 999px; }
+.pl-insignia-suave { color: var(--gp-azul-texto); background: var(--gp-azul-suave); }
+.pl-insignia-alerta { color: var(--gp-texto); background: var(--gp-coral-suave); }
+
+.pl-pestanas { display: flex; gap: .2rem; margin-bottom: 1.1rem; overflow-x: auto; border-bottom: 1px solid var(--gp-linea); }
+.pl-pestana { padding: .55rem .9rem; font-size: .9rem; font-weight: 600; white-space: nowrap; color: var(--gp-texto-3); background: none; border: 0; border-bottom: 2px solid transparent; }
+.pl-pestana:hover { color: var(--gp-texto); }
+.pl-pestana.activa { color: var(--gp-azul-texto); border-bottom-color: var(--gp-azul-texto); }
+
+.pl-formulario { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: .9rem 1.1rem; padding: 1.1rem; }
+.pl-campo { display: flex; flex-direction: column; gap: .3rem; min-width: 0; margin: 0; }
+.pl-campo > span { font-size: .78rem; font-weight: 600; color: var(--gp-texto-2); }
+.pl-campo-ancho, .pl-asociacion, .pl-formulario-acciones, .pl-formulario > .pl-ayuda { grid-column: 1 / -1; }
+.pl-en-linea { display: flex; gap: .4rem; }
+.pl-en-linea input { flex: 1; }
+.pl-asociacion { min-width: 0; margin: 0; padding: .7rem .85rem; border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
+.pl-asociacion legend { padding: 0 .3rem; font-size: .8rem; font-weight: 700; color: var(--gp-texto-2); }
+.pl-opciones { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: .35rem .9rem; margin-top: .55rem; }
+.pl-formulario-acciones { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; }
+
+.pl-aviso { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; justify-content: space-between; padding: 1rem 1.1rem; }
+
+.pl-tabla { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+.pl-tabla li { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; padding: .6rem .8rem; background: var(--gp-superficie); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
+.pl-tabla li.inactivo { opacity: .6; }
+.pl-fila-texto { display: flex; flex: 1 1 20rem; flex-wrap: wrap; gap: .3rem .6rem; align-items: baseline; min-width: 0; font-size: .9rem; }
+.pl-fila-etiquetas { display: inline-flex; flex-wrap: wrap; gap: .3rem; }
+.pl-fila-acciones { display: inline-flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.pl-codigo { font-family: var(--gp-fuente-datos); font-size: .74rem; color: var(--gp-azul-texto); }
+
+.pl-vista { display: grid; gap: .8rem; }
+.pl-vista-grupo { padding: .9rem 1rem; }
+.pl-vista-grupo h3 { margin: 0 0 .6rem; font-size: 1rem; }
+.pl-vista-grupo ul { display: grid; gap: .55rem; margin: 0; padding: 0; list-style: none; }
+.pl-vista-grupo li { display: flex; gap: .6rem; align-items: flex-start; font-size: .9rem; }
+.pl-vista-grupo li input { flex-shrink: 0; margin-top: .2rem; }
+.pl-vista-grupo small { display: block; font-size: .78rem; color: var(--gp-texto-3); }
+.pl-vista-datos { margin-top: .15rem; }
+
+.pl-tabla-versiones { display: grid; gap: .35rem; }
+.pl-tabla-versiones [role="row"] { display: grid; grid-template-columns: 1.4fr .8fr 1.4fr .7fr .7fr 1.3fr; gap: .6rem; align-items: center; padding: .6rem .8rem; font-size: .88rem; background: var(--gp-superficie); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
+.pl-tabla-versiones .pl-versiones-cabecera { font-family: var(--gp-fuente-datos); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--gp-texto-3); background: none; border: 0; }
+.pl-tabla-versiones small { color: var(--gp-texto-3); }
+
+@media (max-width: 720px) {
+    .pl-tabla-versiones .pl-versiones-cabecera { display: none; }
+    .pl-tabla-versiones [role="row"] { grid-template-columns: 1fr 1fr; }
+}
