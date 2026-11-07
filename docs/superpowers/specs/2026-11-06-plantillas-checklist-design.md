@@ -21,6 +21,7 @@ Convertir el checklist de viabilización SGR en un sistema de plantillas configu
 | Requisito condicionado | En plantillas nuevas, la condición es un texto y una persona decide si aplica. La plantilla SGR conserva sus reglas automáticas. |
 | Duplicados | Código común definido por el administrador; una sola fila con varios orígenes. Los textos parecidos solo generan un aviso. |
 | Creación del expediente | Automática para todo proyecto en Formulación con al menos una fuente definida. |
+| Aprobación del "no aplica" en el SGR | Exigida en todos los requisitos SGR (decisión del usuario, 2026-11-07). En plantillas nuevas, el administrador la activa por requisito. |
 | Nombre en pantalla | "Expediente", sin "SGR" ni "de viabilización", junto a las plantillas que lleva. El cambio se hace en la etapa 5. |
 
 **Fuera de alcance:** montos por fuente, preguntas configurables para automatizar condicionados, revisión de cada requisito cumplido, varios soportes vigentes por requisito, y definir qué requisitos aplican a cada financiador. Esto último lo aporta la entidad responsable; por eso solo se siembra la plantilla SGR.
@@ -317,7 +318,7 @@ Reglas para este cambio:
 
 1. Crear la plantilla SGR y asignarle la versión 1.
 2. Registrar en `expediente_plantillas` la versión de los 10 expedientes, como principal.
-3. Valores por defecto en los 207 requisitos: `caracter = obligatorio`, `codigo_comun = clave`, `categoria` vacía. La categoría no se inventa: la define la entidad responsable en una versión nueva.
+3. Valores por defecto en los 207 requisitos: `caracter = obligatorio`, `codigo_comun = clave`, `requiere_aprobacion_no_aplica = true`, `categoria` vacía. La categoría no se inventa: la define la entidad responsable en una versión nueva.
 4. Filas de los expedientes: `estado_aplicabilidad = aplica`, `caracter = obligatorio`, y un origen por fila.
 5. Convertir el texto de la fuente:
    - Contiene `regalia` o la palabra completa `sgr` → SGR.
@@ -357,7 +358,7 @@ Reglas para este cambio:
 - **Etapa 3:** `CatalogoService::crearBorrador` copia una lista fija de columnas. Hay que agregar las de la migración 7, o cada borrador las perderá.
 - **Etapa 4:** `crearBorrador` exige una versión vigente que copiar, así que hace falta un camino para la primera versión de una plantilla nueva. También hay que decidir qué hace el rollback con lo editado en la plantilla SGR, porque hoy `down()` lo borraría.
 - **Etapa 5:** la base no impide dos `es_principal` por expediente ni dos versiones de una misma plantilla, así que el servicio debe validarlo. La migración 10 debe fallar si algún expediente tiene más de una plantilla: al revertir, `expediente_plantillas` se reconstruye solo con la versión de `catalogo_version_id`, y las complementarias se perderían sin aviso.
-- **Etapa 5:** al retirar o rechazar un "no aplica", el requisito vuelve a `aplica`. En un requisito que nació `por_definir` (motor `simple`) debería volver a `por_definir`: hay que guardar el estado anterior. Además, todos los requisitos SGR quedan sin aprobación del "no aplica" mientras no se publique una versión nueva que la active.
+- **Etapa 5:** al retirar o rechazar un "no aplica", el requisito vuelve a `aplica`. En un requisito que nació `por_definir` (motor `simple`) debería volver a `por_definir`: hay que guardar el estado anterior.
 - **Etapa 6:** antes de retirar `catalogo_version_id`, la migración 11 debe comprobar que todo expediente tiene su fila en `expediente_plantillas`. Una rama anterior que cree expedientes sobre la base ya migrada no la escribiría.
 
 ---

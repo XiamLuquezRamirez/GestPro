@@ -27,23 +27,24 @@
 ## Fuera de esta etapa
 
 - Resolver un requisito "por definir": nace solo con motor `simple`, en la etapa 5. Aquí ya cuenta como pendiente y admite "no aplica".
-- Administrar en pantalla los campos nuevos del catálogo (categoría, cargos, aprobación del "no aplica"): etapa 4. Mientras tanto, los 207 requisitos SGR quedan obligatorios y sin aprobación del "no aplica".
+- Administrar en pantalla los campos nuevos del catálogo (categoría, cargos, aprobación del "no aplica"): etapa 4. Mientras tanto, los 207 requisitos SGR quedan obligatorios y exigen aprobación del "no aplica".
 - La pantalla de historial del expediente y los filtros por responsable: etapa 6. Aquí el historial se ve por requisito.
 
 ## Lo que ya se ensayó
 
 El plan se ensayó completo en un clon descartable fuera del repositorio, y este documento se generó con el código de ese ensayo: un script comprobó que aplicar sus bloques sobre la rama reproduce el ensayo exactamente.
 
-- Pruebas: 325 PHP y 140 JS.
+- Pruebas: 329 PHP y 140 JS.
 - En una copia de `gest_pro`: lo que la API entrega de los 10 expedientes y sus 286 filas no cambió al migrar, al revertir ni al volver a migrar. Las claves foráneas e índices quedaron como se esperaba.
 - En el navegador, sobre esa copia: "no aplica" sin y con aprobación, aprobar, retirar, responsable e historial, sin errores de consola.
 
-**Cuidado con SQLite.** Cambiar una columna reconstruye la tabla y, dentro de la transacción de `RefreshDatabase`, eso afecta a las filas hijas. Por eso las pruebas que bajan y suben la migración del catálogo no crean filas de checklist. En MariaDB no ocurre: la tarea 8 lo comprueba con datos reales.
+**Cuidado con SQLite.** Cambiar una columna reconstruye la tabla y, dentro de la transacción de `RefreshDatabase`, eso afecta a las filas hijas. Por eso las pruebas que bajan y suben la migración del catálogo no crean filas de checklist. En MariaDB no ocurre: la tarea 9 lo comprueba con datos reales.
 
 ## Decisiones de este plan
 
 - **Soportes:** reemplazar o eliminar un soporte ya no borra el archivo. Queda en el historial y se descarga por el id del registro; la ruta nunca sale en la API. Eliminar un expediente en borrador sí borra todos sus archivos, como avisa la pantalla, y su historial queda.
 - **"No aplica":** solo sobre un requisito no cumplido. Si el requisito pide aprobación, queda "por aprobar" y sigue contando como pendiente. Revisa otra persona, salvo un Administrador, que puede revisar lo que él mismo marcó, y queda registrado. Quien marcó puede retirarlo.
+- **Aprobación en el SGR (decisión del usuario, 2026-11-07):** todo "no aplica" de un requisito SGR exige aprobación. La migración deja los requisitos existentes en `true`; para los de otras plantillas, el valor por defecto es `false`. La tarea 6 lo agrega.
 - **Responsable:** se elige del catálogo `responsable`. Uno inactivo solo se conserva si la fila ya lo tenía.
 - **Rollback:** las tres migraciones se detienen con un mensaje claro si perderían datos, como pide la sección 8 del diseño.
 - **Excel:** la columna "Responsable" pasa a ser la persona asignada; quien marcó el cumplimiento va en "Marcado por". Se agregan "Estado" y "Justificación de no aplica".
@@ -71,7 +72,7 @@ El plan se ensayó completo en un clon descartable fuera del repositorio, y este
 
 ### Tarea 1: Punto de partida y foto con el código actual
 
-La foto de la API tiene que tomarse **antes de cambiar código**, porque después el servicio ya espera las columnas nuevas. La copia `gestpro_verif_tmp` se conserva hasta la tarea 8.
+La foto de la API tiene que tomarse **antes de cambiar código**, porque después el servicio ya espera las columnas nuevas. La copia `gestpro_verif_tmp` se conserva hasta la tarea 9.
 
 - [ ] **Paso 1: Comprobar la rama, el estado y las pruebas**
 
@@ -2781,7 +2782,309 @@ git commit -m "feat: add not-applicable approval and requirement owner"
 
 ---
 
-### Tarea 6: Lógica de pantalla
+### Tarea 6: Aprobación exigida en el SGR
+
+Decisión del usuario: todo "no aplica" de un requisito SGR necesita aprobación. Cambia la migración de la tarea 2, que todavía no se aplica en ninguna base, y las pruebas de las tareas 2, 3 y 5 que suponían lo contrario.
+
+**Files:**
+- Test: `tests/Feature/Schema/SeguimientoRequisitoTest.php`
+- Test: `tests/Feature/Viabilizacion/PlantillasVersionesTest.php`
+- Test: `tests/Feature/Viabilizacion/SeguimientoRequisitoApiTest.php`
+- Test: `tests/Feature/Viabilizacion/NoAplicaRequisitoApiTest.php`
+- Modify: `database/migrations/2026_11_06_100006_add_seguimiento_to_requisitos_catalogo_table.php`
+- Modify: `database/seeders/CatalogoRequisitosSgrSeeder.php`
+- Modify: `app/Services/Viabilizacion/CatalogoService.php`
+
+- [ ] **Paso 1: Ajustar las pruebas**
+
+En `tests/Feature/Schema/SeguimientoRequisitoTest.php`, reemplazar (1 de 4):
+
+```php
+        $this->assertFalse($fila->requiere_aprobacion_no_aplica);
+```
+
+por:
+
+```php
+        $this->assertTrue($fila->requiere_aprobacion_no_aplica); // los existentes son del SGR
+```
+
+En `tests/Feature/Schema/SeguimientoRequisitoTest.php`, reemplazar (2 de 4):
+
+```php
+    public function test_un_requisito_puede_no_tener_seccion_fuente_ni_codigo(): void
+```
+
+por:
+
+```php
+    public function test_un_requisito_nuevo_no_exige_aprobacion_por_defecto(): void
+    {
+        $id = $this->requisito($this->versionSgr());
+
+        $this->assertEquals(0, DB::table('requisitos_catalogo')->where('id', $id)->value('requiere_aprobacion_no_aplica'));
+    }
+
+    public function test_un_requisito_puede_no_tener_seccion_fuente_ni_codigo(): void
+```
+
+En `tests/Feature/Schema/SeguimientoRequisitoTest.php`, reemplazar (3 de 4):
+
+```php
+        foreach ([['categoria' => 'Técnico'], ['caracter' => 'opcional'], ['requiere_aprobacion_no_aplica' => true]] as $indice => $datos) {
+```
+
+por:
+
+```php
+        foreach ([['categoria' => 'Técnico'], ['caracter' => 'opcional']] as $indice => $datos) {
+```
+
+En `tests/Feature/Schema/SeguimientoRequisitoTest.php`, reemplazar (4 de 4):
+
+```php
+    // ------------------------------------------------------------ checklist
+```
+
+por:
+
+```php
+    public function test_el_rollback_del_catalogo_avanza_aunque_se_exija_aprobacion(): void
+    {
+        $this->requisito($this->versionSgr(), ['requiere_aprobacion_no_aplica' => true]);
+
+        $this->migracionCatalogo()->down();
+
+        $this->assertFalse(Schema::hasColumn('requisitos_catalogo', 'requiere_aprobacion_no_aplica'));
+    }
+
+    // ------------------------------------------------------------ checklist
+```
+
+En `tests/Feature/Viabilizacion/PlantillasVersionesTest.php`, reemplazar (1 de 2):
+
+```php
+    public function test_un_borrador_copia_los_datos_de_seguimiento(): void
+```
+
+por:
+
+```php
+    public function test_todos_los_requisitos_sgr_exigen_aprobacion_del_no_aplica(): void
+    {
+        $this->assertSame(207, DB::table('requisitos_catalogo')->where('requiere_aprobacion_no_aplica', true)->count());
+    }
+
+    public function test_un_borrador_copia_los_datos_de_seguimiento(): void
+```
+
+En `tests/Feature/Viabilizacion/PlantillasVersionesTest.php`, reemplazar (2 de 2):
+
+```php
+        $this->assertSame('nuevo', $borrador->requisitos()->where('clave', 'nuevo')->value('codigo_comun'));
+```
+
+por:
+
+```php
+        $nuevo = $borrador->requisitos()->where('clave', 'nuevo')->first();
+        $this->assertSame('nuevo', $nuevo->codigo_comun);
+        $this->assertTrue($nuevo->requiere_aprobacion_no_aplica);
+```
+
+En `tests/Feature/Viabilizacion/SeguimientoRequisitoApiTest.php`, reemplazar (1 de 1):
+
+```php
+            ->assertJsonPath('requisito.requisito.requiere_aprobacion_no_aplica', false)
+```
+
+por:
+
+```php
+            ->assertJsonPath('requisito.requisito.requiere_aprobacion_no_aplica', true)
+```
+
+En `tests/Feature/Viabilizacion/NoAplicaRequisitoApiTest.php`, reemplazar (1 de 5):
+
+```php
+    private function marcarComo(User $usuario)
+```
+
+por:
+
+```php
+    /** En el SGR todo "no aplica" se aprueba; estas pruebas lo quitan para probar el caso sin aprobación. */
+    private function sinAprobacion(): void
+    {
+        DB::table('requisitos_catalogo')->where('id', $this->fila->requisito_catalogo_id)->update(['requiere_aprobacion_no_aplica' => false]);
+    }
+
+    private function marcarComo(User $usuario)
+```
+
+En `tests/Feature/Viabilizacion/NoAplicaRequisitoApiTest.php`, reemplazar (2 de 5):
+
+```php
+        $gestor = $this->usuario(Rol::Gestor);
+
+        $this->marcarComo($gestor)->assertOk()
+            ->assertJsonPath('requisito.estado', 'no_aplica')
+```
+
+por:
+
+```php
+        $this->sinAprobacion();
+        $gestor = $this->usuario(Rol::Gestor);
+
+        $this->marcarComo($gestor)->assertOk()
+            ->assertJsonPath('requisito.estado', 'no_aplica')
+```
+
+En `tests/Feature/Viabilizacion/NoAplicaRequisitoApiTest.php`, reemplazar (3 de 5):
+
+```php
+    public function test_retirar_un_no_aplica_vuelve_a_contar(): void
+    {
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertOk();
+```
+
+por:
+
+```php
+    public function test_retirar_un_no_aplica_vuelve_a_contar(): void
+    {
+        $this->sinAprobacion();
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertOk();
+```
+
+En `tests/Feature/Viabilizacion/NoAplicaRequisitoApiTest.php`, reemplazar (4 de 5):
+
+```php
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertOk(); // sin aprobación: ya es no_aplica
+```
+
+por:
+
+```php
+        $this->sinAprobacion();
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertOk(); // sin aprobación: ya es no_aplica
+```
+
+En `tests/Feature/Viabilizacion/NoAplicaRequisitoApiTest.php`, reemplazar (5 de 5):
+
+```php
+    public function test_con_aprobacion_queda_pendiente_y_sigue_contando(): void
+```
+
+por:
+
+```php
+    public function test_en_el_sgr_un_no_aplica_queda_por_aprobar(): void
+    {
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertOk()
+            ->assertJsonPath('requisito.estado', 'no_aplica_pendiente')
+            ->assertJsonPath('progreso.total', 8);
+    }
+
+    public function test_con_aprobacion_queda_pendiente_y_sigue_contando(): void
+```
+
+- [ ] **Paso 2: Comprobar que fallan**
+
+Run: `php artisan test tests/Feature/Schema/SeguimientoRequisitoTest.php tests/Feature/Viabilizacion/PlantillasVersionesTest.php tests/Feature/Viabilizacion/SeguimientoRequisitoApiTest.php tests/Feature/Viabilizacion/NoAplicaRequisitoApiTest.php`
+Expected: FALLAN las que esperan aprobación en el SGR (`test_todos_los_requisitos_sgr_exigen_aprobacion_del_no_aplica`, `test_en_el_sgr_un_no_aplica_queda_por_aprobar`, el valor de `requiere_aprobacion_no_aplica` en la migración y en la fila presentada) y `test_el_rollback_del_catalogo_avanza_aunque_se_exija_aprobacion`.
+
+- [ ] **Paso 3: Implementar**
+
+En `database/migrations/2026_11_06_100006_add_seguimiento_to_requisitos_catalogo_table.php`, reemplazar (1 de 3):
+
+```php
+        $this->agregar('requiere_aprobacion_no_aplica', fn (Blueprint $t) => $t->boolean('requiere_aprobacion_no_aplica')->default(false));
+```
+
+por:
+
+```php
+        // Nace en true para que los requisitos existentes, todos del SGR, exijan aprobación del
+        // "no aplica" (decisión del usuario). Abajo el valor por defecto pasa a false.
+        $this->agregar('requiere_aprobacion_no_aplica', fn (Blueprint $t) => $t->boolean('requiere_aprobacion_no_aplica')->default(true));
+```
+
+En `database/migrations/2026_11_06_100006_add_seguimiento_to_requisitos_catalogo_table.php`, reemplazar (2 de 3):
+
+```php
+            $table->string('codigo', 60)->nullable()->change();
+        });
+    }
+```
+
+por:
+
+```php
+            $table->string('codigo', 60)->nullable()->change();
+            $table->boolean('requiere_aprobacion_no_aplica')->default(false)->change();
+        });
+    }
+```
+
+En `database/migrations/2026_11_06_100006_add_seguimiento_to_requisitos_catalogo_table.php`, reemplazar (3 de 3):
+
+```php
+                $q->orWhere('caracter', '!=', 'obligatorio')->orWhere('requiere_aprobacion_no_aplica', true);
+```
+
+por:
+
+```php
+                // requiere_aprobacion_no_aplica no se revisa: en el SGR lo puso esta misma migración.
+                $q->orWhere('caracter', '!=', 'obligatorio');
+```
+
+En `database/seeders/CatalogoRequisitosSgrSeeder.php`, reemplazar (1 de 1):
+
+```php
+                    'codigo_comun' => $r['clave'],
+```
+
+por:
+
+```php
+                    'codigo_comun' => $r['clave'],
+                    'requiere_aprobacion_no_aplica' => true, // en el SGR todo "no aplica" se aprueba
+```
+
+En `app/Services/Viabilizacion/CatalogoService.php`, reemplazar (1 de 1):
+
+```php
+            'codigo_comun' => $datos['clave'],
+```
+
+por:
+
+```php
+            'codigo_comun' => $datos['clave'],
+            'requiere_aprobacion_no_aplica' => true, // en el SGR todo "no aplica" se aprueba
+```
+
+- [ ] **Paso 4: Comprobar que pasan**
+
+Run: `php artisan test`
+Expected: pasan todas, 329.
+
+- [ ] **Paso 5: Comitear**
+
+```bash
+git add tests/Feature/Schema/SeguimientoRequisitoTest.php tests/Feature/Viabilizacion/PlantillasVersionesTest.php tests/Feature/Viabilizacion/SeguimientoRequisitoApiTest.php tests/Feature/Viabilizacion/NoAplicaRequisitoApiTest.php database/migrations/2026_11_06_100006_add_seguimiento_to_requisitos_catalogo_table.php database/seeders/CatalogoRequisitosSgrSeeder.php app/Services/Viabilizacion/CatalogoService.php
+```
+
+```bash
+git commit -m "feat: require approval for not-applicable SGR requirements"
+```
+
+---
+
+### Tarea 7: Lógica de pantalla
 
 **Files:**
 - Modify: `resources/js/utils/expedienteChecklist.js`
@@ -3140,9 +3443,9 @@ git commit -m "feat: add requirement state helpers to the checklist screen logic
 
 ---
 
-### Tarea 7: Acciones en la pantalla del expediente
+### Tarea 8: Acciones en la pantalla del expediente
 
-Sin pruebas automáticas de componentes en el repositorio: se comprueba en el navegador en la tarea 8.
+Sin pruebas automáticas de componentes en el repositorio: se comprueba en el navegador en la tarea 9.
 
 **Files:**
 - Create: `resources/js/components/ExpedienteHistorialRequisito.jsx`
@@ -3648,7 +3951,7 @@ git commit -m "feat: show state, owner, not-applicable and history on each requi
 
 ---
 
-### Tarea 8: Verificación en la copia descartable
+### Tarea 9: Verificación en la copia descartable
 
 Usa la copia y las fotos de la tarea 1. Nunca `gest_pro`.
 
@@ -3673,10 +3976,10 @@ Expected: `SIN DIFERENCIAS`. Cualquier diferencia detiene la etapa.
 - [ ] **Paso 2: Revisar lo migrado**
 
 ```bash
-/c/xampp/mysql/bin/mysql -u root gestpro_verif_tmp -e "SELECT estado_aplicabilidad, caracter, COUNT(*) FROM proyectos_requisitos GROUP BY 1, 2; SELECT COUNT(*) AS total, SUM(codigo_comun = clave) AS comun, SUM(caracter = 'obligatorio') AS obligatorios FROM requisitos_catalogo; SELECT COUNT(*) AS historial FROM checklist_historial;"
+/c/xampp/mysql/bin/mysql -u root gestpro_verif_tmp -e "SELECT estado_aplicabilidad, caracter, COUNT(*) FROM proyectos_requisitos GROUP BY 1, 2; SELECT COUNT(*) AS total, SUM(codigo_comun = clave) AS comun, SUM(caracter = 'obligatorio') AS obligatorios, SUM(requiere_aprobacion_no_aplica) AS con_aprobacion FROM requisitos_catalogo; SHOW COLUMNS FROM requisitos_catalogo WHERE Field = 'requiere_aprobacion_no_aplica'; SELECT COUNT(*) AS historial FROM checklist_historial;"
 ```
 
-Expected: todas las filas en `aplica` y `obligatorio`, los 207 requisitos con `codigo_comun = clave` y obligatorios, y el historial vacío.
+Expected: todas las filas en `aplica` y `obligatorio`, los 207 requisitos con `codigo_comun = clave`, obligatorios y con aprobación del "no aplica" (`con_aprobacion` 207), el valor por defecto de esa columna en `0` y el historial vacío.
 
 ```bash
 /c/xampp/mysql/bin/mysql -u root gestpro_verif_tmp -e "SHOW CREATE TABLE proyectos_requisitos\G SHOW CREATE TABLE requisitos_catalogo\G SHOW CREATE TABLE checklist_historial\G"
@@ -3730,17 +4033,17 @@ Crear un usuario de prueba solo en la copia; nunca usar sesiones de usuarios rea
 DB_DATABASE=gestpro_verif_tmp php artisan tinker --execute="App\Models\User::factory()->create(['email' => 'verif@gestpro.test', 'rol' => App\Enums\Rol::Administrador]);"
 ```
 
-Para probar la aprobación, activarla en un requisito, solo en la copia:
+En el SGR todo "no aplica" se aprueba. Para probar también el caso sin aprobación, quitarla en un requisito, solo en la copia:
 
 ```bash
-/c/xampp/mysql/bin/mysql -u root gestpro_verif_tmp -e "UPDATE requisitos_catalogo SET requiere_aprobacion_no_aplica = 1 WHERE clave = 'a8';"
+/c/xampp/mysql/bin/mysql -u root gestpro_verif_tmp -e "UPDATE requisitos_catalogo SET requiere_aprobacion_no_aplica = 0 WHERE clave = 'a8';"
 ```
 
 La contraseña es la predeterminada de `UserFactory`. En un expediente en borrador comprobar:
 
-1. Marcar un requisito pendiente como "no aplica" sin justificación muestra "Escriba la justificación."; con justificación, el total del avance baja en 1 y la casilla queda deshabilitada.
+1. En el requisito `a8`, marcar "no aplica" sin justificación muestra "Escriba la justificación."; con justificación, el total del avance baja en 1 y la casilla queda deshabilitada.
 2. Asignar un responsable y abrir el historial: aparecen el "no aplica" y el responsable, con fecha y usuario.
-3. En el requisito `a8`, el diálogo avisa "Otra persona deberá aprobarlo."; queda "No aplica, por aprobar", el total no baja y aparecen Aprobar y Rechazar. Aprobar baja el total y registra que lo aprobó quien lo marcó.
+3. En cualquier otro requisito, el diálogo avisa "Otra persona deberá aprobarlo."; queda "No aplica, por aprobar", el total no baja y aparecen Aprobar y Rechazar. Aprobar baja el total y registra que lo aprobó quien lo marcó.
 4. Retirar el "no aplica" devuelve el requisito a pendiente y el total sube.
 5. Reemplazar un soporte: el historial ofrece descargar el anterior.
 6. El Excel trae las columnas Estado, Marcado por, Responsable y Justificación de no aplica.
@@ -3757,7 +4060,7 @@ Detener el servidor y eliminar la copia:
 - [ ] **Paso 7: Ejecutar las suites una última vez**
 
 Run: `php artisan test`
-Expected: pasan todas, 325.
+Expected: pasan todas, 329.
 
 Run: `npm test`
 Expected: pasan todas, 140.
@@ -3768,7 +4071,7 @@ Informar: totales de pruebas, resultado de las tres comparaciones y lo revisado 
 
 ---
 
-### Tarea 9: Aplicar en `gest_pro` (solo con autorización)
+### Tarea 10: Aplicar en `gest_pro` (solo con autorización)
 
 No ejecutar esta tarea sin un sí explícito del usuario a este paso. Si la comparación muestra diferencias, restaurar el respaldo: no usar `migrate:rollback`.
 
