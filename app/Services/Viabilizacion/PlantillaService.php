@@ -23,6 +23,9 @@ final class PlantillaService
 {
     public const ALCANCES = ['general', 'especifica'];
 
+    /** Norma que indicaba la fuente de un requisito SGR, para conservarla al pasar a simple. */
+    private const NORMAS = ['a12' => 'Acuerdo 12 de 2024', 'ot' => 'Orientaciones Transitorias'];
+
     public function __construct(private readonly CatalogoService $catalogo)
     {
     }
@@ -123,12 +126,12 @@ final class PlantillaService
             throw new ReglaNegocioException('Una plantilla simple solo se puede copiar como simple.');
         }
 
-        $requisitos = $vigente->requisitos()->where('activo', true)->orderBy('orden')->get();
+        $requisitos = $vigente->requisitos()->where('activo', true)->orderBy('orden')->orderBy('id')->get();
         if (array_key_exists('requisito_ids', $datos)) {
             $pedidos = array_map('intval', $datos['requisito_ids']);
             $ajenos = array_diff($pedidos, $requisitos->pluck('id')->all());
             if ($ajenos) {
-                throw new ReglaNegocioException('Algunos requisitos elegidos no son de la versión vigente de la plantilla.');
+                throw new ReglaNegocioException('Algunos requisitos elegidos no son de la versión vigente de la plantilla o están inactivos.');
             }
             $requisitos = $requisitos->whereIn('id', $pedidos)->values();
         }
@@ -209,6 +212,8 @@ final class PlantillaService
             'sector_id' => null,
             'tipo_id' => null,
             'condicion' => null,
+            'requiere_aprobacion_no_aplica' => false,
+            'referencia_normativa' => $fila['referencia_normativa'] ?: (self::NORMAS[$fila['fuente']] ?? null),
             'caracter' => ($porCondicion || $porSector) ? RequisitoCatalogo::CONDICIONADO : $fila['caracter'],
             'condicion_descripcion' => $partes ? implode('. ', $partes) : $fila['condicion_descripcion'],
         ];

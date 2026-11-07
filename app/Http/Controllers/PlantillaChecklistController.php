@@ -63,7 +63,7 @@ class PlantillaChecklistController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $plantilla = $this->plantillas->crear($request->validate($this->reglas(), self::MENSAJES, self::ATRIBUTOS),$request->user());
+        $plantilla = $this->plantillas->crear($request->validate($this->reglas(), self::MENSAJES, self::ATRIBUTOS), $request->user());
 
         return response()->json($this->plantillas->presentar($plantilla), 201);
     }
@@ -90,7 +90,7 @@ class PlantillaChecklistController extends Controller
             'motor' => ['sometimes', Rule::in([PlantillaChecklist::MOTOR_SGR, PlantillaChecklist::MOTOR_SIMPLE])],
             'requisito_ids' => ['sometimes', 'array'],
             'requisito_ids.*' => ['integer'],
-        ], self::MENSAJES);
+        ], self::MENSAJES, self::ATRIBUTOS);
         $copia = $this->plantillas->duplicar($plantilla, $datos, $request->user());
 
         return response()->json($this->plantillas->presentar($copia), 201);

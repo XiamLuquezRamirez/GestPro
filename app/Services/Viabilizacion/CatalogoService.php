@@ -162,10 +162,13 @@ final class CatalogoService
     {
         return $version->requisitos()->where('activo', true)
             ->where('caracter', RequisitoCatalogo::CONDICIONADO)
-            ->where(fn ($q) => $q->whereNull('condicion_descripcion')->orWhere('condicion_descripcion', ''))
+            ->where(fn ($q) => $q->whereNull('condicion_descripcion')->orWhere('condicion_descripcion', '')
+                ->orWhere('condicion_descripcion', 'like', '%Condición original:%'))
             ->orderBy('orden')
             ->get()
-            ->map(fn (RequisitoCatalogo $r) => "{$r->texto}: describe cuándo aplica este requisito condicionado.")
+            ->map(fn (RequisitoCatalogo $r) => str_contains((string) $r->condicion_descripcion, 'Condición original:')
+                ? "{$r->texto}: redacta en palabras cuándo aplica; la condición original es del evaluador SGR."
+                : "{$r->texto}: describe cuándo aplica este requisito condicionado.")
             ->all();
     }
 
