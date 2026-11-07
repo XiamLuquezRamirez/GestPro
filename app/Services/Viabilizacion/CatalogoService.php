@@ -194,8 +194,6 @@ final class CatalogoService
         $valores = [
             'catalogo_version_id' => $version->id,
             'clave' => $datos['clave'],
-            'codigo_comun' => $datos['clave'],
-            'requiere_aprobacion_no_aplica' => true, // en el SGR todo "no aplica" se aprueba
             'seccion' => $seccion,
             'fuente' => $datos['fuente'],
             'sector_id' => ($datos['sector_id'] ?? null) ?: null,
@@ -215,7 +213,8 @@ final class CatalogoService
             return $requisito;
         }
 
-        return RequisitoCatalogo::create($valores);
+        // Al crear en el SGR: el código común es la clave y todo "no aplica" se aprueba. Al editar se conservan.
+        return RequisitoCatalogo::create([...$valores, 'codigo_comun' => $datos['clave'], 'requiere_aprobacion_no_aplica' => true]);
     }
 
     public function eliminarRequisito(CatalogoVersion $version, RequisitoCatalogo $requisito): void

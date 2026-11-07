@@ -135,13 +135,64 @@ class SeguimientoRequisitoTest extends TestCase
         }
     }
 
+    public function test_el_rollback_se_detiene_si_hay_requisitos_sin_fuente_o_sin_codigo(): void
+    {
+        foreach ([['fuente' => null], ['codigo' => null]] as $indice => $datos) {
+            DB::table('requisitos_catalogo')->delete();
+            $version = DB::table('catalogo_versiones')->value('id') ?? $this->versionSgr();
+            $this->requisito($version, ['clave' => "r{$indice}", 'codigo_comun' => "r{$indice}", ...$datos]);
+
+            try {
+                $this->migracionCatalogo()->down();
+                $this->fail('El rollback debía detenerse con ' . json_encode($datos));
+            } catch (RuntimeException $e) {
+                $this->assertStringContainsString('sin sección, fuente o código', $e->getMessage());
+            }
+        }
+
+        $this->assertTrue(Schema::hasColumn('requisitos_catalogo', 'codigo_comun'));
+    }
+
+    public function test_el_rollback_se_detiene_si_se_cambio_el_codigo_comun(): void
+    {
+        $this->requisito($this->versionSgr(), ['codigo_comun' => 'otro']);
+
+        try {
+            $this->migracionCatalogo()->down();
+            $this->fail('El rollback debía detenerse.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('se perderían', $e->getMessage());
+        }
+
+        $this->assertSame('otro', DB::table('requisitos_catalogo')->value('codigo_comun'));
+    }
+
     public function test_el_rollback_del_catalogo_avanza_aunque_se_exija_aprobacion(): void
     {
-        $this->requisito($this->versionSgr(), ['requiere_aprobacion_no_aplica' => true]);
+        $this->requisito($this->versionSgr(), ['requiere_aprobacion_no_aplica' => true, 'codigo_comun' => 'a1']);
 
         $this->migracionCatalogo()->down();
 
         $this->assertFalse(Schema::hasColumn('requisitos_catalogo', 'requiere_aprobacion_no_aplica'));
+    }
+
+    public function test_el_rollback_del_catalogo_restaura_las_columnas_obligatorias_y_quita_las_nuevas(): void
+    {
+        $this->requisito($this->versionSgr(), ['codigo_comun' => 'a1']);
+
+        $this->migracionCatalogo()->down();
+
+        $columnas = collect(Schema::getColumns('requisitos_catalogo'));
+        foreach (['seccion', 'fuente', 'codigo'] as $columna) {
+            $this->assertFalse($columnas->firstWhere('name', $columna)['nullable'], $columna);
+        }
+        foreach ([
+            'descripcion', 'categoria', 'tipo_requisito', 'caracter', 'cargo_cumplimiento', 'cargo_revision',
+            'soporte_requerido', 'referencia_normativa', 'condicion_descripcion', 'requiere_aprobacion_no_aplica', 'codigo_comun',
+        ] as $columna) {
+            $this->assertFalse(Schema::hasColumn('requisitos_catalogo', $columna), $columna);
+        }
+        $this->assertSame(1, DB::table('requisitos_catalogo')->count());
     }
 
     // ------------------------------------------------------------ checklist

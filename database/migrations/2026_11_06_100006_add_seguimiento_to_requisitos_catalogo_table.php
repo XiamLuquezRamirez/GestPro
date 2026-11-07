@@ -56,7 +56,8 @@ return new class extends Migration
                     $q->orWhereNotNull($columna);
                 }
                 // requiere_aprobacion_no_aplica no se revisa: en el SGR lo puso esta misma migración.
-                $q->orWhere('caracter', '!=', 'obligatorio');
+                $q->orWhere('caracter', '!=', 'obligatorio')
+                    ->orWhereNull('codigo_comun')->orWhereColumn('codigo_comun', '!=', 'clave');
             })
             ->exists();
         if ($conDatos) {

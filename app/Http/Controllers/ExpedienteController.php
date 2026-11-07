@@ -159,7 +159,7 @@ class ExpedienteController extends Controller
     public function descargarSoporteHistorial(ProyectoExpediente $expediente, ChecklistHistorial $entrada): StreamedResponse|JsonResponse
     {
         $ruta = $entrada->expediente_id === $expediente->id ? ($entrada->antes['soporte_archivo'] ?? null) : null;
-        if ($ruta && dirname($ruta) !== "expedientes/{$expediente->id}") {
+        if ($ruta && (str_contains($ruta, '..') || str_contains($ruta, '\\') || dirname($ruta) !== "expedientes/{$expediente->id}")) {
             $ruta = null; // solo se sirven archivos de la carpeta del expediente
         }
         $disco = Storage::disk(ExpedienteService::DISCO);

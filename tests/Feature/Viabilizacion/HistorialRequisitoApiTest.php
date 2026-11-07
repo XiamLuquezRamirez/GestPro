@@ -99,6 +99,7 @@ class HistorialRequisitoApiTest extends TestCase
         $this->assertArrayNotHasKey('soporte_archivo', $reemplazo['antes']);
         $this->assertSame('soporte_reemplazado', $reemplazo['evento']);
         $this->assertSame(['nombre' => 'v1.pdf'], $reemplazo['soporte']);
+        $this->assertSame('v2.pdf', $reemplazo['despues']['soporte_nombre']);
 
         $this->como(Rol::Consulta)->get("/GestPro/expedientes/{$this->expediente->id}/historial/{$reemplazo['id']}/soporte")
             ->assertOk()->assertDownload('v1.pdf');
@@ -204,5 +205,18 @@ class HistorialRequisitoApiTest extends TestCase
         ]);
 
         $this->como(Rol::Consulta)->get("/GestPro/expedientes/{$this->expediente->id}/historial/{$conPuntos->id}/soporte")->assertNotFound();
+    }
+
+    public function test_no_se_descarga_el_soporte_de_otro_expediente_subiendo_de_carpeta(): void
+    {
+        $otro = app(ExpedienteService::class)->crear(Proyecto::create(['nombre' => 'Vía']), ['fase_sgr' => 3], null);
+        Storage::disk('local')->put("expedientes/{$otro->id}/x.pdf", 'x');
+        $entrada = ChecklistHistorial::create([
+            'entidad_tipo' => 'requisito', 'entidad_id' => $this->fila->id, 'expediente_id' => $this->expediente->id,
+            'evento' => 'soporte_reemplazado',
+            'antes' => ['soporte_archivo' => "expedientes/{$this->expediente->id}/../{$otro->id}/x.pdf", 'soporte_nombre' => 'x.pdf'],
+        ]);
+
+        $this->como(Rol::Consulta)->get("/GestPro/expedientes/{$this->expediente->id}/historial/{$entrada->id}/soporte")->assertNotFound();
     }
 }
