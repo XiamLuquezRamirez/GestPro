@@ -22,6 +22,9 @@ export const SECCIONES_PARAMETROS = [
     { slug: 'sectores', tab: 'sectores', titulo: 'Sectores', descripcion: 'Sectores de inversión de los proyectos.', grupo: GRUPO.CATALOGOS, icono: 'faLayerGroup', palabras: 'educacion salud transporte vivienda catalogo' },
 ];
 
+// No usar /plantillas: bajo /GestPro chocaría con la API del mismo nombre.
+export const RUTA_PLANTILLAS = '/plantillas-checklist';
+
 export const DESTINOS = [
     { id: 'tablero', titulo: 'Tablero', ruta: '/dashboard', grupo: GRUPO.TRABAJO, icono: 'faGaugeHigh', palabras: 'inicio dashboard panel mapa' },
     ...SECCIONES_PARAMETROS.filter((s) => s.grupo === GRUPO.TRABAJO).map((s) => ({ ...s, id: s.slug, ruta: `/parametros/${s.slug}` })),
@@ -29,11 +32,16 @@ export const DESTINOS = [
     { id: 'contratos', titulo: 'Contratos', ruta: '/dashboard?vista=contratos', grupo: GRUPO.ANALISIS, icono: 'faFileSignature', palabras: 'avance fisico financiero desfase' },
     { id: 'estadisticas', titulo: 'Estadísticas', ruta: '/dashboard?vista=estadisticas', grupo: GRUPO.ANALISIS, icono: 'faChartColumn', palabras: 'graficas filtros cadena presupuestal' },
     ...SECCIONES_PARAMETROS.filter((s) => s.grupo === GRUPO.CATALOGOS).map((s) => ({ ...s, id: s.slug, ruta: `/parametros/${s.slug}` })),
-    { id: 'plantillas', titulo: 'Plantillas de checklist', ruta: '/plantillas', grupo: GRUPO.CATALOGOS, icono: 'faListCheck', palabras: 'requisitos checklist fuentes sectores versiones catalogo', soloRol: 'Administrador' },
+    { id: 'plantillas', titulo: 'Plantillas de checklist', ruta: RUTA_PLANTILLAS, grupo: GRUPO.CATALOGOS, icono: 'faListCheck', palabras: 'requisitos checklist fuentes sectores versiones catalogo', soloRol: 'Administrador' },
 ];
 
 /** Los destinos que puede abrir el usuario: algunos son solo de un rol. */
-export const destinosPara = (usuario) => DESTINOS.filter((d) => !d.soloRol || d.soloRol === usuario?.rol);
+const permitido = (usuario, destino) => !destino.soloRol || destino.soloRol === usuario?.rol;
+
+export const destinosPara = (usuario) => DESTINOS.filter((d) => permitido(usuario, d));
+
+/** Si el usuario puede abrir el destino `id`: la misma regla que usa el menú. */
+export const puedeVer = (usuario, id) => destinosPara(usuario).some((d) => d.id === id);
 
 const MAX_PROYECTOS = 8;
 
@@ -74,7 +82,7 @@ export const buscarEnPaleta = (consulta, destinos, proyectos) => {
 
 export const destinoActivo = (pathname, search) => {
     if (pathname.startsWith('/viabilizacion/')) return 'expedientes';
-    if (pathname === '/plantillas' || pathname.startsWith('/plantillas/')) return 'plantillas';
+    if (pathname === RUTA_PLANTILLAS || pathname.startsWith(`${RUTA_PLANTILLAS}/`)) return 'plantillas';
     if (pathname.startsWith('/parametros/')) return pathname.split('/')[2];
     if (pathname.startsWith('/dashboard')) {
         const vista = new URLSearchParams(search).get('vista');

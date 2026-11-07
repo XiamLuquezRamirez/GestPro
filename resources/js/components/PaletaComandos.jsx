@@ -7,7 +7,7 @@ import { ICONOS } from '../utils/iconosNavegacion';
 import { buscarEnPaleta } from '../utils/navegacion';
 
 /** Ctrl+K: escribir a dónde se quiere ir, sea una sección o un proyecto. */
-const PaletaComandos = ({ destinos, onCerrar }) => {
+const PaletaComandos = ({ destinos = [], onCerrar }) => {
     const navigate = useNavigate();
     const [consulta, setConsulta] = useState('');
     const [proyectos, setProyectos] = useState([]);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DESTINOS, buscarEnPaleta, destinoActivo, destinosPara, seccionDesdeSlug, tituloDeRuta } from './navegacion';
+import { DESTINOS, RUTA_PLANTILLAS, buscarEnPaleta, destinoActivo, destinosPara, puedeVer, seccionDesdeSlug, tituloDeRuta } from './navegacion';
 
 const proyectos = [
     { id: 1, nombre: 'Construcción sede educativa', descripcion_municipio: 'MEDELLÍN' },
@@ -35,19 +35,35 @@ describe('DESTINOS', () => {
 });
 
 describe('destinosPara', () => {
-    it('las plantillas de checklist solo se muestran a un Administrador', () => {
-        const ids = (usuario) => destinosPara(usuario).map((d) => d.id);
+    const sinPlantillas = DESTINOS.filter((d) => d.id !== 'plantillas');
 
-        expect(ids({ rol: 'Administrador' })).toContain('plantillas');
-        expect(ids({ rol: 'Gestor' })).not.toContain('plantillas');
-        expect(ids(null)).not.toContain('plantillas');
-        expect(ids({ rol: 'Gestor' })).toContain('tablero');
+    it('las plantillas de checklist solo se muestran a un Administrador', () => {
+        expect(destinosPara({ rol: 'Administrador' })).toEqual(DESTINOS);
+        expect(destinosPara({ rol: 'Gestor' })).toEqual(sinPlantillas);
+        expect(destinosPara({ rol: 'Consulta' })).toEqual(sinPlantillas);
+        expect(destinosPara(null)).toEqual(sinPlantillas);
     });
 
     it('la ruta de plantillas y su detalle marcan el destino', () => {
-        expect(destinoActivo('/plantillas', '')).toBe('plantillas');
-        expect(destinoActivo('/plantillas/7', '')).toBe('plantillas');
-        expect(tituloDeRuta('/plantillas/7', '')).toBe('Plantillas de checklist');
+        expect(RUTA_PLANTILLAS).toBe('/plantillas-checklist');
+        expect(destinoActivo(RUTA_PLANTILLAS, '')).toBe('plantillas');
+        expect(destinoActivo(`${RUTA_PLANTILLAS}/7`, '')).toBe('plantillas');
+        expect(tituloDeRuta(`${RUTA_PLANTILLAS}/7`, '')).toBe('Plantillas de checklist');
+    });
+
+    it('una ruta que solo empieza igual no queda activa', () => {
+        expect(destinoActivo(`${RUTA_PLANTILLAS}x`, '')).toBeNull();
+        expect(destinoActivo('/plantillas', '')).toBeNull();
+    });
+});
+
+describe('puedeVer', () => {
+    it('aplica la misma regla de rol que destinosPara', () => {
+        expect(puedeVer({ rol: 'Administrador' }, 'plantillas')).toBe(true);
+        expect(puedeVer({ rol: 'Gestor' }, 'plantillas')).toBe(false);
+        expect(puedeVer(null, 'plantillas')).toBe(false);
+        expect(puedeVer({ rol: 'Gestor' }, 'tablero')).toBe(true);
+        expect(puedeVer({ rol: 'Administrador' }, 'inexistente')).toBe(false);
     });
 });
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -87,7 +87,7 @@ const AppShell = ({ user, onLogout }) => {
     };
 
     const enBarraInferior = IDS_BARRA_INFERIOR.includes(activo);
-    const destinos = destinosPara(user);
+    const destinos = useMemo(() => destinosPara(user), [user]);
 
     return (
         <div className={`gp-app${plegado ? ' riel-plegado' : ''}`}>
