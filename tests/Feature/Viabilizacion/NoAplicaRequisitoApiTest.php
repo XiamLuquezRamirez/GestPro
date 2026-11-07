@@ -8,6 +8,7 @@ use App\Models\ProyectoExpediente;
 use App\Models\ProyectoRequisito;
 use App\Models\User;
 use App\Services\Viabilizacion\ExpedienteService;
+use App\Services\Viabilizacion\NoAplicaRequisito;
 use Database\Seeders\CatalogoRequisitosSgrSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -83,7 +84,7 @@ class NoAplicaRequisitoApiTest extends TestCase
     public function test_un_no_aplica_exige_justificacion(): void
     {
         $this->como(Rol::Gestor)->postJson($this->url('/no-aplica'), ['justificacion' => '   '])
-            ->assertStatus(422)->assertJsonPath('message', 'Explique por qué el requisito no aplica.');
+            ->assertStatus(422)->assertJsonPath('message', 'Explica por qué el requisito no aplica.');
 
         $this->assertSame('aplica', $this->fila->fresh()->estado_aplicabilidad);
     }
@@ -93,7 +94,7 @@ class NoAplicaRequisitoApiTest extends TestCase
         $this->fila->update(['cumplido' => true]);
 
         $this->marcarComo($this->usuario(Rol::Gestor))->assertStatus(422)
-            ->assertJsonPath('mensaje', 'El requisito está cumplido: desmárquelo antes de indicar que no aplica.');
+            ->assertJsonPath('mensaje', 'El requisito está cumplido: desmárcalo antes de indicar que no aplica.');
     }
 
     public function test_retirar_un_no_aplica_vuelve_a_contar(): void
@@ -128,7 +129,7 @@ class NoAplicaRequisitoApiTest extends TestCase
         $this->marcarComo($quienMarca)->assertOk();
 
         $this->como($quienMarca)->postJson($this->url('/no-aplica/aprobar'))->assertStatus(422)
-            ->assertJsonPath('mensaje', 'Otra persona debe revisar este "no aplica": usted lo marcó.');
+            ->assertJsonPath('mensaje', 'Otra persona debe revisar este "no aplica": tú lo marcaste.');
 
         $this->como($revisor)->postJson($this->url('/no-aplica/aprobar'))->assertOk()
             ->assertJsonPath('requisito.estado', 'no_aplica')
@@ -215,5 +216,118 @@ class NoAplicaRequisitoApiTest extends TestCase
         DB::table('responsable')->where('id', $luis)->update(['activo' => false]);
 
         $this->como(Rol::Gestor)->patchJson($this->url(), ['responsable_id' => $luis, 'observacion' => 'Sigue'])->assertOk();
+    }
+
+    // ------------------------------------------------------------- revisión
+
+    public function test_ninguna_accion_vale_en_un_expediente_radicado(): void
+    {
+        $this->conAprobacion();
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertOk();
+        $this->expediente->update(['estado' => ProyectoExpediente::RADICADO]);
+
+        $this->como(Rol::Administrador)->postJson($this->url('/no-aplica/aprobar'))->assertStatus(422);
+        $this->como(Rol::Administrador)->postJson($this->url('/no-aplica/rechazar'))->assertStatus(422);
+        $this->como(Rol::Administrador)->deleteJson($this->url('/no-aplica'))->assertStatus(422);
+        $this->assertSame('no_aplica_pendiente', $this->fila->fresh()->estado_aplicabilidad);
+    }
+
+    public function test_consulta_no_puede_revisar_ni_retirar(): void
+    {
+        $this->conAprobacion();
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertOk();
+
+        $this->como(Rol::Consulta)->postJson($this->url('/no-aplica/aprobar'))->assertForbidden();
+        $this->como(Rol::Consulta)->postJson($this->url('/no-aplica/rechazar'))->assertForbidden();
+        $this->como(Rol::Consulta)->deleteJson($this->url('/no-aplica'))->assertForbidden();
+    }
+
+    public function test_un_gestor_no_rechaza_lo_que_el_mismo_marco(): void
+    {
+        $this->conAprobacion();
+        $quienMarca = $this->usuario(Rol::Gestor);
+        $this->marcarComo($quienMarca)->assertOk();
+
+        $this->como($quienMarca)->postJson($this->url('/no-aplica/rechazar'))->assertStatus(422);
+    }
+
+    public function test_aprobar_lo_que_marco_otro_no_es_autoaprobado(): void
+    {
+        $this->conAprobacion();
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertOk();
+
+        $this->como(Rol::Administrador)->postJson($this->url('/no-aplica/aprobar'))->assertOk();
+
+        $registro = DB::table('checklist_historial')->where('evento', 'no_aplica_aprobado')->first();
+        $this->assertFalse(json_decode($registro->despues, true)['autoaprobado']);
+    }
+
+    public function test_no_se_marca_dos_veces(): void
+    {
+        $this->conAprobacion();
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertOk();
+
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertStatus(422)
+            ->assertJsonPath('mensaje', 'El requisito ya está marcado como no aplica.');
+    }
+
+    public function test_retirar_y_rechazar_limpian_la_fila(): void
+    {
+        $this->conAprobacion();
+        foreach (['retirar' => fn () => $this->como(Rol::Gestor)->deleteJson($this->url('/no-aplica')),
+                  'rechazar' => fn () => $this->como(Rol::Gestor)->postJson($this->url('/no-aplica/rechazar'), ['motivo' => '  '])] as $accion => $peticion) {
+            $this->marcarComo($this->usuario(Rol::Gestor))->assertOk();
+
+            $peticion()->assertOk();
+
+            $fila = DB::table('proyectos_requisitos')->where('id', $this->fila->id)->first();
+            $this->assertSame('aplica', $fila->estado_aplicabilidad, $accion);
+            $this->assertNull($fila->justificacion_no_aplica, $accion);
+            $this->assertNull($fila->usuario_no_aplica_id, $accion);
+            $this->assertNull($fila->usuario_aprobo_id, $accion);
+        }
+
+        $rechazo = DB::table('checklist_historial')->where('evento', 'no_aplica_rechazado')->first();
+        $this->assertNull(json_decode($rechazo->despues, true)['motivo']); // un motivo en blanco queda nulo
+    }
+
+    public function test_un_requisito_de_otro_expediente_no_sirve(): void
+    {
+        $servicio = app(ExpedienteService::class);
+        $otro = $servicio->crear(Proyecto::create(['nombre' => 'Vía']), ['fase_sgr' => 3], null);
+        $servicio->confirmarConfiguracion($otro, ['fase_sgr' => 3]);
+        $ajena = $otro->requisitos()->where('aplica', true)->first();
+
+        $this->como(Rol::Gestor)->postJson("/GestPro/expedientes/{$this->expediente->id}/requisitos/{$ajena->id}/no-aplica", ['justificacion' => 'x'])
+            ->assertNotFound();
+    }
+
+    public function test_aprobar_con_una_lectura_vieja_no_revive_un_no_aplica_retirado(): void
+    {
+        $this->conAprobacion();
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertOk();
+        $vieja = $this->fila->fresh(); // la cargó otra petición, todavía "por aprobar"
+        $this->como(Rol::Gestor)->deleteJson($this->url('/no-aplica'))->assertOk();
+
+        try {
+            app(NoAplicaRequisito::class)->aprobar($this->expediente, $vieja, $this->usuario(Rol::Administrador));
+            $this->fail('Debía rechazar la aprobación.');
+        } catch (\App\Exceptions\ReglaNegocioException $e) {
+            $this->assertSame('Este requisito no tiene un "no aplica" por aprobar.', $e->getMessage());
+        }
+        $this->assertSame('aplica', $this->fila->fresh()->estado_aplicabilidad);
+    }
+
+    public function test_cumplir_con_una_lectura_vieja_no_pisa_un_no_aplica(): void
+    {
+        $vieja = $this->fila->fresh(); // la cargó otra petición, todavía pendiente
+        $this->marcarComo($this->usuario(Rol::Gestor))->assertOk();
+
+        $this->expectException(\App\Exceptions\ReglaNegocioException::class);
+        try {
+            app(ExpedienteService::class)->marcar($this->expediente, $vieja, ['cumplido' => true], $this->usuario(Rol::Gestor));
+        } finally {
+            $this->assertFalse($this->fila->fresh()->cumplido);
+        }
     }
 }

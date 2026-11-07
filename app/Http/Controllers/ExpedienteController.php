@@ -100,7 +100,7 @@ class ExpedienteController extends Controller
             'cumplido' => ['sometimes', 'boolean'],
             'observacion' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'responsable_id' => ['sometimes', 'nullable', 'integer'],
-        ]);
+        ], ['responsable_id.integer' => 'El responsable no es válido.']);
         $fila = $this->servicio->marcar($expediente, $requisito, $datos, $request->user());
 
         return response()->json([

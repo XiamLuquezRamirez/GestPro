@@ -164,10 +164,27 @@ final class ExpedienteService
     {
         $this->exigirEditable($expediente, $fila);
 
+        DB::transaction(function () use ($expediente, $fila, $datos, $usuario) {
+            // Bloquea la fila y decide sobre su estado actual: un "no aplica" o una marca
+            // simultánea no puede quedar pisado por una lectura vieja.
+            ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
+            $fila->refresh();
+            $this->aplicarMarca($fila, $datos, $usuario);
+            $this->registrarCambios($fila, $usuario);
+            $fila->save();
+            $expediente->touch();
+        });
+
+        return $fila;
+    }
+
+    /** Aplica a la fila lo pedido, sobre su estado actual. */
+    private function aplicarMarca(ProyectoRequisito $fila, array $datos, ?User $usuario): void
+    {
         if (array_key_exists('cumplido', $datos)) {
             $cumplido = (bool) $datos['cumplido'];
             if ($cumplido && $fila->estado_aplicabilidad !== ProyectoRequisito::APLICA) {
-                throw new ReglaNegocioException('Este requisito está marcado como no aplica o por definir: resuelva eso antes de cumplirlo.');
+                throw new ReglaNegocioException('Este requisito está marcado como no aplica o por definir: resuelve eso antes de cumplirlo.');
             }
             if ($cumplido && ! $fila->cumplido) {
                 $fila->fill(['cumplido' => true, 'fecha_cumplido' => now(), 'usuario_cumplido_id' => $usuario?->id]);
@@ -183,14 +200,6 @@ final class ExpedienteService
         if (array_key_exists('responsable_id', $datos)) {
             $fila->responsable_id = $this->responsableValido($datos['responsable_id'], $fila);
         }
-
-        DB::transaction(function () use ($expediente, $fila, $usuario) {
-            $this->registrarCambios($fila, $usuario);
-            $fila->save();
-            $expediente->touch();
-        });
-
-        return $fila;
     }
 
     public function guardarSoporte(ProyectoExpediente $expediente, ProyectoRequisito $fila, UploadedFile $archivo, ?User $usuario = null): ProyectoRequisito

@@ -13,7 +13,9 @@ use Illuminate\Http\Request;
 class NoAplicaRequisitoController extends Controller
 {
     private const MENSAJES = [
-        'justificacion.required' => 'Explique por qué el requisito no aplica.',
+        'justificacion.required' => 'Explica por qué el requisito no aplica.',
+        'justificacion.string' => 'La justificación debe ser un texto.',
+        'motivo.string' => 'El motivo debe ser un texto.',
         'justificacion.max' => 'La justificación admite hasta 2000 caracteres.',
         'motivo.max' => 'El motivo admite hasta 2000 caracteres.',
     ];
