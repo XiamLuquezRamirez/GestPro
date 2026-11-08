@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     AVISO_SIN_SECTOR,
+    MAX_PLANTILLAS,
     alternarPlantilla,
     avisoIncompatibles,
     avisosPlantilla,
@@ -9,6 +10,7 @@ import {
     hayCompatibleSgr,
     incluyeSgr,
     opcionPlantilla,
+    plantillasDelPanel,
     seleccionParaNuevo,
     textoPlantillasNuevo,
 } from './plantillasExpediente';
@@ -142,6 +144,16 @@ describe('opcionPlantilla', () => {
             .toEqual({ marcada: true, deshabilitada: true, motivo: 'Un expediente configurado necesita al menos una plantilla.' });
         expect(opcionPlantilla(AGUA, enUno, [], [AGUA], { configurado: false }).deshabilitada).toBe(false);
         expect(opcionPlantilla(AGUA, { plantilla_ids: [5, 6] }, [], [AGUA, VIAS], { configurado: true }).deshabilitada).toBe(false);
+    });
+
+    it('con el máximo de plantillas marcadas no se puede marcar otra, pero sí quitar', () => {
+        expect(MAX_PLANTILLAS).toBe(20);
+        const llena = { plantilla_ids: Array.from({ length: 20 }, (_, i) => 100 + i) };
+        expect(opcionPlantilla(AGUA, llena, [], [AGUA]))
+            .toEqual({ marcada: false, deshabilitada: true, motivo: 'Un expediente admite como máximo 20 plantillas.' });
+        expect(opcionPlantilla(plantilla(100), llena, [], [plantilla(100)])).toEqual({ marcada: true, deshabilitada: false, motivo: null });
+        const casi = { plantilla_ids: llena.plantilla_ids.slice(1) };
+        expect(opcionPlantilla(AGUA, casi, [], [AGUA]).deshabilitada).toBe(false);
     });
 
     it('sin selección cargada, todo queda deshabilitado', () => {
@@ -287,5 +299,21 @@ describe('textoPlantillasNuevo', () => {
     it('sin una sgr que se ofrezca, no promete preselección', () => {
         expect(textoPlantillasNuevo([AGUA, VIAS])).toBe('Al crearlo podrás elegir entre: Obras de agua, Vías.');
         expect(textoPlantillasNuevo([{ ...SGR, version: null }, AGUA])).toBe('Al crearlo podrás elegir entre: SGR, Obras de agua.');
+    });
+});
+
+describe('plantillasDelPanel', () => {
+    it('editable, muestra todas las disponibles', () => {
+        expect(plantillasDelPanel([SGR, AGUA, VIAS], { plantilla_ids: [5] }, false)).toEqual([SGR, AGUA, VIAS]);
+    });
+
+    it('en solo lectura, solo las de la selección y en su orden', () => {
+        expect(plantillasDelPanel([SGR, AGUA, VIAS], { plantilla_ids: [6, 1] }, true)).toEqual([VIAS, SGR]);
+        expect(plantillasDelPanel([SGR], { plantilla_ids: [] }, true)).toEqual([]);
+    });
+
+    it('aguanta la lista o la selección ausentes', () => {
+        expect(plantillasDelPanel(undefined, { plantilla_ids: [1] }, true)).toEqual([]);
+        expect(plantillasDelPanel([SGR], null, true)).toEqual([]);
     });
 });

@@ -11,6 +11,10 @@ const MOTIVO_NO_OFRECIDA = 'Ya no se ofrece a este proyecto: solo la conserva un
 const MOTIVO_OTRA_SGR = 'El expediente ya tiene una plantilla con motor SGR: solo admite una.';
 const MOTIVO_ULTIMA = 'Un expediente configurado necesita al menos una plantilla.';
 
+/** Igual que el backend (PlantillasExpediente::MAX_PLANTILLAS). */
+export const MAX_PLANTILLAS = 20;
+const MOTIVO_MAXIMO = `Un expediente admite como máximo ${MAX_PLANTILLAS} plantillas.`;
+
 /** Id de una plantilla de GET plantillas-compatibles (`id`) o de las de un expediente (`plantilla_id`). */
 const idDe = (plantilla) => plantilla.id ?? plantilla.plantilla_id;
 
@@ -59,6 +63,7 @@ export const elegirPrincipal = (seleccion, id) =>
  *   nueva en el expediente debe ser compatible.
  * - Con una plantilla sgr elegida, otra sgr no se puede marcar.
  * - Un expediente ya configurado no se queda sin plantillas: la última no se puede quitar.
+ * - Con MAX_PLANTILLAS marcadas, no se puede marcar otra.
  */
 export const opcionPlantilla = (plantilla, seleccion, plantillasExpediente, disponibles, { configurado = false } = {}) => {
     if (!seleccion) return { marcada: false, deshabilitada: true, motivo: null };
@@ -69,6 +74,10 @@ export const opcionPlantilla = (plantilla, seleccion, plantillasExpediente, disp
     }
     if (marcada) return { marcada, deshabilitada: false, motivo: null };
 
+    if (seleccion.plantilla_ids.length >= MAX_PLANTILLAS) {
+        return { marcada, deshabilitada: true, motivo: MOTIVO_MAXIMO };
+    }
+
     if (!seOfrece(plantilla) && !buscar(plantillasExpediente, id)) {
         return { marcada, deshabilitada: true, motivo: MOTIVO_NO_OFRECIDA };
     }
@@ -77,6 +86,17 @@ export const opcionPlantilla = (plantilla, seleccion, plantillasExpediente, disp
         return { marcada, deshabilitada: true, motivo: MOTIVO_OTRA_SGR };
     }
     return { marcada, deshabilitada: false, motivo: null };
+};
+
+/**
+ * Plantillas que muestra el panel. Editable, todas las disponibles; en solo lectura (un radicado,
+ * o un usuario que no edita), solo las de la selección, en su orden (la principal primero).
+ */
+export const plantillasDelPanel = (disponibles, seleccion, deshabilitada) => {
+    const lista = disponibles ?? [];
+    if (!deshabilitada) return lista;
+    const ids = seleccion?.plantilla_ids ?? [];
+    return ids.map((id) => lista.find((p) => p.id === id)).filter(Boolean);
 };
 
 /** Avisos de una plantilla disponible. Una inactiva tampoco es compatible: basta con decir que está inactiva. */

@@ -230,6 +230,8 @@
 }
 span.exv-plantilla-principal { cursor: default; }
 .exv-plantilla-principal input { margin: 0; accent-color: var(--gp-azul); }
+/* Grupo "Plantilla principal", dentro del bloque de plantillas: sin el relleno de un fieldset del panel. */
+.exv-config .exv-principal { padding: .6rem 0 0; margin-top: .6rem; border-top: 1px dashed var(--exv-linea); border-bottom: 0; }
 .exv-panel-sgr { border-top: 1px solid var(--exv-linea-suave); }
 .exv-panel-sgr-titulo {
     margin: 0;

@@ -2,6 +2,7 @@ import React from 'react';
 import { FASES, alternarId, alternarSector } from '../utils/expedienteChecklist';
 import {
     AVISO_SIN_SECTOR, alternarPlantilla, avisosPlantilla, detallePlantilla, elegirPrincipal, incluyeSgr, opcionPlantilla,
+    plantillasDelPanel,
 } from '../utils/plantillasExpediente';
 
 // Opciones del catálogo vigente más lo ya elegido que se haya desactivado después:
@@ -18,8 +19,8 @@ const Casilla = ({ marcada, deshabilitada, onCambiar, children }) => (
     </label>
 );
 
-/** Una plantilla disponible: casilla, opción de principal, datos y avisos. */
-const OpcionPlantilla = ({ plantilla, plantillasExpediente, opcion, esPrincipal, varias, deshabilitada, onAlternar, onPrincipal }) => {
+/** Una plantilla disponible: casilla, marca de principal, datos y avisos. */
+const OpcionPlantilla = ({ plantilla, plantillasExpediente, opcion, esPrincipal, deshabilitada, onAlternar }) => {
     const detalle = detallePlantilla(plantilla, plantillasExpediente);
     const avisos = avisosPlantilla(plantilla);
     const idDetalle = `exv-plantilla-${plantilla.id}-detalle`;
@@ -48,22 +49,29 @@ const OpcionPlantilla = ({ plantilla, plantillasExpediente, opcion, esPrincipal,
                 </dl>
                 {opcion.motivo && <p className="exv-plantilla-motivo">{opcion.motivo}</p>}
             </div>
-            {opcion.marcada && (varias ? (
-                <label className="exv-plantilla-principal">
-                    <input
-                        type="radio"
-                        name="exv-plantilla-principal"
-                        checked={esPrincipal}
-                        disabled={deshabilitada}
-                        aria-label={`Usar ${plantilla.nombre} como plantilla principal`}
-                        onChange={onPrincipal}
-                    />
-                    Principal
-                </label>
-            ) : <span className="exv-plantilla-principal">Principal</span>)}
+            {opcion.marcada && esPrincipal && <span className="exv-plantilla-principal">Principal</span>}
         </div>
     );
 };
+
+/** Con varias plantillas marcadas, cuál es la principal: un grupo de radios con su propio nombre. */
+const ElegirPrincipal = ({ plantillas, principalId, onPrincipal }) => (
+    <fieldset className="exv-principal">
+        <legend>Plantilla principal <small>(va primero en el checklist)</small></legend>
+        {plantillas.map((p) => (
+            <label key={p.id} className="exv-opt">
+                <input
+                    type="radio"
+                    name="exv-plantilla-principal"
+                    value={p.id}
+                    checked={principalId === p.id}
+                    onChange={() => onPrincipal(p.id)}
+                />
+                <span>{p.nombre}</span>
+            </label>
+        ))}
+    </fieldset>
+);
 
 /** Primer bloque del panel: las plantillas que se ofrecen al proyecto y las que ya tiene el expediente. */
 const BloquePlantillas = ({ disponibles, errorPlantillas, onReintentar, expediente, seleccion, deshabilitada, onCambiar }) => {
@@ -85,30 +93,38 @@ const BloquePlantillas = ({ disponibles, errorPlantillas, onReintentar, expedien
         );
     }
 
-    const lista = disponibles.plantillas;
-    const varias = seleccion.plantilla_ids.length > 1;
+    const todas = disponibles.plantillas;
+    // En solo lectura no se elige nada: basta con las plantillas que tiene el expediente.
+    const lista = plantillasDelPanel(todas, seleccion, deshabilitada);
+    const marcadas = seleccion.plantilla_ids.map((id) => todas.find((p) => p.id === id)).filter(Boolean);
+    const vacia = deshabilitada
+        ? 'Este expediente no tiene plantillas.'
+        : 'Ninguna plantilla se ofrece a este proyecto. Revisa sus fuentes de financiación y su sector, o pide a un Administrador que asocie una plantilla.';
 
     return (
         <fieldset className="exv-plantillas">
             <legend>Plantillas <small>(definen el checklist)</small></legend>
-            {disponibles.sin_sector && <p className="exv-config-aviso">{AVISO_SIN_SECTOR}.</p>}
+            {disponibles.sin_sector && !deshabilitada && <p className="exv-config-aviso">{AVISO_SIN_SECTOR}.</p>}
             {lista.length === 0 ? (
-                <p className="exv-config-nota">
-                    Ninguna plantilla se ofrece a este proyecto. Revisa sus fuentes de financiación y su sector, o pide a un Administrador que asocie una plantilla.
-                </p>
+                <p className="exv-config-nota">{vacia}</p>
             ) : lista.map((p) => (
                 <OpcionPlantilla
                     key={p.id}
                     plantilla={p}
                     plantillasExpediente={expediente.plantillas}
-                    opcion={opcionPlantilla(p, seleccion, expediente.plantillas, lista, { configurado: expediente.configurado })}
+                    opcion={opcionPlantilla(p, seleccion, expediente.plantillas, todas, { configurado: expediente.configurado })}
                     esPrincipal={seleccion.principal_id === p.id}
-                    varias={varias}
                     deshabilitada={deshabilitada}
                     onAlternar={() => onCambiar(alternarPlantilla(seleccion, p.id))}
-                    onPrincipal={() => onCambiar(elegirPrincipal(seleccion, p.id))}
                 />
             ))}
+            {!deshabilitada && marcadas.length > 1 && (
+                <ElegirPrincipal
+                    plantillas={marcadas}
+                    principalId={seleccion.principal_id}
+                    onPrincipal={(id) => onCambiar(elegirPrincipal(seleccion, id))}
+                />
+            )}
         </fieldset>
     );
 };
@@ -168,7 +184,7 @@ const ExpedienteConfiguracion = ({
                             ))}
                         </div>
                     </fieldset>
-        
+
                     <fieldset>
                         <legend>Componentes del proyecto</legend>
                         {componentes.map((c) => (
@@ -182,7 +198,7 @@ const ExpedienteConfiguracion = ({
                             </Casilla>
                         ))}
                     </fieldset>
-        
+
                     <fieldset>
                         <legend>Sector de inversión <small>(uno o varios)</small></legend>
                         {sectores.map((s) => (
@@ -197,7 +213,7 @@ const ExpedienteConfiguracion = ({
                             </Casilla>
                         ))}
                     </fieldset>
-        
+
                     {sectoresMarcados.length > 0 && (
                         <fieldset className="exv-tipos">
                             <legend>Tipo de proyecto <small>(marca los que apliquen)</small></legend>
@@ -218,7 +234,7 @@ const ExpedienteConfiguracion = ({
                             ))}
                         </fieldset>
                     )}
-        
+
                     <fieldset>
                         <legend>Tipologías y fuentes especiales</legend>
                         {tipologias.map((t) => (
