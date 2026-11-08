@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class ProyectoRequisito extends Model
 {
@@ -22,6 +23,7 @@ class ProyectoRequisito extends Model
         'usuario_cumplido_id', 'observacion', 'soporte_archivo', 'soporte_nombre', 'orden',
         'estado_aplicabilidad', 'justificacion_no_aplica', 'usuario_no_aplica_id', 'usuario_aprobo_id',
         'fecha_aprobacion', 'caracter', 'responsable_id',
+        'titulo_propio', 'descripcion_propia', 'categoria_propia',
     ];
     protected $attributes = [
         'estado_aplicabilidad' => self::APLICA,
@@ -79,9 +81,25 @@ class ProyectoRequisito extends Model
         return $this->belongsTo(ProyectoExpediente::class, 'expediente_id');
     }
 
+    /**
+     * Requisito que creó la fila (su ancla): no cambia aunque cambien las plantillas.
+     * Null en un requisito propio del proyecto.
+     */
     public function requisito(): BelongsTo
     {
         return $this->belongsTo(RequisitoCatalogo::class, 'requisito_catalogo_id');
+    }
+
+    /** Requisitos de las plantillas del expediente que aplican con la llave de esta fila. */
+    public function origenes(): BelongsToMany
+    {
+        return $this->belongsToMany(RequisitoCatalogo::class, 'proyecto_requisito_origenes', 'proyecto_requisito_id', 'requisito_catalogo_id');
+    }
+
+    /** Requisito agregado en el expediente, con sus textos en la fila y sin plantilla. */
+    public function esPropio(): bool
+    {
+        return $this->requisito_catalogo_id === null;
     }
 
     public function usuarioCumplido(): BelongsTo

@@ -35,6 +35,7 @@ class ProyectoExpediente extends Model
         return $this->belongsTo(Proyecto::class, 'proyecto_id');
     }
 
+    /** Versión de la plantilla SGR del expediente; null si no tiene plantilla con motor sgr. */
     public function version(): BelongsTo
     {
         return $this->belongsTo(CatalogoVersion::class, 'catalogo_version_id');
