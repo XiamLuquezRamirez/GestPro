@@ -109,7 +109,7 @@ El estado visible se calcula a partir de `cumplido` y `estado_aplicabilidad`.
 - Exige justificación.
 - Si `requiere_aprobacion_no_aplica` está activo, queda por aprobar. Lo aprueba un Administrador o Gestor distinto de quien lo marcó.
 - Excepción: un Administrador puede aprobar lo que él mismo marcó, y queda registrado. Hoy `gest_pro` tiene un solo usuario y, sin esta excepción, el flujo se bloquearía.
-- Si se rechaza, vuelve a `aplica` y queda en el historial.
+- Si se rechaza o se retira, vuelve al estado que tenía al marcarse (`aplica` o `por_definir`) y queda en el historial (decisión de la etapa 5).
 - `cargo_revision` indica en la plantilla quién debería revisar. No restringe quién aprueba.
 
 ### Duplicados
@@ -373,6 +373,12 @@ Reglas para este cambio:
   - Los mensajes genéricos de validación están repetidos en dos controladores.
   - La ruta antigua `POST /catalogo-requisitos/versiones` ya no la usa ninguna pantalla.
   - En la SGR, las flechas de orden pueden cruzar secciones sin efecto visible en el expediente.
+
+**Notas de la etapa 5 para los planes siguientes:**
+
+- **Etapa 6 (migración 11):** una fila se ancla al requisito que la creó (`requisito_catalogo_id`) y sus orígenes están en `proyecto_requisito_origenes`. Las filas propias no tienen ancla. Antes de retirar `catalogo_version_id` hay que leer la versión SGR desde `expediente_plantillas`.
+- **Etapa 6 (aplicar versión nueva):** las filas se reconocen por la llave `codigo_comun` del ancla (o `req:{id}` si no la tiene). Una versión nueva con el mismo código común encuentra su fila; si el código común cambia, nace una fila nueva y la anterior queda retirada con su trabajo.
+- **Pantalla:** el expediente todavía carga `/catalogo-requisitos/vigente` al abrirse, aunque no tenga la SGR. Si algún día no hay versión SGR vigente, la pantalla fallaría.
 
 ---
 
