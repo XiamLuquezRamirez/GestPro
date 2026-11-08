@@ -173,7 +173,9 @@ final class ExpedienteService
     {
         return DB::transaction(function () use ($expediente, $datos, $usuario) {
             // Todo se decide sobre la fila bloqueada: un PUT simultáneo que quite las
-            // plantillas espera a que esto termine, y luego ya lo ve confirmado.
+            // plantillas espera a que esto termine, y luego ya lo ve confirmado. Con el
+            // bloqueo, esta es la única comprobación de "sin plantillas" que hace falta:
+            // una lista no vacía que pasa validar() siempre deja alguna versión.
             $this->bloquear($expediente);
             $this->exigirBorrador($expediente);
             $sinPlantillas = array_key_exists('plantilla_ids', $datos)
@@ -185,10 +187,6 @@ final class ExpedienteService
 
             $this->actualizarConfiguracion($expediente, $datos, $usuario);
             if (! $expediente->estaConfigurado()) {
-                // Sobre lo recién guardado: nunca se confirma un expediente sin plantillas.
-                if (! $expediente->versionesPlantilla()->exists()) {
-                    throw new ReglaNegocioException(self::SIN_PLANTILLAS);
-                }
                 $expediente->update(['fecha_configuracion' => now()]);
                 $this->historial->registrarExpediente($expediente, 'configuracion_confirmada', [], $this->configuracionRegistrable($expediente), $usuario);
             }
@@ -256,8 +254,9 @@ final class ExpedienteService
         $this->exigirEditable($expediente, $fila);
 
         DB::transaction(function () use ($expediente, $fila, $datos, $usuario) {
-            // Bloquea la fila y decide sobre su estado actual: un "no aplica" o una marca
-            // simultánea no puede quedar pisado por una lectura vieja.
+            // Primero el expediente (radicado entre medias, se rechaza), luego la fila: un
+            // "no aplica" o una marca simultánea no puede quedar pisado por una lectura vieja.
+            $this->bloquearChecklistEditable($expediente);
             ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
             $fila->refresh();
             $this->exigirQueAplique($fila);
@@ -302,8 +301,9 @@ final class ExpedienteService
         $ruta = $archivo->storeAs("expedientes/{$expediente->id}", Str::uuid() . '.' . $archivo->extension(), self::DISCO);
 
         try {
-            DB::transaction(function () use ($fila, $archivo, $ruta, $usuario) {
-                // Bloquea la fila: con dos subidas a la vez, la segunda ve el soporte de la primera.
+            DB::transaction(function () use ($expediente, $fila, $archivo, $ruta, $usuario) {
+                // Expediente y luego fila: con dos subidas a la vez, la segunda ve el soporte de la primera.
+                $this->bloquearChecklistEditable($expediente);
                 $bloqueada = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
                 $this->exigirQueAplique($bloqueada);
                 $anterior =$bloqueada->only(['soporte_archivo', 'soporte_nombre']);
@@ -334,8 +334,9 @@ final class ExpedienteService
             return $fila;
         }
 
-        DB::transaction(function () use ($fila, $usuario) {
-            // Bloquea la fila: si otra petición ya quitó el soporte, no hay nada que registrar.
+        DB::transaction(function () use ($expediente, $fila, $usuario) {
+            // Expediente y luego fila: si otra petición ya quitó el soporte, no hay nada que registrar.
+            $this->bloquearChecklistEditable($expediente);
             $bloqueada = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
             $this->exigirQueAplique($bloqueada);
             $antes = $bloqueada->only(['soporte_archivo', 'soporte_nombre']);
@@ -385,6 +386,9 @@ final class ExpedienteService
         $this->exigirBorrador($expediente);
 
         $archivos = DB::transaction(function () use ($expediente, $usuario) {
+            // Sobre la fila bloqueada: un expediente radicado entre medias no se borra con sus archivos.
+            $this->bloquear($expediente);
+            $this->exigirBorrador($expediente);
             $archivos = [
                 ...$expediente->requisitos()->whereNotNull('soporte_archivo')->pluck('soporte_archivo')->all(),
                 ...$this->historial->archivosDe($expediente),
@@ -1046,6 +1050,11 @@ final class ExpedienteService
     /**
      * Bloquea la fila del expediente y deja el modelo con lo que dice esa lectura: las reglas
      * se deciden sobre ella y no sobre lo que leyó la petición. Va dentro de una transacción.
+     *
+     * Orden único de bloqueo: primero el expediente, después sus filas y orígenes. Toda
+     * escritura del checklist lo sigue (marcar, soportes, "no aplica", propios, sincronizar,
+     * radicar): así ninguna espera una fila que otra tiene mientras esta espera el expediente,
+     * el interbloqueo 1213 de MariaDB. SQLite no lo puede reproducir en las pruebas.
      *
      * Equivale a refresh(), pero copia la fila leída con FOR UPDATE: en REPEATABLE READ, un
      * SELECT normal en una transacción que ya leyó algo puede devolver la foto de entonces.

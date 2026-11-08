@@ -2,18 +2,24 @@
 
 namespace Tests\Feature\Viabilizacion;
 
+use App\Enums\Rol;
 use App\Exceptions\ReglaNegocioException;
 use App\Models\CatalogoVersion;
 use App\Models\FuenteFinanciacion;
 use App\Models\PlantillaChecklist;
 use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
+use App\Models\ProyectoRequisito;
 use App\Models\RequisitoCatalogo;
+use App\Models\User;
 use App\Services\Viabilizacion\ExpedienteService;
+use App\Services\Viabilizacion\NoAplicaRequisito;
 use App\Services\Viabilizacion\RequisitosPropios;
 use Database\Seeders\CatalogoRequisitosSgrSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -111,11 +117,12 @@ class ExpedienteConcurrenciaTest extends TestCase
     public function test_configurar_con_una_lectura_vieja_no_cambia_un_radicado(): void
     {
         $expediente = $this->expedienteSgr();
-        $vieja = $expediente->fresh();
+        // Una lectura vieja por acción: bloquear() pone al día la que recibe.
+        [$paraActualizar, $paraConfirmar] = [$expediente->fresh(), $expediente->fresh()];
         $this->radicarEnOtraPeticion($expediente);
 
-        $this->assertRechaza(self::RADICADO, fn () => $this->servicio->actualizarConfiguracion($vieja, ['fase_sgr' => 2]));
-        $this->assertRechaza(self::RADICADO, fn () => $this->servicio->confirmarConfiguracion($vieja, ['fase_sgr' => 2]));
+        $this->assertRechaza(self::RADICADO, fn () => $this->servicio->actualizarConfiguracion($paraActualizar, ['fase_sgr' => 2]));
+        $this->assertRechaza(self::RADICADO, fn () => $this->servicio->confirmarConfiguracion($paraConfirmar, ['fase_sgr' => 2]));
 
         $this->assertSame(3, $expediente->fresh()->fase_sgr);
     }
@@ -178,14 +185,106 @@ class ExpedienteConcurrenciaTest extends TestCase
         $expediente = $this->expedienteSgr();
         $propios = app(RequisitosPropios::class);
         $fila = $propios->crear($expediente, ['titulo' => 'Acta de socialización'], null);
-        $vieja = $expediente->fresh();
+        // Una lectura vieja por acción: bloquear() pone al día la que recibe.
+        [$paraCrear, $paraEditar, $paraEliminar] = [$expediente->fresh(), $expediente->fresh(), $expediente->fresh()];
         $this->radicarEnOtraPeticion($expediente);
 
-        $this->assertRechaza(self::RADICADO, fn () => $propios->crear($vieja, ['titulo' => 'Otro requisito'], null));
-        $this->assertRechaza(self::RADICADO, fn () => $propios->editar($vieja, $fila, ['titulo' => 'Acta firmada'], null));
-        $this->assertRechaza(self::RADICADO, fn () => $propios->eliminar($vieja, $fila, null));
+        $this->assertRechaza(self::RADICADO, fn () => $propios->crear($paraCrear, ['titulo' => 'Otro requisito'], null));
+        $this->assertRechaza(self::RADICADO, fn () => $propios->editar($paraEditar, $fila, ['titulo' => 'Acta firmada'], null));
+        $this->assertRechaza(self::RADICADO, fn () => $propios->eliminar($paraEliminar, $fila, null));
 
         $this->assertSame(1, $expediente->requisitos()->whereNull('requisito_catalogo_id')->count());
         $this->assertSame('Acta de socialización', $fila->fresh()->titulo_propio);
+    }
+
+    // ------------------------------------------- filas del checklist y soportes
+
+    private function filaSgr(ProyectoExpediente $expediente): ProyectoRequisito
+    {
+        return $expediente->requisitos()->where('aplica', true)->orderBy('orden')->firstOrFail();
+    }
+
+    public function test_desmarcar_con_una_lectura_vieja_no_deja_pendientes_en_un_radicado(): void
+    {
+        $expediente = $this->expedienteSgr();
+        $fila = $this->filaSgr($expediente);
+        $this->servicio->marcar($expediente, $fila, ['cumplido' => true], null);
+        $vieja = $expediente->fresh();
+        $this->radicarEnOtraPeticion($expediente);
+
+        $this->assertRechaza(self::RADICADO, fn () => $this->servicio->marcar($vieja, $fila, ['cumplido' => false, 'observacion' => 'Otra'], null));
+
+        $this->assertTrue($fila->fresh()->cumplido);
+        $this->assertNull($fila->fresh()->observacion);
+    }
+
+    public function test_retirar_un_no_aplica_con_una_lectura_vieja_no_cambia_un_radicado(): void
+    {
+        $expediente = $this->expedienteSgr();
+        $fila = $this->filaSgr($expediente);
+        $usuario = User::factory()->create(['rol' => Rol::Administrador]);
+        $noAplica = app(NoAplicaRequisito::class);
+        $noAplica->marcar($expediente, $fila, 'No hay predios.', $usuario);
+        $noAplica->aprobar($expediente, $fila, $usuario);
+        $vieja = $expediente->fresh();
+        $this->radicarEnOtraPeticion($expediente);
+
+        $this->assertRechaza(self::RADICADO, fn () => $noAplica->retirar($vieja, $fila, $usuario));
+
+        $this->assertSame(ProyectoRequisito::NO_APLICA, $fila->fresh()->estado_aplicabilidad);
+    }
+
+    public function test_subir_o_eliminar_un_soporte_con_una_lectura_vieja_no_cambia_un_radicado(): void
+    {
+        Storage::fake('local');
+        $expediente = $this->expedienteSgr();
+        [$conSoporte, $sinSoporte] = $expediente->requisitos()->where('aplica', true)->orderBy('orden')->take(2)->get()->all();
+        $this->servicio->guardarSoporte($expediente, $conSoporte, UploadedFile::fake()->create('acta.pdf', 10, 'application/pdf'));
+        [$paraSubir, $paraEliminar] = [$expediente->fresh(), $expediente->fresh()];
+        $this->radicarEnOtraPeticion($expediente);
+
+        $this->assertRechaza(self::RADICADO, fn () => $this->servicio->guardarSoporte($paraSubir, $sinSoporte, UploadedFile::fake()->create('otro.pdf', 10, 'application/pdf')));
+        $this->assertRechaza(self::RADICADO, fn () => $this->servicio->eliminarSoporte($paraEliminar, $conSoporte));
+
+        $this->assertNull($sinSoporte->fresh()->soporte_archivo);
+        $this->assertSame('acta.pdf', $conSoporte->fresh()->soporte_nombre);
+        // El archivo rechazado no queda en el disco.
+        $this->assertSame([$conSoporte->fresh()->soporte_archivo], Storage::disk('local')->allFiles());
+    }
+
+    public function test_eliminar_con_una_lectura_vieja_no_borra_un_radicado_ni_sus_archivos(): void
+    {
+        Storage::fake('local');
+        $expediente = $this->expedienteSgr();
+        $fila = $this->filaSgr($expediente);
+        $this->servicio->guardarSoporte($expediente, $fila, UploadedFile::fake()->create('acta.pdf', 10, 'application/pdf'));
+        $vieja = $expediente->fresh();
+        $this->radicarEnOtraPeticion($expediente);
+
+        $this->assertRechaza(self::RADICADO, fn () => $this->servicio->eliminar($vieja));
+
+        $this->assertNotNull($expediente->fresh());
+        Storage::disk('local')->assertExists($fila->fresh()->soporte_archivo);
+    }
+
+    // ---------------------------------------------------------------- bloquear
+
+    public function test_bloquear_descarta_las_relaciones_cargadas_por_la_peticion(): void
+    {
+        $vivienda = (int) DB::table('requisitos_sectores')->where('clave', 'vivienda')->value('id');
+        $tipo = (int) DB::table('requisitos_tipos')->where('sector_id', $vivienda)->where('clave', 'operaciones_urbanas')->value('id');
+        $expediente = $this->expedienteSgr(['fase_sgr' => 3, 'sector_ids' => [$vivienda], 'tipo_ids' => [$tipo]]);
+        // Otra petición la leyó con su configuración cargada, todavía con vivienda.
+        $vieja = $expediente->fresh()->load(['sectores', 'tipos', 'componentes', 'tipologias']);
+
+        $this->servicio->actualizarConfiguracion($expediente, ['fase_sgr' => 3]);
+        $esperadas = $this->claves($expediente);
+        $this->assertNotContains('vi4b', $esperadas);
+
+        $this->servicio->sincronizar($vieja);
+
+        $this->assertSame($esperadas, $this->claves($expediente));
+        // sincronizar volvió a leer los sectores: ya no son los que trajo la petición.
+        $this->assertSame([], $vieja->sectores->pluck('id')->all());
     }
 }

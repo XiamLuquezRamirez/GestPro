@@ -79,10 +79,10 @@ final class RequisitosPropios
         $valores = $this->valores($datos);
 
         DB::transaction(function () use ($expediente, $fila, $valores, $usuario) {
-            // Bloquea la fila y compara con su estado actual: dos ediciones no se pisan en el historial.
-            $actual = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
-            // Primero la fila y luego el expediente, el mismo orden que marcar (fila y touch).
+            // Primero el expediente y luego la fila, el orden de toda escritura del checklist.
+            // Compara con el estado actual de la fila: dos ediciones no se pisan en el historial.
             $this->expedientes->bloquearChecklistEditable($expediente);
+            $actual = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
             $antes = $this->valoresDe($actual);
             $cambios = array_filter($valores, fn ($valor, string $campo) => $valor !== $antes[$campo], ARRAY_FILTER_USE_BOTH);
             if ($cambios === []) {
@@ -102,9 +102,9 @@ final class RequisitosPropios
         $this->exigirPropio($expediente, $fila, 'solo se eliminan los requisitos propios del proyecto.');
 
         DB::transaction(function () use ($expediente, $fila, $usuario) {
-            // Bloquea la fila: una marca o una subida simultánea no puede perderse con ella.
-            $actual = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
+            // Expediente y luego fila: una marca o una subida simultánea no puede perderse con ella.
             $this->expedientes->bloquearChecklistEditable($expediente);
+            $actual = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
             if ($actual->cumplido) {
                 throw new ReglaNegocioException('El requisito está cumplido: desmárcalo antes de eliminarlo.');
             }

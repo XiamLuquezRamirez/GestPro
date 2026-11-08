@@ -137,8 +137,8 @@ final class NoAplicaRequisito
     }
 
     /**
-     * Bloquea la fila y decide sobre su estado actual: dos acciones simultáneas no pueden
-     * actuar sobre una lectura vieja.
+     * Bloquea el expediente y luego la fila, y decide sobre su estado actual: dos acciones
+     * simultáneas no pueden actuar sobre una lectura vieja.
      *
      * @param callable(ProyectoRequisito): array $decidir devuelve [evento, cambios, datos extra opcionales]
      */
@@ -147,7 +147,9 @@ final class NoAplicaRequisito
         $this->expedientes->exigirEditable($expediente, $fila);
 
         DB::transaction(function () use ($expediente, $fila, $usuario, $decidir) {
-            $actual = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->with(['requisito', 'origenes'])->firstOrFail();
+            // Primero el expediente, como toda escritura del checklist: radicado entre medias, se rechaza.
+            $this->expedientes->bloquearChecklistEditable($expediente);
+            $actual =ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->with(['requisito', 'origenes'])->firstOrFail();
             $this->expedientes->exigirQueAplique($actual);
             [$evento, $cambios, $extra] = $decidir($actual) + [2 => []];
 
