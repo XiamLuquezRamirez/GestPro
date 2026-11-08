@@ -379,6 +379,8 @@ Reglas para este cambio:
 - **Etapa 6 (migración 11):** una fila se ancla al requisito que la creó (`requisito_catalogo_id`) y sus orígenes están en `proyecto_requisito_origenes`. Las filas propias no tienen ancla. Antes de retirar `catalogo_version_id` hay que leer la versión SGR desde `expediente_plantillas`.
 - **Etapa 6 (aplicar versión nueva):** las filas se reconocen por la llave `codigo_comun` del ancla (o `req:{id}` si no la tiene). Una versión nueva con el mismo código común encuentra su fila; si el código común cambia, nace una fila nueva y la anterior queda retirada con su trabajo.
 - **Pantalla:** el expediente todavía carga `/catalogo-requisitos/vigente` al abrirse, aunque no tenga la SGR. Si algún día no hay versión SGR vigente, la pantalla fallaría.
+- **Decisión: recalcular no cambia el estado de una fila.** Si otra plantilla aporta la misma llave y una fila `por_definir` pasa a carácter obligatorio, sigue `por_definir` hasta que alguien marque "Aplica". El carácter se recalcula; la decisión de aplicabilidad es de una persona.
+- **Decisión: una plantilla que vuelve con otra versión no recupera las filas sin código común.** Al quitar una plantilla y volver a ponerla con una versión nueva, sus requisitos sin `codigo_comun` tienen otra llave (`req:{id}`) y crean filas nuevas. Las antiguas quedan retiradas con su trabajo. Lo resuelve "aplicar versión nueva" en la etapa 6.
 
 ---
 
