@@ -303,7 +303,7 @@ span.exv-plantilla-principal { cursor: default; }
     border-bottom: 2px solid var(--exv-tinta);
 }
 .exv-num { flex-shrink: 0; padding: .12rem .5rem; font-size: .78rem; font-weight: 600; color: var(--exv-sobre-acento); background: var(--exv-bronce); border-radius: 2px; }
-.exv-seccion-head h3 { flex: 1; margin: 0; font-size: 1.06rem; font-weight: 700; color: var(--exv-tinta); }
+.exv-seccion-head h3, .exv-seccion-head h4 { flex: 1; margin: 0; font-size: 1.06rem; font-weight: 700; color: var(--exv-tinta); }
 .exv-cita { font-size: .74rem; text-align: right; color: var(--exv-tinta-tenue); }
 .exv-subhead {
     margin: .9rem 0 .35rem;
@@ -374,6 +374,7 @@ span.exv-plantilla-principal { cursor: default; }
 .exv-mini:hover { border-color: var(--exv-a12); color: var(--exv-a12); }
 .exv-mini-peligro:hover { border-color: var(--exv-alerta); color: var(--exv-alerta); }
 .exv-mini-exito:hover { border-color: var(--exv-verde); color: var(--exv-verde); }
+.exv-mini:disabled { opacity: .55; cursor: not-allowed; }
 .exv-observacion, .exv-observacion-lectura {
     display: block;
     width: calc(100% - 17px - .8rem);
@@ -399,6 +400,59 @@ span.exv-plantilla-principal { cursor: default; }
 .exv-vacio .exv-btn { margin-top: 1rem; }
 .exv-pie { margin: 1.5rem 0 0; font-size: .78rem; line-height: 1.5; color: var(--exv-tinta-tenue); }
 
+/* Checklist con varias plantillas y requisitos propios */
+.exv-bloque { margin-bottom: 1.75rem; }
+.exv-plantilla-titulo {
+    display: flex;
+    align-items: baseline;
+    gap: .75rem;
+    margin-bottom: .75rem;
+    padding: .45rem .75rem;
+    background: var(--exv-a12-tinte);
+    border-left: 3px solid var(--gp-azul);
+    border-radius: 2px;
+}
+.exv-plantilla-titulo h3 { flex: 1; margin: 0; font-size: 1.1rem; font-weight: 800; color: var(--exv-tinta); }
+.exv-item-origenes { margin-top: .25rem; font-size: .76rem; color: var(--exv-tinta-tenue); }
+.exv-item-condicion { margin-top: .25rem; font-size: .8rem; color: var(--exv-tinta-suave); }
+.exv-item-condicion b { font-weight: 600; color: var(--exv-tinta); }
+.exv-por-definir { border-left-color: var(--exv-bronce); }
+.exv-item-descripcion { display: block; margin-top: .25rem; font-size: .82rem; color: var(--exv-tinta-suave); white-space: pre-wrap; }
+.exv-estado-propio { color: var(--exv-a12); background: var(--exv-a12-tinte); }
+.exv-duplicados ul { margin: .4rem 0 0; padding-left: 1.1rem; }
+.exv-duplicados li { margin-top: .2rem; }
+.exv-duplicados-similitud { color: var(--exv-tinta-suave); }
+.exv-propios-vacio { margin: 0 0 .75rem; font-size: .85rem; color: var(--exv-tinta-suave); }
+.exv-propio-form {
+    display: grid;
+    gap: .7rem;
+    padding: .9rem 1rem;
+    margin-bottom: .6rem;
+    background: var(--exv-tarjeta);
+    border: 1px solid var(--gp-azul);
+    border-radius: var(--exv-radio);
+}
+.exv-campo { display: grid; gap: .25rem; margin: 0; font-size: .82rem; font-weight: 600; color: var(--exv-tinta); }
+.exv-campo small { font-weight: 400; color: var(--exv-tinta-tenue); }
+.exv-campo textarea, .exv-campo select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: .4rem .55rem;
+    font: inherit;
+    font-weight: 400;
+    color: var(--exv-tinta);
+    background: var(--exv-control);
+    border: 1px solid var(--exv-linea);
+    border-radius: var(--exv-radio);
+}
+.exv-campo textarea { resize: vertical; }
+.exv-campo textarea:focus, .exv-campo select:focus { outline: 2px solid var(--exv-a12); outline-offset: 1px; }
+.exv-campo-grupo { margin: 0; padding: 0; border: 0; font-size: .82rem; color: var(--exv-tinta); }
+.exv-campo-grupo legend { margin-bottom: .25rem; padding: 0; font-weight: 600; }
+.exv-campo-grupo label { display: inline-flex; align-items: center; gap: .35rem; margin: 0 1rem 0 0; font-weight: 400; cursor: pointer; }
+.exv-campo-ayuda { margin: .3rem 0 0; font-size: .76rem; color: var(--exv-tinta-tenue); }
+.exv-propio-acciones { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+
 @media (max-width: 920px) {
     .exv-shell { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
     .exv-config { position: static; max-height: none; }
@@ -422,7 +476,7 @@ span.exv-plantilla-principal { cursor: default; }
         --exv-a12: #3A5A8C;
         --exv-a12-tinte: #E4EAF3;
     }
-    .gp-riel, .gp-barra-superior, .gp-barra-inferior, .exv-config, .exv-barra, .exv-no-imprimir, .exv-item-acciones, .exv-observacion, .exv-observacion-lectura, .exv-responsable, .exv-historial, .exv-historial-vacio { display: none !important; }
+    .gp-riel, .gp-barra-superior, .gp-barra-inferior, .exv-config, .exv-barra, .exv-no-imprimir, .exv-propio-form, .exv-item-acciones, .exv-observacion, .exv-observacion-lectura, .exv-responsable, .exv-historial, .exv-historial-vacio { display: none !important; }
     /* El body de la app tiene un degradado que saldría con "gráficos de fondo". */
     html, body { background: #fff !important; }
     .gp-app { display: block !important; }
