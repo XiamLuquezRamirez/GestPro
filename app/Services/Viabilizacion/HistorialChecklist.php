@@ -41,6 +41,22 @@ final class HistorialChecklist
             ->all();
     }
 
+    /**
+     * Estado de aplicabilidad que tenía la fila cuando se marcó su último "no aplica", o null
+     * si no hay registro.
+     */
+    public function estadoAlMarcarNoAplica(ProyectoRequisito $fila): ?string
+    {
+        $entrada = ChecklistHistorial::query()
+            ->where('entidad_tipo', self::REQUISITO)
+            ->where('entidad_id', $fila->id)
+            ->where('evento', 'no_aplica_marcado')
+            ->orderByDesc('id')
+            ->first();
+
+        return $entrada?->antes['estado'] ?? null;
+    }
+
     /** @return list<string> rutas de los soportes conservados en el historial del expediente */
     public function archivosDe(ProyectoExpediente $expediente): array
     {

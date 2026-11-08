@@ -102,6 +102,22 @@ class ProyectoRequisito extends Model
         return $this->requisito_catalogo_id === null;
     }
 
+    /**
+     * Si un "no aplica" de esta fila necesita aprobación: la exige si alguno de sus orígenes
+     * la exige. Sin orígenes (fila retirada) decide su ancla; un propio nunca la exige.
+     * Es la única definición: la usan el "no aplica" y la presentación de la fila.
+     */
+    public function requiereAprobacionNoAplica(): bool
+    {
+        if ($this->esPropio()) {
+            return false;
+        }
+
+        return $this->origenes->isNotEmpty()
+            ? $this->origenes->contains(fn (RequisitoCatalogo $r) => $r->requiere_aprobacion_no_aplica)
+            : (bool) $this->requisito?->requiere_aprobacion_no_aplica;
+    }
+
     public function usuarioCumplido(): BelongsTo
     {
         return $this->belongsTo(User::class, 'usuario_cumplido_id');

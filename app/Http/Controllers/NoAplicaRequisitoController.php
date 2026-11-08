@@ -9,7 +9,7 @@ use App\Services\Viabilizacion\NoAplicaRequisito;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/** "No aplica" de un requisito del checklist. Rutas con can:editar-datos. */
+/** "No aplica" y "aplica" de un requisito del checklist. Rutas con can:editar-datos. */
 class NoAplicaRequisitoController extends Controller
 {
     private const MENSAJES = [
@@ -36,6 +36,11 @@ class NoAplicaRequisitoController extends Controller
     public function retirar(Request $request, ProyectoExpediente $expediente, ProyectoRequisito $requisito): JsonResponse
     {
         return $this->respuesta($expediente, $this->noAplica->retirar($expediente, $requisito, $request->user()));
+    }
+
+    public function decidirAplica(Request $request, ProyectoExpediente $expediente, ProyectoRequisito $requisito): JsonResponse
+    {
+        return $this->respuesta($expediente, $this->noAplica->decidirAplica($expediente, $requisito, $request->user()));
     }
 
     public function aprobar(Request $request, ProyectoExpediente $expediente, ProyectoRequisito $requisito): JsonResponse

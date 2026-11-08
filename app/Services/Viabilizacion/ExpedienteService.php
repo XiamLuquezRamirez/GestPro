@@ -699,6 +699,8 @@ final class ExpedienteService
             'usuario_cumplido' => $fila->usuarioCumplido?->name,
             'observacion' => $fila->observacion,
             'soporte' => $fila->soporte_archivo ? ['nombre' => $fila->soporte_nombre] : null,
+            // La de la fila, que reúne todos sus orígenes; la de `requisito` es solo la del mostrado.
+            'requiere_aprobacion_no_aplica' => $fila->requiereAprobacionNoAplica(),
             'requisito' => $r ? [
                 'id' => $r->id,
                 'clave' => $r->clave,

@@ -52,6 +52,8 @@ Route::middleware('can:editar-datos')->group(function () {
         Route::delete('/expedientes/{expediente}/requisitos/{requisito}/soporte', [ExpedienteController::class, 'eliminarSoporte'])
             ->name('expedientes.requisitos.soporte.eliminar');
 
+        Route::post('/expedientes/{expediente}/requisitos/{requisito}/aplica', [NoAplicaRequisitoController::class, 'decidirAplica'])
+            ->name('expedientes.requisitos.aplica');
         Route::post('/expedientes/{expediente}/requisitos/{requisito}/no-aplica', [NoAplicaRequisitoController::class, 'marcar'])
             ->name('expedientes.requisitos.no-aplica.marcar');
         Route::delete('/expedientes/{expediente}/requisitos/{requisito}/no-aplica', [NoAplicaRequisitoController::class, 'retirar'])

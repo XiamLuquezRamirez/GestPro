@@ -10,13 +10,16 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /**
- * "No aplica" de un requisito: lo marca una persona con justificación y, si el
- * requisito lo pide, otra lo aprueba. Mientras espera aprobación cuenta como pendiente.
+ * Aplicabilidad de una fila del checklist, que decide una persona.
+ *
+ * - "No aplica": lo marca una persona con justificación y, si la fila lo pide (algún origen
+ *   lo exige; un propio nunca), otra lo aprueba. Mientras espera aprobación cuenta como pendiente.
+ * - Retirarlo o rechazarlo devuelve la fila al estado que tenía al marcarlo: por definir o aplica.
+ * - "Aplica": decide una fila por definir.
  */
 final class NoAplicaRequisito
 {
     private const SIN_NO_APLICA = [
-        'estado_aplicabilidad' => ProyectoRequisito::APLICA,
         'justificacion_no_aplica' => null,
         'usuario_no_aplica_id' => null,
         'usuario_aprobo_id' => null,
@@ -44,7 +47,7 @@ final class NoAplicaRequisito
                 throw new ReglaNegocioException('El requisito ya está marcado como no aplica.');
             }
 
-            $estado = $actual->requisito->requiere_aprobacion_no_aplica
+            $estado = $actual->requiereAprobacionNoAplica()
                 ? ProyectoRequisito::NO_APLICA_PENDIENTE
                 : ProyectoRequisito::NO_APLICA;
 
@@ -57,7 +60,7 @@ final class NoAplicaRequisito
         });
     }
 
-    /** Quien se equivocó lo deshace: el requisito vuelve a aplicar. */
+    /** Quien se equivocó lo deshace: la fila vuelve al estado que tenía al marcarlo. */
     public function retirar(ProyectoExpediente $expediente, ProyectoRequisito $fila, User $usuario): ProyectoRequisito
     {
         return $this->guardar($expediente, $fila, $usuario, function (ProyectoRequisito $actual) {
@@ -66,7 +69,19 @@ final class NoAplicaRequisito
                 throw new ReglaNegocioException('El requisito no está marcado como no aplica.');
             }
 
-            return ['no_aplica_retirado', self::SIN_NO_APLICA];
+            return ['no_aplica_retirado', $this->sinNoAplica($actual)];
+        });
+    }
+
+    /** Una fila por definir pasa a aplicar. */
+    public function decidirAplica(ProyectoExpediente $expediente, ProyectoRequisito $fila, User $usuario): ProyectoRequisito
+    {
+        return $this->guardar($expediente, $fila, $usuario, function (ProyectoRequisito $actual) {
+            if ($actual->estado_aplicabilidad !== ProyectoRequisito::POR_DEFINIR) {
+                throw new ReglaNegocioException('Este requisito no está por definir.');
+            }
+
+            return ['aplicabilidad_decidida', ['estado_aplicabilidad' => ProyectoRequisito::APLICA, ...self::SIN_NO_APLICA]];
         });
     }
 
@@ -90,8 +105,21 @@ final class NoAplicaRequisito
         return $this->guardar($expediente, $fila, $usuario, function (ProyectoRequisito $actual) use ($usuario, $motivo) {
             $this->exigirRevisor($actual, $usuario);
 
-            return ['no_aplica_rechazado', self::SIN_NO_APLICA, ['motivo' => $motivo !== '' ? $motivo : null]];
+            return ['no_aplica_rechazado', $this->sinNoAplica($actual), ['motivo' => $motivo !== '' ? $motivo : null]];
         });
+    }
+
+    /**
+     * Cambios que quitan el "no aplica": la fila vuelve al estado que tenía al marcarlo
+     * (antes.estado del último no_aplica_marcado). Sin ese registro, aplica.
+     */
+    private function sinNoAplica(ProyectoRequisito $fila): array
+    {
+        $previo = $this->historial->estadoAlMarcarNoAplica($fila) === ProyectoRequisito::POR_DEFINIR
+            ? ProyectoRequisito::POR_DEFINIR
+            : ProyectoRequisito::APLICA;
+
+        return ['estado_aplicabilidad' => $previo, ...self::SIN_NO_APLICA];
     }
 
     private function exigirRevisor(ProyectoRequisito $fila, User $usuario): void
@@ -117,7 +145,7 @@ final class NoAplicaRequisito
         $this->expedientes->exigirEditable($expediente, $fila);
 
         DB::transaction(function () use ($expediente, $fila, $usuario, $decidir) {
-            $actual = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->with('requisito')->firstOrFail();
+            $actual = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->with(['requisito', 'origenes'])->firstOrFail();
             $this->expedientes->exigirQueAplique($actual);
             [$evento, $cambios, $extra] = $decidir($actual) + [2 => []];
 
