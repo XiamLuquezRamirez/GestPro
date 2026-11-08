@@ -20,11 +20,13 @@ use Illuminate\Support\Facades\DB;
  *   (o de todas) y de su sector (o de todos). Sin sector, solo las de todos los sectores.
  * - Una plantilla nueva en el expediente entra con su versión vigente; la que ya tenía
  *   conserva su versión aunque haya dejado de ofrecerse (sin cambios retroactivos).
- * - Como máximo una plantilla con motor sgr; si hay plantillas, una es la principal.
+ * - Como máximo una plantilla con motor sgr y 20 en total; si hay plantillas, una es la principal.
  * - proyectos_expedientes.catalogo_version_id guarda la versión de la plantilla sgr, o null.
  */
 final class PlantillasExpediente
 {
+    public const MAX_PLANTILLAS = 20;
+
     /**
      * Plantillas que se ofrecen al proyecto, y al expediente si se indica: las compatibles
      * más las que ya tiene, aunque hayan dejado de ser compatibles o estén inactivas.
@@ -159,6 +161,12 @@ final class PlantillasExpediente
     /**
      * Comprueba la selección pedida y decide la versión de cada plantilla.
      *
+     * plantilla_ids ausente significa "no cambiar": quien llama no debe validar ni guardar nada.
+     * Una lista vacía significa "quitar todas", y es una selección válida (sin principal).
+     * El expediente, si se indica, debe ser del proyecto: con él se decide la compatibilidad.
+     * Admite hasta MAX_PLANTILLAS: así el orden de cualquier fila de plantilla
+     * (posición × 10 000 000) queda antes que el de los propios (900 000 000 + id).
+     *
      * @param array{plantilla_ids?: list<int>, principal_id?: ?int} $datos
      * @param ?list<int> $compatibles las de idsCompatibles(), si ya se calcularon
      * @return array{versiones: array<int, int>, principal_id: ?int, version_sgr_id: ?int}
@@ -166,7 +174,15 @@ final class PlantillasExpediente
      */
     public function validar(array $datos, Proyecto $proyecto, ?ProyectoExpediente $expediente, ?array $compatibles = null): array
     {
+        if ($expediente && $expediente->proyecto_id !== $proyecto->id) {
+            throw new \InvalidArgumentException("El expediente #{$expediente->id} no es del proyecto #{$proyecto->id}.");
+        }
         $ids = array_values(array_unique(array_map('intval', $datos['plantilla_ids'] ?? [])));
+        if (count($ids) > self::MAX_PLANTILLAS) {
+            throw new ReglaNegocioException('La configuración del expediente no es válida.', [
+                'Un expediente admite como máximo ' . self::MAX_PLANTILLAS . ' plantillas.',
+            ]);
+        }
         $principal = isset($datos['principal_id']) ? (int) $datos['principal_id'] : null;
         $previas = $expediente ? $this->versionesDe($expediente)->keyBy('plantilla_id') : collect();
         $compatibles ??= $this->idsCompatibles($proyecto);

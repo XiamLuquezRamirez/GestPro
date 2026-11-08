@@ -180,6 +180,7 @@ class NoAplicaOrigenesApiTest extends TestCase
         $agua = $this->plantilla('Obras de agua', ['Permiso de vertimientos' => [null, 'condicionado']]);
         $fila = $this->fila($this->expediente($agua), 'Permiso de vertimientos');
         $this->assertSame(ProyectoRequisito::POR_DEFINIR, $fila->estado_aplicabilidad);
+        $this->assertNull($this->servicio->presentarFila($fila)['no_aplica']);
 
         $this->decidirAplica($fila)->assertOk()
             ->assertJsonPath('requisito.estado', 'pendiente')
@@ -227,9 +228,10 @@ class NoAplicaOrigenesApiTest extends TestCase
         $fila = $this->fila($this->expediente($agua), 'Permiso de vertimientos');
         $this->marcar($fila)->assertOk()->assertJsonPath('requisito.estado', 'no_aplica');
 
+        // El bloque del "no aplica" solo viene mientras está marcado.
         $this->como()->deleteJson($this->url($fila, '/no-aplica'))->assertOk()
             ->assertJsonPath('requisito.estado', 'por_definir')
-            ->assertJsonPath('requisito.no_aplica.justificacion', null);
+            ->assertJsonPath('requisito.no_aplica', null);
 
         $this->assertSame(
             [['no_aplica_marcado', 'por_definir', 'no_aplica'], ['no_aplica_retirado', 'no_aplica', 'por_definir']],

@@ -115,7 +115,7 @@ final class ExpedienteService
             $this->sincronizar($expediente);
             $this->historial->registrarExpediente($expediente, 'expediente_creado', [], [
                 'catalogo_version_id' => $expediente->catalogo_version_id,
-                'plantillas' => $this->plantillasRegistrables($expediente),
+                'plantillas' => $this->plantillasRegistrables($this->plantillas->versionesDe($expediente)),
             ], $usuario);
 
             return $expediente;
@@ -791,7 +791,8 @@ final class ExpedienteService
             'estado' => $fila->estadoVisible(),
             'caracter' => $fila->caracter,
             'cuenta' => $fila->cuenta(),
-            'no_aplica' => $fila->estado_aplicabilidad === ProyectoRequisito::APLICA ? null : [
+            // Solo mientras hay un "no aplica" marcado, pendiente o aprobado; nunca en por definir.
+            'no_aplica' => ! in_array($fila->estado_aplicabilidad, [ProyectoRequisito::NO_APLICA_PENDIENTE, ProyectoRequisito::NO_APLICA], true) ? null : [
                 'justificacion' => $fila->justificacion_no_aplica,
                 'usuario_id' => $fila->usuario_no_aplica_id,
                 'usuario' => $fila->usuarioNoAplica?->name,
@@ -987,15 +988,20 @@ final class ExpedienteService
         return (new $modelo())->getTable();
     }
 
-    /** Plantillas, fase e ids ordenados de cada selección, para comparar y registrar la configuración. */
+    /**
+     * Plantillas, fase e ids ordenados de cada selección, para comparar y registrar la
+     * configuración. La fase solo cuenta con una plantilla de motor sgr: sin ella no tiene
+     * efecto, y cambiarla no debe registrar un cambio de configuración.
+     */
     private function configuracionRegistrable(ProyectoExpediente $expediente): array
     {
         $ids = fn (string $relacion, string $tabla) => $expediente->{$relacion}()
             ->orderBy("{$tabla}.id")->pluck("{$tabla}.id")->map(fn ($id) => (int) $id)->all();
+        $versiones = $this->plantillas->versionesDe($expediente);
 
         return [
-            'plantillas' => $this->plantillasRegistrables($expediente),
-            'fase_sgr' => (int) $expediente->fase_sgr,
+            'plantillas' => $this->plantillasRegistrables($versiones),
+            ...($this->plantillas->tieneSgr($versiones) ? ['fase_sgr' => (int) $expediente->fase_sgr] : []),
             'sector_ids' => $ids('sectores', 'requisitos_sectores'),
             'tipo_ids' => $ids('tipos', 'requisitos_tipos'),
             'componente_ids' => $ids('componentes', 'requisitos_componentes'),
@@ -1003,10 +1009,13 @@ final class ExpedienteService
         ];
     }
 
-    /** @return list<array{plantilla_id: int, catalogo_version_id: int, es_principal: bool}> */
-    private function plantillasRegistrables(ProyectoExpediente $expediente): array
+    /**
+     * @param Collection<int, CatalogoVersion> $versiones las de versionesDe()
+     * @return list<array{plantilla_id: int, catalogo_version_id: int, es_principal: bool}>
+     */
+    private function plantillasRegistrables(Collection $versiones): array
     {
-        return $this->plantillas->versionesDe($expediente)
+        return $versiones
             ->map(fn (CatalogoVersion $v) => [
                 'plantilla_id' => $v->plantilla_id,
                 'catalogo_version_id' => $v->id,

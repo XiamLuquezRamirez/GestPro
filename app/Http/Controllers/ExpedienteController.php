@@ -11,6 +11,7 @@ use App\Services\Viabilizacion\HistorialChecklist;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -21,18 +22,20 @@ class ExpedienteController extends Controller
 {
     // Sin plantilla_ids, las plantillas no cambian (al crear, se preselecciona la SGR si
     // corresponde). La fase solo la exige el servicio, y solo si hay plantilla con motor sgr.
-    private function reglasConfiguracion(): array
+    private function reglasConfiguracion(Request $request): array
     {
         // Enteros de verdad: `integer` admitiría true como 1 o "1".
         $entero = fn (string $atributo, mixed $valor, \Closure $falla) => is_int($valor)
             || $falla('Revisa :attribute: debe ser un número entero.');
 
         return [
-            // Sin "sometimes": required_with exige las plantillas cuando llega una principal.
-            'plantilla_ids' => ['required_with:principal_id', 'array'],
+            // Con una principal, la lista debe venir, aunque sea vacía: una lista vacía llega al
+            // servicio, que responde que la principal no está entre las elegidas.
+            'plantilla_ids' => [Rule::requiredIf(fn () => $request->filled('principal_id') && ! $request->has('plantilla_ids')), 'array'],
             'plantilla_ids.*' => ['bail', 'integer', $entero],
             'principal_id' => ['sometimes', 'nullable', 'bail', 'integer', $entero],
-            'fase_sgr' => ['sometimes', 'integer', 'in:1,2,3'],
+            // bail: con null, un solo error y no "(and 1 more error)".
+            'fase_sgr' => ['sometimes', 'bail', 'integer', 'in:1,2,3'],
             'sector_ids' => ['sometimes', 'array'],
             'sector_ids.*' => ['integer'],
             'tipo_ids' => ['sometimes', 'array'],
@@ -56,7 +59,7 @@ class ExpedienteController extends Controller
         'array' => 'Revisa :attribute: debe ser una lista.',
         'integer' => 'Revisa :attribute: debe ser un número entero.',
         'in' => 'Revisa :attribute: no es un valor válido.',
-        'plantilla_ids.required_with' => 'Indica las plantillas junto con la plantilla principal.',
+        'plantilla_ids.required' => 'Indica las plantillas junto con la plantilla principal.',
     ];
 
     // Documentos oficiales y sus escaneos.
@@ -91,7 +94,7 @@ class ExpedienteController extends Controller
 
     public function store(Request $request, Proyecto $proyecto): JsonResponse
     {
-        $datos = $request->validate($this->reglasConfiguracion(), self::MENSAJES_CONFIGURACION, self::ATRIBUTOS_CONFIGURACION);
+        $datos = $request->validate($this->reglasConfiguracion($request), self::MENSAJES_CONFIGURACION, self::ATRIBUTOS_CONFIGURACION);
         $expediente = $this->servicio->crear($proyecto, $datos, $request->user());
 
         return response()->json($this->servicio->presentar($expediente), 201);
@@ -104,7 +107,7 @@ class ExpedienteController extends Controller
 
     public function updateConfiguracion(Request $request, ProyectoExpediente $expediente): JsonResponse
     {
-        $datos = $request->validate($this->reglasConfiguracion(), self::MENSAJES_CONFIGURACION, self::ATRIBUTOS_CONFIGURACION);
+        $datos = $request->validate($this->reglasConfiguracion($request), self::MENSAJES_CONFIGURACION, self::ATRIBUTOS_CONFIGURACION);
         $this->servicio->actualizarConfiguracion($expediente, $datos, $request->user());
 
         return response()->json($this->servicio->presentar($expediente->refresh()));
@@ -112,7 +115,7 @@ class ExpedienteController extends Controller
 
     public function confirmarConfiguracion(Request $request, ProyectoExpediente $expediente): JsonResponse
     {
-        $datos = $request->validate($this->reglasConfiguracion(), self::MENSAJES_CONFIGURACION, self::ATRIBUTOS_CONFIGURACION);
+        $datos = $request->validate($this->reglasConfiguracion($request), self::MENSAJES_CONFIGURACION, self::ATRIBUTOS_CONFIGURACION);
         $this->servicio->confirmarConfiguracion($expediente, $datos, $request->user());
 
         return response()->json($this->servicio->presentar($expediente->refresh()));

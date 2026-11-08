@@ -12,6 +12,7 @@ use App\Models\ProyectoExpediente;
 use App\Models\RequisitoCatalogo;
 use App\Models\User;
 use App\Services\Viabilizacion\ExpedienteService;
+use App\Services\Viabilizacion\PlantillasExpediente;
 use Database\Seeders\CatalogoRequisitosSgrSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -106,6 +107,101 @@ class ExpedienteConfiguracionValidacionTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors('fase_sgr');
         $this->como()->postJson("/GestPro/expedientes/{$id}/configuracion/confirmar", [])
             ->assertStatus(422)->assertJsonValidationErrors('fase_sgr');
+    }
+
+    public function test_la_fase_nula_da_un_solo_error_en_espanol(): void
+    {
+        $r = $this->crear($this->proyecto(), ['fase_sgr' => null])->assertStatus(422);
+
+        $this->assertSame(['Revisa la fase SGR: debe ser un número entero.'], $r->json('errors.fase_sgr'));
+        $this->assertSame('Revisa la fase SGR: debe ser un número entero.', $r->json('message'));
+    }
+
+    public function test_una_lista_vacia_con_principal_llega_al_servicio(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos' => null]);
+        $proyecto = $this->proyecto(['recursos_propios']);
+        $mensaje = 'La plantilla principal debe estar entre las elegidas.';
+
+        $this->crear($proyecto, ['plantilla_ids' => [], 'principal_id' => $agua->id])
+            ->assertStatus(422)->assertJsonPath('errores', [$mensaje]);
+        $id = $this->crear($proyecto, ['plantilla_ids' => [$agua->id]])->assertCreated()->json('id');
+        $this->como()->putJson("/GestPro/expedientes/{$id}/configuracion", ['plantilla_ids' => [], 'principal_id' => $agua->id])
+            ->assertStatus(422)->assertJsonPath('errores', [$mensaje]);
+
+        // Sin la lista sigue pidiéndola, y una principal nula sin lista no la exige.
+        $this->como()->putJson("/GestPro/expedientes/{$id}/configuracion", ['principal_id' => $agua->id])
+            ->assertStatus(422)->assertJsonPath('errors.plantilla_ids.0', 'Indica las plantillas junto con la plantilla principal.');
+        $this->como()->putJson("/GestPro/expedientes/{$id}/configuracion", ['principal_id' => null])->assertOk();
+    }
+
+    public function test_la_principal_debe_ser_un_entero_de_verdad(): void
+    {
+        $proyecto = $this->proyecto();
+
+        foreach ([true, '5'] as $principal) {
+            $this->crear($proyecto, ['fase_sgr' => 3, 'plantilla_ids' => [$this->sgr->id], 'principal_id' => $principal])
+                ->assertStatus(422)
+                ->assertJsonPath('errors.principal_id', ['Revisa la plantilla principal: debe ser un número entero.']);
+        }
+        $this->assertDatabaseCount('proyectos_expedientes', 0);
+    }
+
+    public function test_configurar_y_confirmar_responden_en_espanol(): void
+    {
+        $id = $this->crear($this->proyecto(), ['fase_sgr' => 3])->assertCreated()->json('id');
+
+        foreach (['putJson' => "/GestPro/expedientes/{$id}/configuracion", 'postJson' => "/GestPro/expedientes/{$id}/configuracion/confirmar"] as $metodo => $url) {
+            $this->como()->{$metodo}($url, ['plantilla_ids' => 'sgr', 'fase_sgr' => 3])->assertStatus(422)
+                ->assertJsonPath('errors.plantilla_ids.0', 'Revisa las plantillas: debe ser una lista.');
+            $this->como()->{$metodo}($url, ['plantilla_ids' => [$this->sgr->id], 'principal_id' => true, 'fase_sgr' => 3])->assertStatus(422)
+                ->assertJsonPath('errors.principal_id.0', 'Revisa la plantilla principal: debe ser un número entero.');
+            $this->como()->{$metodo}($url, ['fase_sgr' => 9])->assertStatus(422)
+                ->assertJsonPath('errors.fase_sgr', ['Revisa la fase SGR: no es un valor válido.']);
+            $this->como()->{$metodo}($url, ['fase_sgr' => null])->assertStatus(422)
+                ->assertJsonPath('errors.fase_sgr', ['Revisa la fase SGR: debe ser un número entero.']);
+            $this->como()->{$metodo}($url, ['principal_id' => $this->sgr->id, 'fase_sgr' => 3])->assertStatus(422)
+                ->assertJsonPath('errors.plantilla_ids.0', 'Indica las plantillas junto con la plantilla principal.');
+        }
+        $this->assertNull(ProyectoExpediente::find($id)->fecha_configuracion);
+    }
+
+    // ------------------------------------------------------------ reglas
+
+    public function test_validar_exige_un_expediente_del_mismo_proyecto(): void
+    {
+        $expediente = app(ExpedienteService::class)->crear($this->proyecto(), ['fase_sgr' => 3], null);
+
+        $this->expectException(\InvalidArgumentException::class);
+        app(PlantillasExpediente::class)->validar(['plantilla_ids' => [$this->sgr->id]], $this->proyecto(), $expediente);
+    }
+
+    public function test_un_expediente_admite_como_maximo_20_plantillas(): void
+    {
+        $ids = collect(range(1, 21))->map(fn ($n) => $this->plantilla("Plantilla {$n}", ["Requisito {$n}" => null])->id)->all();
+        $proyecto = $this->proyecto(['recursos_propios']);
+
+        $this->crear($proyecto, ['plantilla_ids' => $ids, 'principal_id' => $ids[0]])
+            ->assertStatus(422)->assertJsonPath('errores', ['Un expediente admite como máximo 20 plantillas.']);
+        $this->assertDatabaseCount('proyectos_expedientes', 0);
+
+        $id = $this->crear($proyecto, ['plantilla_ids' => array_slice($ids, 0, 20), 'principal_id' => $ids[0]])
+            ->assertCreated()->assertJsonCount(20, 'plantillas')->json('id');
+        // La última plantilla sigue antes que cualquier requisito propio.
+        $this->assertLessThan(900_000_000, ProyectoExpediente::find($id)->requisitos()->max('orden'));
+    }
+
+    public function test_sin_plantilla_sgr_cambiar_la_fase_no_queda_en_el_historial(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos' => null]);
+        $id = $this->crear($this->proyecto(['recursos_propios']), ['plantilla_ids' => [$agua->id]])->assertCreated()->json('id');
+        $this->como()->postJson("/GestPro/expedientes/{$id}/configuracion/confirmar", [])->assertOk();
+
+        $this->como()->putJson("/GestPro/expedientes/{$id}/configuracion", ['fase_sgr' => 2])->assertOk();
+
+        $this->assertDatabaseMissing('checklist_historial', ['evento' => 'configuracion_cambiada']);
+        $confirmada = DB::table('checklist_historial')->where('evento', 'configuracion_confirmada')->sole();
+        $this->assertArrayNotHasKey('fase_sgr', json_decode($confirmada->despues, true));
     }
 
     // ------------------------------------------------------------ preselección
