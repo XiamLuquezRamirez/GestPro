@@ -14,7 +14,6 @@ import {
     construirHojasExcel,
     datosPropio,
     faseLegible,
-    mensajeError,
     motivoNoEliminarPropio,
     nombreArchivoExcel,
     plantillasConVersion,
@@ -60,8 +59,13 @@ const ExpedienteViabilizacion = ({ user }) => {
     const idActual = idSolicitado ?? datosProyecto?.expedientes[0]?.id ?? null;
 
     // Envíos de configuración en serie: si el usuario sigue marcando mientras hay uno
-    // en curso, solo se manda el último estado al terminar.
+    // en curso, solo se manda el último estado al terminar. `pendiente` lleva su expediente
+    // ({ id, datos }): si entretanto se abrió otro, no se le manda la selección del anterior.
     const envio = useRef({ temporizador: null, enCurso: false, pendiente: null });
+
+    // Expediente que se muestra (o se está abriendo). Una respuesta de otro llega tarde y se descarta.
+    const idVigente = useRef(null);
+    const esVigente = (id) => id === idVigente.current;
 
     const cargarProyecto = useCallback(async () => {
         const { data } = await axios.get(`/proyectos/${proyectoId}/expedientes`);
@@ -74,12 +78,41 @@ const ExpedienteViabilizacion = ({ user }) => {
         prev ? { ...prev, expedientes: actualizarExpedienteEnLista(prev.expedientes, data) } : prev
     )), []);
 
+    // Como cargarPlantillas: solo vale la última petición, y solo si su expediente sigue abierto.
+    // Una respuesta o un error que llegan tarde se descartan en silencio.
+    const peticionExpediente = useRef(0);
     const cargarExpediente = useCallback(async (id) => {
-        const { data } = await axios.get(`/expedientes/${id}`);
+        if (id !== idVigente.current) return;
+        const numero = ++peticionExpediente.current;
+        const alDia = () => numero === peticionExpediente.current && id === idVigente.current;
+        let data;
+        try {
+            ({ data } = await axios.get(`/expedientes/${id}`));
+        } catch (error) {
+            if (alDia()) throw error;
+            return;
+        }
+        if (!alDia()) return;
         setExpediente(data);
         setSeleccion(seleccionDesde(data));
         actualizarEnLista(data);
     }, [actualizarEnLista]);
+
+    // Los avisos de duplicados cambian cuando una fila deja de aplicar o vuelve a aplicar, y la
+    // respuesta de una acción por fila no los trae: se piden aparte, sin tocar nada más de la pantalla.
+    const peticionAvisos = useRef(0);
+    const refrescarAvisos = useCallback(async (id) => {
+        const numero = ++peticionAvisos.current;
+        try {
+            const { data } = await axios.get(`/expedientes/${id}`);
+            if (numero !== peticionAvisos.current) return;
+            setExpediente((prev) => (prev?.id === id
+                ? { ...prev, avisos_duplicados: data.avisos_duplicados, avisos_duplicados_total: data.avisos_duplicados_total }
+                : prev));
+        } catch {
+            // En silencio: los avisos quedan como estaban hasta la próxima carga.
+        }
+    }, []);
 
     // Solo vale la última petición: el expediente abierto puede cambiar mientras llega.
     const peticionPlantillas = useRef(0);
@@ -107,7 +140,7 @@ const ExpedienteViabilizacion = ({ user }) => {
                 if (vigente) setCatalogo(respuestaCatalogo.data);
             } catch (error) {
                 if (vigente) {
-                    setErrorCarga(error?.response?.status === 404 ? 'El proyecto no existe.' : mensajeError(error));
+                    setErrorCarga(error?.response?.status === 404 ? 'El proyecto no existe.' : mensajeApi(error));
                 }
             }
         })();
@@ -115,21 +148,23 @@ const ExpedienteViabilizacion = ({ user }) => {
     }, [cargarProyecto]);
 
     useEffect(() => {
+        idVigente.current = idActual;
         clearTimeout(envio.current.temporizador);
         envio.current.pendiente = null;
+        // Un cambio que esperaba el temporizador ya no se manda; si hay un envío en curso, él lo apaga al terminar.
+        if (!envio.current.enCurso) setRecalculando(false);
         setConfigAbierta(false);
 
         if (!idActual) {
             setExpediente(null);
             setSeleccion(null);
-            return undefined;
+            return;
         }
 
-        let vigente = true;
+        // cargarExpediente ya descarta lo que llega tarde: si lanza, el error es del expediente abierto.
         cargarExpediente(idActual).catch((error) => {
-            if (vigente) setErrorCarga(error?.response?.status === 404 ? 'El expediente no existe.' : mensajeError(error));
+            setErrorCarga(error?.response?.status === 404 ? 'El expediente no existe.' : mensajeApi(error));
         });
-        return () => { vigente = false; };
     }, [idActual, cargarExpediente]);
 
     // También sin expediente: dice qué plantillas tendría uno nuevo. Espera al proyecto para
@@ -154,24 +189,28 @@ const ExpedienteViabilizacion = ({ user }) => {
 
     const enviarConfiguracion = useCallback(async (id, datos) => {
         if (envio.current.enCurso) {
-            envio.current.pendiente = datos;
+            envio.current.pendiente = { id, datos };
             return;
         }
         envio.current.enCurso = true;
         setRecalculando(true);
         try {
             const { data } = await axios.put(`/expedientes/${id}/configuracion`, datos);
-            if (!envio.current.pendiente) setExpediente(data);
+            // La lista del selector se indexa por id: ponerla al día vale aunque ya se muestre otro.
             actualizarEnLista(data);
+            if (id === idVigente.current && !envio.current.pendiente) setExpediente(data);
         } catch (error) {
-            envio.current.pendiente = null;
-            avisarError('No se pudo actualizar la configuración', error);
-            cargarExpediente(id).catch(() => {});
+            // Si ya se muestra otro expediente, el error de este no se avisa ni se recarga.
+            if (id === idVigente.current) {
+                envio.current.pendiente = null;
+                avisarError('No se pudo actualizar la configuración', error);
+                cargarExpediente(id).catch(() => {});
+            }
         } finally {
             envio.current.enCurso = false;
             const siguiente = envio.current.pendiente;
             envio.current.pendiente = null;
-            if (siguiente) enviarConfiguracion(id, siguiente);
+            if (siguiente) enviarConfiguracion(siguiente.id, siguiente.datos);
             else setRecalculando(false);
         }
     }, [cargarExpediente, actualizarEnLista]);
@@ -187,6 +226,7 @@ const ExpedienteViabilizacion = ({ user }) => {
         setConfirmando(true);
         try {
             const { data } = await axios.post(`/expedientes/${expediente.id}/configuracion/confirmar`, seleccion);
+            if (!esVigente(data.id)) return;
             setExpediente(data);
             setSeleccion(seleccionDesde(data));
             setConfigAbierta(false);
@@ -200,24 +240,26 @@ const ExpedienteViabilizacion = ({ user }) => {
         }
     };
 
-    const reemplazarFila = (fila, progreso) => setExpediente((prev) => ({
-        ...prev,
-        progreso: progreso ?? prev.progreso,
-        requisitos: prev.requisitos.map((f) => (f.id === fila.id ? fila : f)),
-    }));
+    // Si la fila ya no está (se abrió otro expediente mientras llegaba la respuesta), nada cambia:
+    // ni la fila ni el progreso, que es del expediente de la fila.
+    const reemplazarFila = (fila, progreso) => setExpediente((prev) => (
+        prev?.requisitos.some((f) => f.id === fila.id)
+            ? { ...prev, progreso: progreso ?? prev.progreso, requisitos: prev.requisitos.map((f) => (f.id === fila.id ? fila : f)) }
+            : prev
+    ));
 
     // Un propio nuevo va al final: el backend ordena los propios después de toda plantilla.
-    const agregarFila = (fila, progreso) => setExpediente((prev) => ({
-        ...prev,
-        progreso: progreso ?? prev.progreso,
-        requisitos: [...prev.requisitos, fila],
-    }));
+    const agregarFila = (expedienteId, fila, progreso) => setExpediente((prev) => (
+        prev?.id === expedienteId
+            ? { ...prev, progreso: progreso ?? prev.progreso, requisitos: [...prev.requisitos, fila] }
+            : prev
+    ));
 
-    const quitarFila = (fila, progreso) => setExpediente((prev) => ({
-        ...prev,
-        progreso: progreso ?? prev.progreso,
-        requisitos: prev.requisitos.filter((f) => f.id !== fila.id),
-    }));
+    const quitarFila = (fila, progreso) => setExpediente((prev) => (
+        prev?.requisitos.some((f) => f.id === fila.id)
+            ? { ...prev, progreso: progreso ?? prev.progreso, requisitos: prev.requisitos.filter((f) => f.id !== fila.id) }
+            : prev
+    ));
 
     const urlFila = (fila) => `/expedientes/${expediente.id}/requisitos/${fila.id}`;
 
@@ -277,10 +319,14 @@ const ExpedienteViabilizacion = ({ user }) => {
         [expediente?.id]
     );
 
+    // Los propios no entran en los avisos de duplicados (ExpedienteService::avisosDuplicados), y con
+    // una sola plantilla no hay avisos: solo hace falta pedirlos tras una acción de aplicabilidad.
     const accionFila = async (peticion, titulo) => {
+        const { id, plantillas } = expediente;
         try {
             const { data } = await peticion();
             reemplazarFila(data.requisito, data.progreso);
+            if (plantillas.length > 1) refrescarAvisos(id);
         } catch (error) {
             avisarError(titulo, error);
             // La fila pudo cambiar en el servidor: se recarga para no mostrar acciones viejas.
@@ -318,8 +364,8 @@ const ExpedienteViabilizacion = ({ user }) => {
         await accionFila(() => axios.delete(`${urlFila(fila)}/no-aplica`), 'No se pudo retirar el "no aplica"');
     };
 
-    const aprobarNoAplica = (fila) =>
-        accionFila(() => axios.post(`${urlFila(fila)}/no-aplica/aprobar`), 'No se pudo aprobar el "no aplica"');
+    const aprobarNoAplica = (fila) => ejecutar(() =>
+        accionFila(() => axios.post(`${urlFila(fila)}/no-aplica/aprobar`), 'No se pudo aprobar el "no aplica"'));
 
     const rechazarNoAplica = async (fila) => {
         const { isConfirmed, value } = await Swal.fire({
@@ -361,7 +407,7 @@ const ExpedienteViabilizacion = ({ user }) => {
                 reemplazarFila(data.requisito, data.progreso);
             } else {
                 const { data } = await axios.post(urlPropios(), datos);
-                agregarFila(data.requisito, data.progreso);
+                agregarFila(expediente.id, data.requisito, data.progreso);
             }
             return true;
         } catch (error) {
@@ -426,7 +472,13 @@ const ExpedienteViabilizacion = ({ user }) => {
 
     const abrirExpediente = (id) => setSearchParams(id ? { expediente: String(id) } : {});
 
+    // El expediente del selector ya llegó: hasta entonces, `seleccion` y `disponibles` son del anterior.
+    const expedienteAlDia = !idActual || expediente?.id === idActual;
+    // Sin la lista no se sabe qué plantillas pasarían; si falló, se crea igual y decide el servidor.
+    const plantillasListas = disponibles !== null || Boolean(errorPlantillas);
+
     const crearExpediente = () => ejecutar(async () => {
+        if (!expedienteAlDia || !plantillasListas) return;
         // Uno nuevo parte de la configuración del abierto (caso re-radicación), solo con las
         // plantillas que hoy se ofrecen al proyecto. Sin ninguno, el servidor preselecciona la
         // plantilla SGR compatible, si la hay; con ella van la fase III y el sector sugerido.
@@ -458,7 +510,8 @@ const ExpedienteViabilizacion = ({ user }) => {
         }
     });
 
-    const radicar = async () => {
+    const radicar = () => ejecutar(async () => {
+        const { id } = expediente;
         const { isConfirmed } = await Swal.fire({
             icon: 'warning',
             title: '¿Radicar el expediente?',
@@ -469,15 +522,15 @@ const ExpedienteViabilizacion = ({ user }) => {
         });
         if (!isConfirmed) return;
         try {
-            const { data } = await axios.post(`/expedientes/${expediente.id}/radicar`);
-            setExpediente(data);
+            const { data } = await axios.post(`/expedientes/${id}/radicar`);
+            if (esVigente(id)) setExpediente(data);
             await cargarProyecto();
         } catch (error) {
             avisarError('No se pudo radicar el expediente', error);
         }
-    };
+    });
 
-    const eliminar = async () => {
+    const eliminar = () => ejecutar(async () => {
         const { isConfirmed } = await Swal.fire({
             icon: 'warning',
             title: `¿Eliminar el expediente #${expediente.id}?`,
@@ -494,7 +547,7 @@ const ExpedienteViabilizacion = ({ user }) => {
         } catch (error) {
             avisarError('No se pudo eliminar el expediente', error);
         }
-    };
+    });
 
     const exportarExcel = () => {
         const { resumen, checklist } = construirHojasExcel(expediente);
@@ -574,7 +627,12 @@ const ExpedienteViabilizacion = ({ user }) => {
                                     </select>
                                 )}
                                 {puedeEditar && !hayBorrador && (
-                                    <button type="button" className="exv-btn" onClick={crearExpediente} disabled={ocupado}>
+                                    <button
+                                        type="button"
+                                        className="exv-btn"
+                                        onClick={crearExpediente}
+                                        disabled={ocupado || !expedienteAlDia || !plantillasListas}
+                                    >
                                         <FontAwesomeIcon icon={faPlus} /> Nuevo expediente
                                     </button>
                                 )}
@@ -696,7 +754,7 @@ const ExpedienteViabilizacion = ({ user }) => {
                                             </button>
                                             {editable && (
                                                 <>
-                                                    <button type="button" className="exv-btn exv-btn-peligro" onClick={eliminar}>
+                                                    <button type="button" className="exv-btn exv-btn-peligro" onClick={eliminar} disabled={ocupado}>
                                                         <FontAwesomeIcon icon={faTrash} /> Eliminar
                                                     </button>
                                                     {!puedeRadicar(expediente.progreso) && (
@@ -709,7 +767,7 @@ const ExpedienteViabilizacion = ({ user }) => {
                                                         type="button"
                                                         className="exv-btn exv-btn-primario"
                                                         onClick={radicar}
-                                                        disabled={recalculando || !puedeRadicar(expediente.progreso)}
+                                                        disabled={ocupado || recalculando || !puedeRadicar(expediente.progreso)}
                                                     >
                                                         <FontAwesomeIcon icon={faStamp} /> Radicar
                                                     </button>
