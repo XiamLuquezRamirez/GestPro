@@ -1,17 +1,10 @@
 // Lógica de presentación de la administración de plantillas de checklist.
 // Funciones puras, probadas en plantillasChecklist.test.js. Las reglas las valida el backend.
 
-import { ORDEN_SECCIONES, SECCIONES, mensajeError } from './expedienteChecklist';
+import { CATEGORIAS, ORDEN_SECCIONES, SECCIONES, mensajeError } from './expedienteChecklist';
 
-export const CATEGORIAS = [
-    ['tecnico', 'Técnico'],
-    ['juridico', 'Jurídico'],
-    ['financiero', 'Financiero'],
-    ['ambiental', 'Ambiental'],
-    ['social', 'Social'],
-    ['administrativo', 'Administrativo'],
-    ['otro', 'Otro'],
-];
+// La lista vive en expedienteChecklist.js porque el checklist del expediente también agrupa por categoría.
+export { CATEGORIAS };
 
 export const TIPOS_REQUISITO = [
     ['documental', 'Documental'],
