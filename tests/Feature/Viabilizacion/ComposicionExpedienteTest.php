@@ -342,4 +342,93 @@ class ComposicionExpedienteTest extends TestCase
         $this->assertSame([], $this->origenes($despues));
         $this->assertSame(0, $expediente->requisitos()->where('aplica', true)->whereNotNull('requisito_catalogo_id')->count());
     }
+
+    // ------------------------------------------------- revisión de la tarea 4
+
+    public function test_una_fila_nueva_nace_por_definir_segun_el_caracter_mas_exigente_y_no_el_de_su_ancla(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Licencia ambiental' => ['licencia', 'opcional'], 'Planos' => ['planos', 'condicionado']]);
+        $vias = $this->plantilla('Vías', ['Licencia de la autoridad' => ['licencia', 'condicionado'], 'Planos viales' => ['planos', 'obligatorio']]);
+        $expediente = $this->expediente();
+
+        $this->componer($expediente, [$agua, $vias]);
+
+        $this->assertSame(ProyectoRequisito::POR_DEFINIR, $this->fila($expediente, $this->requisito($agua, 'Licencia ambiental'))->estado_aplicabilidad);
+        $planos = $this->fila($expediente, $this->requisito($agua, 'Planos'));
+        $this->assertSame(RequisitoCatalogo::OBLIGATORIO, $planos->caracter);
+        $this->assertSame(ProyectoRequisito::APLICA, $planos->estado_aplicabilidad);
+    }
+
+    public function test_sincronizar_devuelve_lo_mismo_que_la_etapa_4_en_un_expediente_solo_sgr(): void
+    {
+        $expediente = $this->expediente();
+        $a1 = RequisitoCatalogo::where('catalogo_version_id', $this->sgr->versionVigente()->id)->where('clave', 'a1')->sole();
+        $fila = $this->fila($expediente, $a1);
+        $this->servicio->marcar($expediente, $fila, ['cumplido' => true], null);
+
+        // Dato anterior a la regla de versiones inmutables: la etapa 4 retiraba la fila de un desactivado.
+        $a1->update(['activo' => false]);
+
+        $this->assertSame(['aplican' => 7, 'retenidos' => 1], $this->servicio->sincronizar($expediente->refresh()));
+        $fila->refresh();
+        $this->assertFalse($fila->aplica);
+        $this->assertTrue($fila->cumplido);
+        $this->assertSame([], $this->origenes($fila));
+    }
+
+    public function test_dos_filas_existentes_con_la_misma_llave_dejan_una_sola_activa_y_la_otra_sin_origenes(): void
+    {
+        $expediente = $this->expediente();
+        $a1 = RequisitoCatalogo::where('catalogo_version_id', $this->sgr->versionVigente()->id)->where('clave', 'a1')->sole();
+        // Otra versión SGR con el mismo código común, y una segunda fila activa anclada en ella.
+        $otra = $this->sgr->versiones()->create(['numero' => 99, 'estado' => CatalogoVersion::PUBLICADA, 'vigente' => false]);
+        $copia = $a1->replicate();
+        $copia->catalogo_version_id = $otra->id;
+        $copia->save();
+        $duplicada = $expediente->requisitos()->create(['requisito_catalogo_id' => $copia->id, 'aplica' => true, 'orden' => 1]);
+
+        $this->servicio->sincronizar($expediente->refresh());
+
+        $filas = $expediente->requisitos()->whereIn('requisito_catalogo_id', [$a1->id, $copia->id])->get();
+        $this->assertSame(1, $filas->where('aplica', true)->count());
+        foreach ($filas as $f) {
+            $this->assertSame($f->aplica ? [$a1->id] : [], $this->origenes($f));
+        }
+        $this->assertFalse($duplicada->refresh()->aplica);
+    }
+
+    public function test_la_misma_llave_dos_veces_en_una_version_es_una_fila_anclada_al_primero_por_orden(): void
+    {
+        // CatalogoService lo impide; si el dato llega igual, sincronizar no duplica la fila.
+        $agua = $this->plantilla('Obras de agua', ['Planos' => [null, 'obligatorio']]);
+        $version = $agua->versionVigente();
+        $primero = RequisitoCatalogo::create(['catalogo_version_id' => $version->id, 'clave' => 'r8', 'texto' => 'Licencia A', 'orden' => 2, 'codigo_comun' => 'licencia', 'caracter' => 'obligatorio']);
+        $segundo = RequisitoCatalogo::create(['catalogo_version_id' => $version->id, 'clave' => 'r9', 'texto' => 'Licencia B', 'orden' => 9, 'codigo_comun' => 'licencia', 'caracter' => 'opcional']);
+        $expediente = $this->expediente();
+
+        $this->componer($expediente, [$agua]);
+
+        $fila = $this->fila($expediente, $primero);
+        $this->assertSame(2, $fila->orden);
+        $this->assertSame(RequisitoCatalogo::OBLIGATORIO, $fila->caracter);
+        $this->assertSame([$primero->id, $segundo->id], $this->origenes($fila));
+        $this->assertFalse($expediente->requisitos()->where('requisito_catalogo_id', $segundo->id)->exists());
+    }
+
+    public function test_sincronizar_no_escribe_en_el_catalogo(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos' => [null, 'obligatorio'], 'Presupuesto' => ['a2', 'opcional']]);
+        $expediente = $this->expediente();
+        $escrituras = [];
+        DB::listen(function ($q) use (&$escrituras) {
+            if (preg_match('/^\s*(insert into|update|delete from)\s+"?(requisitos_catalogo|catalogo_versiones|plantillas_checklist)"?\s/i', $q->sql)) {
+                $escrituras[] = $q->sql;
+            }
+        });
+
+        $this->componer($expediente, [$this->sgr, $agua], $agua);
+        $this->componer($expediente, [$agua]);
+
+        $this->assertSame([], $escrituras);
+    }
 }

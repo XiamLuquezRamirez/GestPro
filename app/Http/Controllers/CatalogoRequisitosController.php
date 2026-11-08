@@ -179,6 +179,7 @@ class CatalogoRequisitosController extends Controller
         'in' => 'Revisa :attribute: no es un valor válido.',
         'string' => 'Revisa :attribute: debe ser un texto.',
         'min' => 'Revisa :attribute: el mínimo es :min.',
+        'orden.max' => 'Revisa el orden: el máximo es :max.',
         'codigo_comun.regex' => 'El código común solo admite letras, números, punto, guion y guion bajo.',
         'texto.required' => 'Escribe el nombre del requisito.',
         'clave.regex' => 'La clave solo admite minúsculas, números y guion bajo.',
@@ -201,7 +202,7 @@ class CatalogoRequisitosController extends Controller
             'requiere_aprobacion_no_aplica' => ['sometimes', 'boolean'],
             'codigo_comun' => ['nullable', 'string', 'max:40', 'regex:/^[A-Za-z0-9_.-]+$/'],
             'nota' => ['nullable', 'string'],
-            'orden' => ['sometimes', 'integer', 'min:0'],
+            'orden' => ['sometimes', 'integer', 'min:0', 'max:9999999'],
             'activo' => ['sometimes', 'boolean'],
         ];
 
