@@ -9,6 +9,7 @@ use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Plantillas de un expediente: cuáles se ofrecen a un proyecto, cuáles se pueden elegir
@@ -203,15 +204,23 @@ final class PlantillasExpediente
         return ['versiones' => $versiones, 'principal_id' => $principal, 'version_sgr_id' => $sgr[0] ?? null];
     }
 
-    /** Deja el expediente con las plantillas elegidas, sus versiones y la versión SGR. */
+    /**
+     * Deja el expediente con las plantillas elegidas, sus versiones y la versión SGR.
+     *
+     * Se llama dentro de la transacción que bloqueó el expediente y validó la selección
+     * (ExpedienteService). Abre la suya, que entonces es un savepoint: el pivote y
+     * catalogo_version_id nunca quedan a medias.
+     */
     public function guardar(ProyectoExpediente $expediente, array $seleccion): void
     {
-        $expediente->versionesPlantilla()->sync(
-            collect($seleccion['versiones'])
-                ->mapWithKeys(fn (int $version, int $plantilla) => [$version => ['es_principal' => $plantilla === $seleccion['principal_id']]])
-                ->all()
-        );
-        $expediente->update(['catalogo_version_id' => $seleccion['version_sgr_id']]);
+        DB::transaction(function () use ($expediente, $seleccion) {
+            $expediente->versionesPlantilla()->sync(
+                collect($seleccion['versiones'])
+                    ->mapWithKeys(fn (int $version, int $plantilla) => [$version => ['es_principal' => $plantilla === $seleccion['principal_id']]])
+                    ->all()
+            );
+            $expediente->update(['catalogo_version_id' => $seleccion['version_sgr_id']]);
+        });
         $expediente->unsetRelation('versionesPlantilla')->unsetRelation('version');
     }
 }

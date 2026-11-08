@@ -159,16 +159,24 @@ final class ExpedienteService
 
     public function confirmarConfiguracion(ProyectoExpediente $expediente, array $datos, ?User $usuario = null): ProyectoExpediente
     {
-        $sinPlantillas = array_key_exists('plantilla_ids', $datos)
-            ? $datos['plantilla_ids'] === []
-            : ! $expediente->versionesPlantilla()->exists();
-        if ($sinPlantillas) {
-            throw new ReglaNegocioException(self::SIN_PLANTILLAS);
-        }
-
         return DB::transaction(function () use ($expediente, $datos, $usuario) {
+            // Todo se decide sobre la fila bloqueada: un PUT simultáneo que quite las
+            // plantillas espera a que esto termine, y luego ya lo ve confirmado.
+            $this->bloquear($expediente);
+            $this->exigirBorrador($expediente);
+            $sinPlantillas = array_key_exists('plantilla_ids', $datos)
+                ? $datos['plantilla_ids'] === []
+                : ! $expediente->versionesPlantilla()->exists();
+            if ($sinPlantillas) {
+                throw new ReglaNegocioException(self::SIN_PLANTILLAS);
+            }
+
             $this->actualizarConfiguracion($expediente, $datos, $usuario);
             if (! $expediente->estaConfigurado()) {
+                // Sobre lo recién guardado: nunca se confirma un expediente sin plantillas.
+                if (! $expediente->versionesPlantilla()->exists()) {
+                    throw new ReglaNegocioException(self::SIN_PLANTILLAS);
+                }
                 $expediente->update(['fecha_configuracion' => now()]);
                 $this->historial->registrarExpediente($expediente, 'configuracion_confirmada', [], $this->configuracionRegistrable($expediente), $usuario);
             }
@@ -197,19 +205,21 @@ final class ExpedienteService
      */
     public function actualizarConfiguracion(ProyectoExpediente $expediente, array $datos, ?User $usuario = null): ProyectoExpediente
     {
-        $this->exigirBorrador($expediente);
-        $plantillas = array_key_exists('plantilla_ids', $datos)
-            ? $this->plantillas->validar($datos, $expediente->proyecto, $expediente)
-            : null;
-        if ($plantillas && $plantillas['versiones'] === [] && $expediente->estaConfigurado()) {
-            throw new ReglaNegocioException(self::SIN_PLANTILLAS);
-        }
-        $this->exigirFaseSgr($datos, $plantillas
-            ? $plantillas['version_sgr_id'] !== null
-            : $this->plantillas->tieneSgr($this->plantillas->versionesDe($expediente)));
-        $seleccion = $this->validarSeleccion($datos, $expediente);
+        return DB::transaction(function () use ($expediente, $datos, $usuario) {
+            // Borrador, plantillas y "ya confirmado" se leen de la fila bloqueada.
+            $this->bloquear($expediente);
+            $this->exigirBorrador($expediente);
+            $plantillas = array_key_exists('plantilla_ids', $datos)
+                ? $this->plantillas->validar($datos, $expediente->proyecto, $expediente)
+                : null;
+            if ($plantillas && $plantillas['versiones'] === [] && $expediente->estaConfigurado()) {
+                throw new ReglaNegocioException(self::SIN_PLANTILLAS);
+            }
+            $this->exigirFaseSgr($datos, $plantillas
+                ? $plantillas['version_sgr_id'] !== null
+                : $this->plantillas->tieneSgr($this->plantillas->versionesDe($expediente)));
+            $seleccion = $this->validarSeleccion($datos, $expediente);
 
-        return DB::transaction(function () use ($expediente, $datos, $plantillas, $seleccion, $usuario) {
             $antes = $this->configuracionRegistrable($expediente);
             if (isset($datos['fase_sgr'])) {
                 $expediente->update(['fase_sgr' => (int) $datos['fase_sgr']]);
@@ -331,20 +341,22 @@ final class ExpedienteService
 
     public function radicar(ProyectoExpediente $expediente, ?User $usuario): ProyectoExpediente
     {
-        $this->exigirBorrador($expediente);
-        $this->exigirConfigurado($expediente);
+        DB::transaction(function () use ($expediente, $usuario) {
+            // Con la fila bloqueada, un propio que se agrega a la vez espera o ya cuenta.
+            $this->bloquear($expediente);
+            $this->exigirBorrador($expediente);
+            $this->exigirConfigurado($expediente);
 
-        ['total' => $total, 'cumplidos' => $cumplidos] = $this->progresoDe($expediente);
-        if ($total === 0) {
-            throw new ReglaNegocioException('No se puede radicar: el expediente no tiene requisitos aplicables.');
-        }
-        if ($cumplidos < $total) {
-            $pendientes = $total - $cumplidos;
-            $verbo = $pendientes === 1 ? 'falta' : 'faltan';
-            throw new ReglaNegocioException("No se puede radicar: {$verbo} {$pendientes} de {$total} requisitos por cumplir.");
-        }
+            ['total' => $total, 'cumplidos' => $cumplidos] = $this->progresoDe($expediente);
+            if ($total === 0) {
+                throw new ReglaNegocioException('No se puede radicar: el expediente no tiene requisitos aplicables.');
+            }
+            if ($cumplidos < $total) {
+                $pendientes = $total - $cumplidos;
+                $verbo = $pendientes === 1 ? 'falta' : 'faltan';
+                throw new ReglaNegocioException("No se puede radicar: {$verbo} {$pendientes} de {$total} requisitos por cumplir.");
+            }
 
-        DB::transaction(function () use ($expediente, $usuario, $total) {
             $expediente->update([
                 'estado' => ProyectoExpediente::RADICADO,
                 'fecha_radicado' => now(),
@@ -391,10 +403,22 @@ final class ExpedienteService
      *   una existente no cambia de estado por recalcular.
      * - Orden: el del primer origen, desplazado por la posición de su plantilla.
      * - Los requisitos propios no se tocan.
+     * - Corre en su propia transacción (un savepoint si ya hay una) y con la fila del
+     *   expediente bloqueada: dos recálculos simultáneos no eligen anclas distintas para una llave.
      *
      * @return array{aplican:int, retenidos:int}
      */
     public function sincronizar(ProyectoExpediente $expediente): array
+    {
+        return DB::transaction(function () use ($expediente) {
+            $this->bloquear($expediente);
+
+            return $this->recalcular($expediente);
+        });
+    }
+
+    /** @return array{aplican:int, retenidos:int} */
+    private function recalcular(ProyectoExpediente $expediente): array
     {
         $llaves = $this->origenesPorLlave($expediente);
 
@@ -935,6 +959,28 @@ final class ExpedienteService
         $expediente->tipologias()->sync($seleccion['tipologia_ids']);
         $expediente->unsetRelation('sectores')->unsetRelation('tipos')
             ->unsetRelation('componentes')->unsetRelation('tipologias');
+    }
+
+    /**
+     * Bloquea la fila del expediente y deja el modelo con lo que dice esa lectura: las reglas
+     * se deciden sobre ella y no sobre lo que leyó la petición. Va dentro de una transacción.
+     *
+     * Equivale a refresh(), pero copia la fila leída con FOR UPDATE: en REPEATABLE READ, un
+     * SELECT normal en una transacción que ya leyó algo puede devolver la foto de entonces.
+     * Las relaciones se descartan por la misma razón y se vuelven a leer al usarlas.
+     */
+    public function bloquear(ProyectoExpediente $expediente): void
+    {
+        $actual = ProyectoExpediente::query()->whereKey($expediente->id)->lockForUpdate()->firstOrFail();
+        $expediente->setRawAttributes($actual->getAttributes(), true);
+        $expediente->setRelations([]);
+    }
+
+    /** Bloquea el expediente y exige, sobre esa lectura, que su checklist admita cambios. */
+    public function bloquearChecklistEditable(ProyectoExpediente $expediente): void
+    {
+        $this->bloquear($expediente);
+        $this->exigirChecklistEditable($expediente);
     }
 
     private function exigirBorrador(ProyectoExpediente $expediente): void

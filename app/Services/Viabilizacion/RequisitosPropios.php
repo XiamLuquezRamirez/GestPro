@@ -51,6 +51,9 @@ final class RequisitosPropios
         ]);
 
         return DB::transaction(function () use ($expediente, $valores, $usuario) {
+            // Con el expediente bloqueado: una radicación simultánea espera y ya cuenta este
+            // propio, o termina antes y aquí se ve radicado.
+            $this->expedientes->bloquearChecklistEditable($expediente);
             $fila = $expediente->requisitos()->create([
                 ...$this->columnas($valores),
                 'requisito_catalogo_id' => null,
@@ -78,6 +81,8 @@ final class RequisitosPropios
         DB::transaction(function () use ($expediente, $fila, $valores, $usuario) {
             // Bloquea la fila y compara con su estado actual: dos ediciones no se pisan en el historial.
             $actual = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
+            // Primero la fila y luego el expediente, el mismo orden que marcar (fila y touch).
+            $this->expedientes->bloquearChecklistEditable($expediente);
             $antes = $this->valoresDe($actual);
             $cambios = array_filter($valores, fn ($valor, string $campo) => $valor !== $antes[$campo], ARRAY_FILTER_USE_BOTH);
             if ($cambios === []) {
@@ -99,6 +104,7 @@ final class RequisitosPropios
         DB::transaction(function () use ($expediente, $fila, $usuario) {
             // Bloquea la fila: una marca o una subida simultánea no puede perderse con ella.
             $actual = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->firstOrFail();
+            $this->expedientes->bloquearChecklistEditable($expediente);
             if ($actual->cumplido) {
                 throw new ReglaNegocioException('El requisito está cumplido: desmárcalo antes de eliminarlo.');
             }

@@ -1,0 +1,191 @@
+<?php
+
+namespace Tests\Feature\Viabilizacion;
+
+use App\Exceptions\ReglaNegocioException;
+use App\Models\CatalogoVersion;
+use App\Models\FuenteFinanciacion;
+use App\Models\PlantillaChecklist;
+use App\Models\Proyecto;
+use App\Models\ProyectoExpediente;
+use App\Models\RequisitoCatalogo;
+use App\Services\Viabilizacion\ExpedienteService;
+use App\Services\Viabilizacion\RequisitosPropios;
+use Database\Seeders\CatalogoRequisitosSgrSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Tests\TestCase;
+
+/**
+ * Las escrituras del expediente deciden sobre su fila releída con bloqueo, no sobre el modelo
+ * que trajo la petición. SQLite no tiene concurrencia real: un modelo obsoleto hace de la
+ * petición que leyó antes de que otra escribiera.
+ */
+class ExpedienteConcurrenciaTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private const RADICADO = 'El expediente está radicado: su checklist está congelado y no admite cambios.';
+    private const SIN_PLANTILLAS = 'Elige al menos una plantilla para armar el checklist.';
+
+    private ExpedienteService $servicio;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seed(CatalogoRequisitosSgrSeeder::class);
+        $this->servicio = app(ExpedienteService::class);
+    }
+
+    private function proyecto(string $fuente = FuenteFinanciacion::SGR): Proyecto
+    {
+        $proyecto = Proyecto::create(['nombre' => 'Acueducto veredal']);
+        $proyecto->fuentes()->sync([FuenteFinanciacion::where('clave', $fuente)->value('id')]);
+
+        return $proyecto;
+    }
+
+    private function expedienteSgr(array $config = ['fase_sgr' => 3]): ProyectoExpediente
+    {
+        $expediente = $this->servicio->crear($this->proyecto(), $config, null);
+
+        return $this->servicio->confirmarConfiguracion($expediente, $config);
+    }
+
+    private function plantillaSimple(): PlantillaChecklist
+    {
+        $plantilla = PlantillaChecklist::create([
+            'nombre' => 'Obras de agua', 'motor' => PlantillaChecklist::MOTOR_SIMPLE, 'activo' => true,
+            'todas_fuentes' => true, 'todos_sectores' => true,
+        ]);
+        $version = $plantilla->versiones()->create(['numero' => 1, 'estado' => CatalogoVersion::PUBLICADA, 'vigente' => true]);
+        RequisitoCatalogo::create(['catalogo_version_id' => $version->id, 'clave' => 'r1', 'texto' => 'Planos firmados', 'orden' => 1]);
+
+        return $plantilla;
+    }
+
+    private function radicarEnOtraPeticion(ProyectoExpediente $expediente): void
+    {
+        ProyectoExpediente::whereKey($expediente->id)->update(['estado' => ProyectoExpediente::RADICADO]);
+    }
+
+    private function assertRechaza(string $mensaje, callable $accion): void
+    {
+        try {
+            $accion();
+            $this->fail("Debía rechazarse con: {$mensaje}");
+        } catch (ReglaNegocioException $e) {
+            $this->assertSame($mensaje, $e->getMessage());
+        }
+    }
+
+    private function claves(ProyectoExpediente $expediente): array
+    {
+        return $expediente->requisitos()->where('aplica', true)->with('requisito:id,clave')->get()
+            ->pluck('requisito.clave')->sort()->values()->all();
+    }
+
+    // ------------------------------------------------------------ sincronizar
+
+    public function test_sincronizar_usa_la_configuracion_de_la_fila_releida(): void
+    {
+        // Operaciones urbanas pide vi4a en fase II y vi4b en fase III.
+        $vivienda = (int) DB::table('requisitos_sectores')->where('clave', 'vivienda')->value('id');
+        $tipo = (int) DB::table('requisitos_tipos')->where('sector_id', $vivienda)->where('clave', 'operaciones_urbanas')->value('id');
+        $config = ['sector_ids' => [$vivienda], 'tipo_ids' => [$tipo]];
+        $expediente = $this->expedienteSgr(['fase_sgr' => 3, ...$config]);
+        $vieja = $expediente->fresh(); // la leyó otra petición, todavía en fase III
+
+        $this->servicio->actualizarConfiguracion($expediente, ['fase_sgr' => 2, ...$config]);
+        $esperadas = $this->claves($expediente);
+        $this->assertContains('vi4a', $esperadas);
+
+        $this->servicio->sincronizar($vieja);
+
+        $this->assertSame($esperadas, $this->claves($expediente));
+        $this->assertSame(2, $vieja->fase_sgr);
+    }
+
+    // ---------------------------------------------------------- configuración
+
+    public function test_configurar_con_una_lectura_vieja_no_cambia_un_radicado(): void
+    {
+        $expediente = $this->expedienteSgr();
+        $vieja = $expediente->fresh();
+        $this->radicarEnOtraPeticion($expediente);
+
+        $this->assertRechaza(self::RADICADO, fn () => $this->servicio->actualizarConfiguracion($vieja, ['fase_sgr' => 2]));
+        $this->assertRechaza(self::RADICADO, fn () => $this->servicio->confirmarConfiguracion($vieja, ['fase_sgr' => 2]));
+
+        $this->assertSame(3, $expediente->fresh()->fase_sgr);
+    }
+
+    public function test_quitar_las_plantillas_con_una_lectura_vieja_no_deja_un_confirmado_sin_ellas(): void
+    {
+        $agua = $this->plantillaSimple();
+        $expediente = $this->servicio->crear($this->proyecto(FuenteFinanciacion::RECURSOS_PROPIOS), ['plantilla_ids' => [$agua->id]], null);
+        $vieja = $expediente->fresh(); // la leyó otra petición, todavía sin confirmar
+
+        $this->servicio->confirmarConfiguracion($expediente, []);
+
+        $this->assertRechaza(self::SIN_PLANTILLAS, fn () => $this->servicio->actualizarConfiguracion($vieja, ['plantilla_ids' => []]));
+        $this->assertSame(1, $expediente->versionesPlantilla()->count());
+        $this->assertTrue($expediente->fresh()->estaConfigurado());
+    }
+
+    public function test_confirmar_con_una_lectura_vieja_no_confirma_un_expediente_que_quedo_sin_plantillas(): void
+    {
+        $agua = $this->plantillaSimple();
+        $expediente = $this->servicio->crear($this->proyecto(FuenteFinanciacion::RECURSOS_PROPIOS), ['plantilla_ids' => [$agua->id]], null);
+        $vieja = $expediente->fresh();
+
+        $this->servicio->actualizarConfiguracion($expediente, ['plantilla_ids' => []]);
+
+        $this->assertRechaza(self::SIN_PLANTILLAS, fn () => $this->servicio->confirmarConfiguracion($vieja, []));
+        $this->assertNull($expediente->fresh()->fecha_configuracion);
+    }
+
+    // ---------------------------------------------------------------- radicar
+
+    public function test_radicar_dos_veces_con_una_lectura_vieja_no_vuelve_a_radicar(): void
+    {
+        $expediente = $this->expedienteSgr();
+        $expediente->requisitos()->update(['cumplido' => true]);
+        $vieja = $expediente->fresh();
+
+        $this->servicio->radicar($expediente, null);
+        $this->assertRechaza(self::RADICADO, fn () => $this->servicio->radicar($vieja, null));
+
+        $this->assertSame(1, DB::table('checklist_historial')->where('evento', 'expediente_radicado')->count());
+    }
+
+    public function test_radicar_cuenta_el_progreso_dentro_de_la_transaccion(): void
+    {
+        $expediente = $this->expedienteSgr();
+        $expediente->requisitos()->update(['cumplido' => true]);
+        $vieja = $expediente->fresh();
+        // Otra petición agregó un propio obligatorio, todavía pendiente.
+        app(RequisitosPropios::class)->crear($expediente, ['titulo' => 'Acta de socialización'], null);
+
+        $this->assertRechaza('No se puede radicar: falta 1 de 9 requisitos por cumplir.', fn () => $this->servicio->radicar($vieja, null));
+        $this->assertTrue($expediente->fresh()->esBorrador());
+    }
+
+    // -------------------------------------------------------------- propios
+
+    public function test_un_propio_no_se_agrega_edita_ni_elimina_con_una_lectura_vieja_de_un_radicado(): void
+    {
+        $expediente = $this->expedienteSgr();
+        $propios = app(RequisitosPropios::class);
+        $fila = $propios->crear($expediente, ['titulo' => 'Acta de socialización'], null);
+        $vieja = $expediente->fresh();
+        $this->radicarEnOtraPeticion($expediente);
+
+        $this->assertRechaza(self::RADICADO, fn () => $propios->crear($vieja, ['titulo' => 'Otro requisito'], null));
+        $this->assertRechaza(self::RADICADO, fn () => $propios->editar($vieja, $fila, ['titulo' => 'Acta firmada'], null));
+        $this->assertRechaza(self::RADICADO, fn () => $propios->eliminar($vieja, $fila, null));
+
+        $this->assertSame(1, $expediente->requisitos()->whereNull('requisito_catalogo_id')->count());
+        $this->assertSame('Acta de socialización', $fila->fresh()->titulo_propio);
+    }
+}
