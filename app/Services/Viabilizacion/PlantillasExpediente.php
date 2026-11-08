@@ -95,20 +95,26 @@ final class PlantillasExpediente
 
     /**
      * Selección con que nace un expediente si el pedido no trae plantillas: la plantilla
-     * compatible con motor sgr como principal (la de clave sgr antes que una copia), o ninguna.
+     * compatible con motor sgr como principal, o ninguna.
      *
      * @return array{plantilla_ids: list<int>, principal_id: ?int}
      */
     public function preseleccion(Proyecto $proyecto): array
     {
-        $sgr = PlantillaChecklist::query()
+        $sgr = $this->sgrCompatible($proyecto);
+
+        return ['plantilla_ids' => $sgr ? [$sgr->id] : [], 'principal_id' => $sgr?->id];
+    }
+
+    /** Plantilla compatible con motor sgr que se preselecciona: la de clave sgr antes que una copia. */
+    public function sgrCompatible(Proyecto $proyecto): ?PlantillaChecklist
+    {
+        return PlantillaChecklist::query()
             ->whereIn('id', $this->idsCompatibles($proyecto))
             ->where('motor', PlantillaChecklist::MOTOR_SGR)
             ->get()
             ->sortBy(fn (PlantillaChecklist $p) => [$p->clave === PlantillaChecklist::CLAVE_SGR ? 0 : 1, $p->id])
             ->first();
-
-        return ['plantilla_ids' => $sgr ? [$sgr->id] : [], 'principal_id' => $sgr?->id];
     }
 
     /** Si alguna de las versiones es de una plantilla con motor sgr. */

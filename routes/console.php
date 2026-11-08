@@ -2,6 +2,7 @@
 
 use App\Models\Proyecto;
 use App\Services\Viabilizacion\ExpedienteService;
+use App\Services\Viabilizacion\PlantillasExpediente;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -10,11 +11,14 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Artisan::command('expedientes:crear-faltantes {--simular : Solo lista los proyectos, sin crear nada}', function (ExpedienteService $servicio) {
+Artisan::command('expedientes:crear-faltantes {--simular : Solo lista los proyectos y la plantilla que se preseleccionaría, sin crear nada}', function (ExpedienteService $servicio, PlantillasExpediente $plantillas) {
     $proyectos = Proyecto::query()->orderBy('id')->get()->filter(fn (Proyecto $p) => $servicio->correspondeAutomatico($p));
 
     if ($this->option('simular')) {
-        $proyectos->each(fn (Proyecto $p) => $this->line("#{$p->id} {$p->nombre}"));
+        $proyectos->each(function (Proyecto $p) use ($plantillas) {
+            $plantilla = $plantillas->sgrCompatible($p);
+            $this->line("#{$p->id} {$p->nombre}: " . ($plantilla ? "plantilla {$plantilla->nombre}" : 'sin plantilla'));
+        });
         $this->info("Se crearían {$proyectos->count()} expedientes.");
 
         return;
@@ -22,7 +26,7 @@ Artisan::command('expedientes:crear-faltantes {--simular : Solo lista los proyec
 
     $creados = $proyectos->filter(fn (Proyecto $p) => $servicio->crearAutomatico($p, null) !== null)->count();
     $this->info("Expedientes creados: {$creados} de {$proyectos->count()}.");
-})->purpose('Crea el expediente SGR, sin configurar, a los proyectos en Formulación con la fuente SGR que no tienen');
+})->purpose('Crea el expediente, sin configurar, a los proyectos en Formulación con al menos una fuente definida que no tienen');
 
 Artisan::command('proyectos:informe-fuentes', function () {
     $porFuente = DB::table('fuentes_financiacion as f')

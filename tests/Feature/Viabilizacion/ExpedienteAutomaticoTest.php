@@ -4,8 +4,10 @@ namespace Tests\Feature\Viabilizacion;
 
 use App\Enums\Rol;
 use App\Exceptions\ReglaNegocioException;
+use App\Models\CatalogoVersion;
 use App\Models\FuenteFinanciacion;
 use App\Models\Municipio;
+use App\Models\PlantillaChecklist;
 use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
 use App\Models\User;
@@ -122,19 +124,63 @@ class ExpedienteAutomaticoTest extends TestCase
 
     public function test_detecta_regalias_por_el_catalogo_y_no_por_el_texto(): void
     {
-        $proyecto = $this->proyecto(['nombre' => 'Texto engañoso', 'fuente_financiacion' => 'Sin regalías'], [$this->fuentePropios]);
+        $proyecto = $this->proyecto(['nombre' => 'Texto engañoso', 'fuente_financiacion' => 'Recursos propios y regalías'], [$this->fuentePropios]);
 
-        $this->assertFalse(app(ExpedienteService::class)->correspondeAutomatico($proyecto));
+        $expediente = app(ExpedienteService::class)->crearAutomatico($proyecto, null);
+
+        $this->assertSame(0, $expediente->versionesPlantilla()->count());
+    }
+
+    public function test_un_proyecto_con_solo_recursos_propios_nace_con_expediente_sin_plantillas(): void
+    {
+        // Con sector mapeado a la SGR: sin plantilla SGR no se preselecciona ningún sector.
+        $this->guardar(['nombre' => 'Recursos propios', 'fuenteIds' => [$this->fuentePropios], 'sector' => $this->sectorMapeado()])->assertOk();
+
+        $expediente = Proyecto::where('nombre', 'Recursos propios')->firstOrFail()->expedientes()->sole();
+        $this->assertNull($expediente->fecha_configuracion);
+        $this->assertNull($expediente->catalogo_version_id);
+        $this->assertSame(0, $expediente->versionesPlantilla()->count());
+        $this->assertSame(0, $expediente->sectores()->count());
+        $this->assertSame(0, $expediente->requisitos()->count());
+
+        $this->como(Rol::Consulta)->getJson("/GestPro/expedientes/{$expediente->id}")->assertOk()
+            ->assertJsonPath('plantillas', [])
+            ->assertJsonPath('tiene_sgr', false);
+    }
+
+    public function test_una_plantilla_compatible_que_no_es_sgr_no_se_preselecciona(): void
+    {
+        $agua = PlantillaChecklist::create(['nombre' => 'Obras de agua', 'motor' => PlantillaChecklist::MOTOR_SIMPLE, 'activo' => true, 'todas_fuentes' => true, 'todos_sectores' => true]);
+        $agua->versiones()->create(['numero' => 1, 'estado' => CatalogoVersion::PUBLICADA, 'vigente' => true]);
+
+        $sinSgr = app(ExpedienteService::class)->crearAutomatico($this->proyecto([], [$this->fuentePropios]), null);
+        $conSgr = app(ExpedienteService::class)->crearAutomatico($this->proyecto([], [$this->fuentePropios, $this->fuenteSgr]), null);
+
+        $this->assertSame([], $sinSgr->versionesPlantilla()->pluck('plantilla_id')->all());
+        $this->assertSame([PlantillaChecklist::sgr()->id], $conSgr->versionesPlantilla()->pluck('plantilla_id')->all());
+        $this->assertSame(8, $conSgr->requisitos()->where('aplica', true)->count());
+    }
+
+    public function test_corresponde_con_al_menos_una_fuente_en_formulacion_y_sin_expediente(): void
+    {
+        $servicio = app(ExpedienteService::class);
+        $conExpediente = $this->proyecto();
+        $this->expedienteSinConfigurar($conExpediente);
+
+        $this->assertTrue($servicio->correspondeAutomatico($this->proyecto([], [$this->fuenteSgr])));
+        $this->assertTrue($servicio->correspondeAutomatico($this->proyecto([], [$this->fuentePropios])));
+        $this->assertFalse($servicio->correspondeAutomatico($this->proyecto(['financiacion_por_definir' => true], [])));
+        $this->assertFalse($servicio->correspondeAutomatico($this->proyecto(['fase' => $this->licitacion])));
+        $this->assertFalse($servicio->correspondeAutomatico($conExpediente));
     }
 
     public function test_no_se_crea_si_no_corresponde(): void
     {
         $this->guardar(['nombre' => 'En licitacion', 'fase' => $this->licitacion])->assertOk();
-        $this->guardar(['nombre' => 'Recursos propios', 'fuenteIds' => [$this->fuentePropios]])->assertOk();
         $this->guardar(['nombre' => 'Por definir', 'fuenteIds' => [], 'financiacionPorDefinir' => true])->assertOk();
         $this->guardar(['nombre' => 'Sin fase', 'fase' => null])->assertOk();
 
-        $this->assertDatabaseCount('proyectos', 4);
+        $this->assertDatabaseCount('proyectos', 3);
         $this->assertDatabaseCount('proyectos_expedientes', 0);
     }
 
@@ -394,28 +440,45 @@ class ExpedienteAutomaticoTest extends TestCase
     public function test_el_comando_crea_los_que_faltan_y_se_puede_repetir(): void
     {
         $falta = $this->proyecto(['nombre' => 'Falta']);
+        $propios = $this->proyecto(['nombre' => 'Sin regalías'], [$this->fuentePropios]);
         $tiene = $this->proyecto(['nombre' => 'Ya tiene']);
         $previo = $this->expedienteSinConfigurar($tiene);
         $this->proyecto(['nombre' => 'Otra fase', 'fase' => $this->licitacion]);
-        $this->proyecto(['nombre' => 'Sin regalías'], [$this->fuentePropios]);
+        $this->proyecto(['nombre' => 'Por definir', 'financiacion_por_definir' => true], []);
 
-        $this->artisan('expedientes:crear-faltantes')->assertSuccessful();
+        $this->artisan('expedientes:crear-faltantes')
+            ->expectsOutput('Expedientes creados: 2 de 2.')
+            ->assertSuccessful();
 
         $this->assertSame(1, $falta->expedientes()->count());
         $this->assertNull($falta->expedientes()->sole()->fecha_configuracion);
+        $this->assertSame(1, $falta->expedientes()->sole()->versionesPlantilla()->count());
+        $this->assertSame(0, $propios->expedientes()->sole()->versionesPlantilla()->count());
         $this->assertSame([$previo->id], $tiene->expedientes()->pluck('id')->all());
-        $this->assertDatabaseCount('proyectos_expedientes', 2);
+        $this->assertDatabaseCount('proyectos_expedientes', 3);
 
         $this->artisan('expedientes:crear-faltantes')->assertSuccessful();
-        $this->assertDatabaseCount('proyectos_expedientes', 2);
+        $this->assertDatabaseCount('proyectos_expedientes', 3);
     }
 
-    public function test_el_comando_en_simulacion_no_crea_nada(): void
+    public function test_el_comando_en_simulacion_muestra_la_plantilla_y_no_crea_nada(): void
     {
-        $this->proyecto(['nombre' => 'Falta']);
+        $sgr = $this->proyecto(['nombre' => 'Acueducto']);
+        $propios = $this->proyecto(['nombre' => 'Parque'], [$this->fuentePropios]);
 
-        $this->artisan('expedientes:crear-faltantes', ['--simular' => true])->assertSuccessful();
+        $this->artisan('expedientes:crear-faltantes', ['--simular' => true])
+            ->expectsOutput("#{$sgr->id} Acueducto: plantilla SGR")
+            ->expectsOutput("#{$propios->id} Parque: sin plantilla")
+            ->expectsOutput('Se crearían 2 expedientes.')
+            ->assertSuccessful();
 
         $this->assertDatabaseCount('proyectos_expedientes', 0);
+    }
+
+    public function test_el_comando_describe_la_regla_nueva(): void
+    {
+        $this->artisan('list')
+            ->expectsOutputToContain('Crea el expediente, sin configurar, a los proyectos en Formulación con al menos una fuente definida que no tienen')
+            ->assertSuccessful();
     }
 }

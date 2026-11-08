@@ -5,7 +5,6 @@ namespace App\Services\Viabilizacion;
 use App\Exceptions\ReglaNegocioException;
 use App\Models\CatalogoVersion;
 use App\Models\Fase;
-use App\Models\FuenteFinanciacion;
 use App\Models\PlantillaChecklist;
 use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
@@ -114,8 +113,10 @@ final class ExpedienteService
     }
 
     /**
-     * Expediente que nace con el proyecto, si le corresponde. Nunca interrumpe a quien
-     * guarda el proyecto: un fallo se registra y el expediente se puede crear a mano.
+     * Expediente que nace con el proyecto, si le corresponde. Con plantilla SGR compatible,
+     * la preselecciona con la fase III y el sector sugerido por el proyecto; sin ella, nace
+     * sin plantillas. Nunca interrumpe a quien guarda el proyecto: un fallo se registra y el
+     * expediente se puede crear a mano.
      */
     public function crearAutomatico(Proyecto $proyecto, ?User $usuario): ?ProyectoExpediente
     {
@@ -123,11 +124,8 @@ final class ExpedienteService
             return null;
         }
 
-        $proyecto->loadMissing('sectorRel');
-        $sugerido = $proyecto->sectorRel?->requisitos_sector_id;
-
         try {
-            return $this->crear($proyecto, ['fase_sgr' => 3, 'sector_ids' => $sugerido ? [$sugerido] : []], $usuario);
+            return $this->crear($proyecto, $this->seleccionAutomatica($proyecto), $usuario);
         } catch (\Throwable $e) {
             report($e);
 
@@ -135,12 +133,28 @@ final class ExpedienteService
         }
     }
 
-    /** Proyecto en Formulación, con la fuente SGR y todavía sin expediente. */
+    /** Proyecto en Formulación, con al menos una fuente definida y todavía sin expediente. */
     public function correspondeAutomatico(Proyecto $proyecto): bool
     {
+        // "Por definir" no es una fuente definida, aunque quedaran fuentes de antes.
         return $this->esFormulacion($proyecto->fase)
-            && $proyecto->fuentes()->where('clave', FuenteFinanciacion::SGR)->exists()
+            && ! $proyecto->financiacion_por_definir
+            && $proyecto->fuentes()->exists()
             && ! $proyecto->expedientes()->exists();
+    }
+
+    /** @return array{plantilla_ids: list<int>, principal_id: ?int, fase_sgr?: int, sector_ids?: list<int>} */
+    private function seleccionAutomatica(Proyecto $proyecto): array
+    {
+        $seleccion = $this->plantillas->preseleccion($proyecto);
+        if ($seleccion['plantilla_ids'] === []) {
+            return $seleccion;
+        }
+
+        $proyecto->loadMissing('sectorRel');
+        $sugerido = $proyecto->sectorRel?->requisitos_sector_id;
+
+        return [...$seleccion, 'fase_sgr' => 3, 'sector_ids' => $sugerido ? [$sugerido] : []];
     }
 
     public function confirmarConfiguracion(ProyectoExpediente $expediente, array $datos, ?User $usuario = null): ProyectoExpediente
@@ -592,8 +606,9 @@ final class ExpedienteService
     }
 
     /**
-     * Expediente más reciente de cada proyecto que tiene alguno, con su avance.
-     * Son dos consultas sin importar cuántos proyectos haya.
+     * Expediente más reciente de cada proyecto que tiene alguno, con su avance y sus
+     * plantillas. Son tres consultas sin importar cuántos proyectos haya: cantidades,
+     * expedientes con su avance y plantillas.
      */
     public function resumenPorProyecto(): array
     {
@@ -601,6 +616,16 @@ final class ExpedienteService
             ->selectRaw('MAX(id) AS ultimo_id, COUNT(*) AS cantidad')
             ->groupBy('proyecto_id')
             ->pluck('cantidad', 'ultimo_id');
+
+        // Mismo orden que versionesDe(): la principal primero y luego por plantilla.
+        $plantillas = DB::table('expediente_plantillas')
+            ->join('catalogo_versiones', 'catalogo_versiones.id', '=', 'expediente_plantillas.catalogo_version_id')
+            ->join('plantillas_checklist', 'plantillas_checklist.id', '=', 'catalogo_versiones.plantilla_id')
+            ->whereIn('expediente_plantillas.expediente_id', $cantidades->keys())
+            ->orderByDesc('expediente_plantillas.es_principal')
+            ->orderBy('plantillas_checklist.id')
+            ->get(['expediente_plantillas.expediente_id', 'plantillas_checklist.nombre', 'plantillas_checklist.motor'])
+            ->groupBy('expediente_id');
 
         return ProyectoExpediente::query()
             ->whereIn('id', $cantidades->keys())
@@ -617,6 +642,8 @@ final class ExpedienteService
                 'estado' => $e->estado,
                 'fase_sgr' => $e->fase_sgr,
                 'configurado' => $e->estaConfigurado(),
+                'plantillas' => $plantillas->get($e->id, collect())->pluck('nombre')->values()->all(),
+                'tiene_sgr' => $plantillas->get($e->id, collect())->contains('motor', PlantillaChecklist::MOTOR_SGR),
                 'fecha_radicado' => $e->fecha_radicado?->toIso8601String(),
                 'actualizado' => $e->updated_at?->toIso8601String(),
                 'progreso' => $this->progreso((int) $e->requisitos_aplican, (int) $e->requisitos_cumplidos),

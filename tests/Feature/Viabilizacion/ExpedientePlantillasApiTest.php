@@ -168,6 +168,45 @@ class ExpedientePlantillasApiTest extends TestCase
         $this->assertDatabaseCount('proyectos_expedientes', 0);
     }
 
+    /**
+     * El frontend crea el nuevo expediente enviando la configuración del abierto, ahora con
+     * plantilla_ids y principal_id: el backend no necesita nada más. Cada plantilla entra con
+     * su versión vigente y no se copian el cumplimiento ni los requisitos propios.
+     */
+    public function test_un_nuevo_expediente_desde_un_radicado_copia_las_plantillas_con_su_vigente_actual(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos firmados' => [null]]);
+        $proyecto = $this->proyecto();
+        $seleccion = ['fase_sgr' => 2, 'plantilla_ids' => [$this->sgr->id, $agua->id], 'principal_id' => $agua->id];
+        $radicado = ProyectoExpediente::findOrFail($this->crear($proyecto, $seleccion)->json('id'));
+        $servicio = app(ExpedienteService::class);
+        $servicio->confirmarConfiguracion($radicado, $seleccion);
+        $radicado->requisitos()->create([
+            'requisito_catalogo_id' => null, 'aplica' => true, 'orden' => 900_000_000, 'titulo_propio' => 'Acta de socialización',
+        ]);
+        $radicado->requisitos()->update(['cumplido' => true]);
+        $servicio->radicar($radicado, null);
+
+        // Obras de agua publica una versión 2 después de radicar.
+        $v1 = $agua->versionVigente();
+        $v1->update(['vigente' => false]);
+        $v2 = $agua->versiones()->create(['numero' => 2, 'estado' => CatalogoVersion::PUBLICADA, 'vigente' => true]);
+        RequisitoCatalogo::create(['catalogo_version_id' => $v2->id, 'clave' => 'r1', 'texto' => 'Planos firmados y aprobados', 'orden' => 1]);
+
+        $nuevo = $this->crear($proyecto, $seleccion)->assertCreated();
+
+        $nuevo->assertJsonPath('plantillas.0.plantilla_id', $agua->id)
+            ->assertJsonPath('plantillas.0.es_principal', true)
+            ->assertJsonPath('plantillas.0.version', ['id' => $v2->id, 'numero' => 2])
+            ->assertJsonPath('plantillas.1.plantilla_id', $this->sgr->id)
+            ->assertJsonPath('fase_sgr', 2)
+            ->assertJsonPath('configurado', false)
+            ->assertJsonPath('progreso.cumplidos', 0);
+        $this->assertSame('Planos firmados y aprobados', $nuevo->json('requisitos.0.requisito.texto'));
+        $this->assertSame([], collect($nuevo->json('requisitos'))->whereNotNull('propio')->all());
+        $this->assertSame($v1->id, $radicado->versionesPlantilla()->where('plantilla_id', $agua->id)->sole()->id);
+    }
+
     // --------------------------------------------------------- configuración
 
     public function test_configurar_sin_plantillas_en_el_pedido_conserva_la_seleccion(): void
@@ -390,5 +429,50 @@ class ExpedientePlantillasApiTest extends TestCase
         $r->assertJsonCount(1, 'avisos_duplicados')
             ->assertJsonPath('avisos_duplicados.0.plantillas', ['Obras de agua', 'Vías'])
             ->assertJsonPath('avisos_duplicados.0.similitud', 0.8);
+    }
+
+    // ---------------------------------------------------------------- resumen
+
+    public function test_el_resumen_trae_las_plantillas_con_la_principal_primero_y_si_tiene_sgr(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos firmados' => [null]]);
+        $vias = $this->plantilla('Vías', ['Licencia' => [null]]);
+        $mixto = $this->proyecto();
+        $this->crear($mixto, ['fase_sgr' => 3, 'plantilla_ids' => [$this->sgr->id, $agua->id, $vias->id], 'principal_id' => $vias->id])->assertCreated();
+        $soloSgr = $this->proyecto();
+        $this->crear($soloSgr, ['fase_sgr' => 3])->assertCreated();
+        $sinPlantillas = $this->proyecto(['recursos_propios']);
+        $this->crear($sinPlantillas, [])->assertCreated();
+
+        $resumen = collect($this->como(Rol::Consulta)->getJson('/GestPro/expedientes')->assertOk()->json())->keyBy('proyecto_id');
+
+        $this->assertSame(['Vías', 'SGR', 'Obras de agua'], $resumen[$mixto->id]['plantillas']);
+        $this->assertTrue($resumen[$mixto->id]['tiene_sgr']);
+        $this->assertSame(['SGR'], $resumen[$soloSgr->id]['plantillas']);
+        $this->assertTrue($resumen[$soloSgr->id]['tiene_sgr']);
+        $this->assertSame([], $resumen[$sinPlantillas->id]['plantillas']);
+        $this->assertFalse($resumen[$sinPlantillas->id]['tiene_sgr']);
+    }
+
+    public function test_el_resumen_hace_tres_consultas_sin_importar_cuantos_proyectos_haya(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos firmados' => [null]]);
+        $servicio = app(ExpedienteService::class);
+        $contar = function () use ($servicio) {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $servicio->resumenPorProyecto();
+            DB::disableQueryLog();
+
+            return count(DB::getQueryLog());
+        };
+
+        $this->crear($this->proyecto(), ['fase_sgr' => 3, 'plantilla_ids' => [$this->sgr->id, $agua->id], 'principal_id' => $this->sgr->id])->assertCreated();
+        $this->assertSame(3, $contar());
+
+        foreach (range(1, 3) as $_) {
+            $this->crear($this->proyecto(), ['fase_sgr' => 3])->assertCreated();
+        }
+        $this->assertSame(3, $contar());
     }
 }
