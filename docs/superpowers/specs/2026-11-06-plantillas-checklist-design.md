@@ -381,6 +381,11 @@ Reglas para este cambio:
 - **Pantalla:** el expediente todavía carga `/catalogo-requisitos/vigente` al abrirse, aunque no tenga la SGR. Si algún día no hay versión SGR vigente, la pantalla fallaría.
 - **Decisión: recalcular no cambia el estado de una fila.** Si otra plantilla aporta la misma llave y una fila `por_definir` pasa a carácter obligatorio, sigue `por_definir` hasta que alguien marque "Aplica". El carácter se recalcula; la decisión de aplicabilidad es de una persona.
 - **Decisión: una plantilla que vuelve con otra versión no recupera las filas sin código común.** Al quitar una plantilla y volver a ponerla con una versión nueva, sus requisitos sin `codigo_comun` tienen otra llave (`req:{id}`) y crean filas nuevas. Las antiguas quedan retiradas con su trabajo. Lo resuelve "aplicar versión nueva" en la etapa 6.
+- **Pendientes menores para la etapa 6:**
+  - **Orden en la SGR:** el tope de `orden` (9 999 999) no cuenta la sección. Una fila SGR de la sección C con un orden muy alto puede quedar después de la plantilla siguiente; esto afecta al Excel y a la impresión.
+  - **Avisos de duplicados:** tras cada acción de aplicabilidad, `refrescarAvisos` pide el expediente completo solo para leer los avisos. Conviene un endpoint liviano.
+  - **Entrar a Formulación:** si un proyecto pasa a Formulación al editarlo, no se crea el expediente automático. Solo se crea al darlo de alta o al salir de "por definir". Falta decidir si también debe crearse en ese caso.
+  - **Bloqueo de confirmar:** en confirmar la configuración, el `bloquear()` inicial es la única defensa frente a un PUT simultáneo que quite todas las plantillas. No hay que moverlo.
 
 ---
 
