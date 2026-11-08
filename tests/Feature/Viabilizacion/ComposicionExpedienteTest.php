@@ -397,6 +397,107 @@ class ComposicionExpedienteTest extends TestCase
         $this->assertFalse($duplicada->refresh()->aplica);
     }
 
+    // ------------------------------------------- desempate entre filas de una llave
+
+    /** Copia de un requisito SGR en una versión anterior de la plantilla, con el mismo código común. */
+    private function copiaAnterior(RequisitoCatalogo $requisito, int $numero): RequisitoCatalogo
+    {
+        $version = $this->sgr->versiones()->create(['numero' => $numero, 'estado' => CatalogoVersion::PUBLICADA, 'vigente' => false]);
+        $copia = $requisito->replicate();
+        $copia->catalogo_version_id = $version->id;
+        $copia->save();
+
+        return $copia;
+    }
+
+    /** Las filas se crean en el orden dado: el id crece con él. */
+    private function filaAnclada(ProyectoExpediente $expediente, RequisitoCatalogo $ancla, bool $aplica, bool $cumplido = false): ProyectoRequisito
+    {
+        $fila = $expediente->requisitos()->create(['requisito_catalogo_id' => $ancla->id, 'aplica' => $aplica, 'orden' => 100_001, 'cumplido' => $cumplido]);
+        if ($aplica) {
+            $fila->origenes()->attach($ancla->id);
+        }
+
+        return $fila;
+    }
+
+    private function sgrA1(): RequisitoCatalogo
+    {
+        return RequisitoCatalogo::where('catalogo_version_id', $this->sgr->versionVigente()->id)->where('clave', 'a1')->sole();
+    }
+
+    public function test_entre_filas_de_una_llave_gana_la_anclada_en_un_origen_aunque_tenga_un_id_mayor(): void
+    {
+        // Datos anteriores: una fila retirada anclada en una versión anterior de la SGR y,
+        // con un id mayor, la activa con trabajo anclada en la versión del expediente.
+        $expediente = $this->expediente();
+        $a1 = $this->sgrA1();
+        $this->fila($expediente, $a1)->delete();
+        $retirada = $this->filaAnclada($expediente, $this->copiaAnterior($a1, 98), false);
+        $activa = $this->filaAnclada($expediente, $a1, true, true);
+
+        $this->servicio->sincronizar($expediente->refresh());
+
+        $this->assertTrue($activa->refresh()->aplica);
+        $this->assertTrue($activa->cumplido);
+        $this->assertSame([$a1->id], $this->origenes($activa));
+        $this->assertFalse($retirada->refresh()->aplica);
+        $this->assertSame([], $this->origenes($retirada));
+    }
+
+    public function test_sin_ancla_en_los_origenes_gana_la_fila_que_aplica_y_luego_la_de_id_menor(): void
+    {
+        $expediente = $this->expediente();
+        $a1 = $this->sgrA1();
+        $this->fila($expediente, $a1)->delete();
+        $retirada = $this->filaAnclada($expediente, $this->copiaAnterior($a1, 97), false);
+        $activa = $this->filaAnclada($expediente, $this->copiaAnterior($a1, 98), true, true);
+
+        $this->servicio->sincronizar($expediente->refresh());
+
+        $this->assertTrue($activa->refresh()->aplica);
+        $this->assertSame([$a1->id], $this->origenes($activa));
+        $this->assertFalse($retirada->refresh()->aplica);
+
+        // Empatadas en todo, la de id menor.
+        $activa->update(['aplica' => false]);
+        $activa->origenes()->detach();
+        $this->servicio->sincronizar($expediente->refresh());
+
+        $this->assertTrue($retirada->refresh()->aplica);
+        $this->assertFalse($activa->refresh()->aplica);
+    }
+
+    // ------------------------------------------------------ escrituras en bloque
+
+    public function test_quitar_una_plantilla_grande_retira_sus_filas_con_pocas_sentencias(): void
+    {
+        $requisitos = [];
+        foreach (range(1, 200) as $n) {
+            $requisitos["Requisito número {$n}"] = [null, 'obligatorio'];
+        }
+        $grande = $this->plantilla('Plantilla grande', $requisitos);
+        $expediente = $this->expediente();
+        $this->componer($expediente, [$this->sgr, $grande]);
+        $this->assertSame(208, $this->servicio->progresoDe($expediente)['total']);
+
+        $seleccion = app(PlantillasExpediente::class)->validar(['plantilla_ids' => [$this->sgr->id], 'principal_id' => $this->sgr->id], $expediente->proyecto, $expediente);
+        app(PlantillasExpediente::class)->guardar($expediente, $seleccion);
+        $expediente->refresh();
+        $sentencias = 0;
+        DB::listen(function () use (&$sentencias) {
+            $sentencias++;
+        });
+        $this->servicio->sincronizar($expediente);
+
+        // Una fila por sentencia serían más de 400: un UPDATE y un DELETE por cada una.
+        $this->assertLessThan(20, $sentencias);
+        $this->assertSame(8, $this->servicio->progresoDe($expediente)['total']);
+        $this->assertSame(200, $expediente->requisitos()->where('aplica', false)->count());
+        $this->assertSame(0, DB::table('proyecto_requisito_origenes')
+            ->whereIn('proyecto_requisito_id', $expediente->requisitos()->where('aplica', false)->select('id'))->count());
+    }
+
     public function test_la_misma_llave_dos_veces_en_una_version_es_una_fila_anclada_al_primero_por_orden(): void
     {
         // CatalogoService lo impide; si el dato llega igual, sincronizar no duplica la fila.

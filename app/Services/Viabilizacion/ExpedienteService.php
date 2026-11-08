@@ -398,7 +398,8 @@ final class ExpedienteService
      *   Sus orígenes son los requisitos que aplican con esa llave, de todas las plantillas.
      * - La fila la crea el primer origen (su ancla, que no cambia) y se reconoce por la llave
      *   de su ancla. Sin orígenes queda aplica = false y conserva su trabajo; al volver a
-     *   tenerlos se recupera tal cual.
+     *   tenerlos se recupera tal cual. Si datos anteriores dejaron dos filas con una llave, la
+     *   conserva la anclada en un origen calculado, luego la que aplica y luego la de id menor.
      * - Carácter: el más exigente de los orígenes. Una fila nueva condicionada nace por definir;
      *   una existente no cambia de estado por recalcular.
      * - Orden: el del primer origen, desplazado por la posición de su plantilla.
@@ -426,15 +427,18 @@ final class ExpedienteService
         $sinLlave = [];
         $filas = $expediente->requisitos()->whereNotNull('requisito_catalogo_id')
             ->with('requisito:id,codigo_comun')->orderBy('id')->get();
-        foreach ($filas as $fila) {
-            $llave = $this->llave($fila->requisito);
-            // Dos filas con la misma llave solo pueden venir de datos anteriores a esta regla:
-            // la primera conserva la llave y las demás quedan sin orígenes.
-            if (isset($existentes[$llave])) {
-                $sinLlave[] = $fila;
-            } else {
-                $existentes[$llave] = $fila;
-            }
+        foreach ($filas->groupBy(fn (ProyectoRequisito $f) => $this->llave($f->requisito)) as $llave => $grupo) {
+            // Dos filas con la misma llave solo pueden venir de datos anteriores a esta regla.
+            // Conserva la llave la anclada en un origen calculado; si no, la que aplica; si no,
+            // la de id menor. Las demás quedan sin orígenes.
+            $origenes = array_flip(array_map(fn (RequisitoCatalogo $r) => $r->id, $llaves[$llave]['origenes'] ?? []));
+            $ordenadas = $grupo->sortBy(fn (ProyectoRequisito $f) => [
+                isset($origenes[$f->requisito_catalogo_id]) ? 0 : 1,
+                $f->aplica ? 0 : 1,
+                $f->id,
+            ])->values();
+            $existentes[$llave] = $ordenadas->first();
+            array_push($sinLlave, ...$ordenadas->slice(1)->all());
         }
 
         $deseados = [];
@@ -462,10 +466,11 @@ final class ExpedienteService
         }
 
         // Sin orígenes: la fila deja de aplicar y conserva cumplimiento, observación y soporte.
-        foreach ([...array_values($existentes), ...$sinLlave] as $fila) {
-            if ($fila->aplica) {
-                $fila->update(['aplica' => false]);
-            }
+        // Una sola sentencia por lote, no una por fila.
+        $retirar = collect([...array_values($existentes), ...$sinLlave])
+            ->filter(fn (ProyectoRequisito $f) => $f->aplica)->pluck('id')->all();
+        foreach (array_chunk($retirar, 1000) as $lote) {
+            ProyectoRequisito::query()->whereIn('id', $lote)->update(['aplica' => false]);
         }
 
         $this->guardarOrigenes($expediente, $deseados);
@@ -565,8 +570,13 @@ final class ExpedienteService
                 $nuevos[] = ['proyecto_requisito_id' => $fila, 'requisito_catalogo_id' => $requisito];
             }
         }
+        // Las filas que se quedan sin ninguno se limpian juntas; las que conservan alguno, una a una.
+        $sinOrigenes = array_keys(array_diff_key($actuales->all(), $deseados));
+        foreach (array_chunk($sinOrigenes, 1000) as $lote) {
+            DB::table('proyecto_requisito_origenes')->whereIn('proyecto_requisito_id', $lote)->delete();
+        }
         foreach ($actuales as $fila => $requisitos) {
-            $sobran = array_diff($requisitos, $deseados[$fila] ?? []);
+            $sobran = isset($deseados[$fila]) ? array_diff($requisitos, $deseados[$fila]) : [];
             if ($sobran) {
                 DB::table('proyecto_requisito_origenes')
                     ->where('proyecto_requisito_id', $fila)
