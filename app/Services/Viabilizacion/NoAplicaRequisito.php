@@ -149,7 +149,7 @@ final class NoAplicaRequisito
         DB::transaction(function () use ($expediente, $fila, $usuario, $decidir) {
             // Primero el expediente, como toda escritura del checklist: radicado entre medias, se rechaza.
             $this->expedientes->bloquearChecklistEditable($expediente);
-            $actual =ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->with(['requisito', 'origenes'])->firstOrFail();
+            $actual = ProyectoRequisito::query()->whereKey($fila->id)->lockForUpdate()->with(['requisito', 'origenes'])->firstOrFail();
             $this->expedientes->exigirQueAplique($actual);
             [$evento, $cambios, $extra] = $decidir($actual) + [2 => []];
 

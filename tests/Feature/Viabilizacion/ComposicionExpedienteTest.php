@@ -297,6 +297,20 @@ class ComposicionExpedienteTest extends TestCase
         $this->assertSame(ProyectoRequisito::APLICA, $permiso->refresh()->estado_aplicabilidad);
     }
 
+    public function test_quitar_una_plantilla_con_un_condicionado_sin_tocar_no_deja_retenidos(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Permiso de vertimientos' => [null, 'condicionado']]);
+        $expediente = $this->expediente();
+
+        $this->componer($expediente, [$this->sgr, $agua]);
+        $this->componer($expediente->refresh(), [$this->sgr]);
+
+        $fila = $this->fila($expediente, $this->requisito($agua, 'Permiso de vertimientos'));
+        $this->assertFalse((bool) $fila->aplica);
+        $this->assertSame(ProyectoRequisito::POR_DEFINIR, $fila->estado_aplicabilidad);
+        $this->assertSame(0, $this->servicio->presentar($expediente->refresh())['retenidos']);
+    }
+
     // ------------------------------------------------------------------ orden
 
     public function test_el_orden_sigue_a_la_plantilla_del_primer_origen_con_la_principal_primero(): void

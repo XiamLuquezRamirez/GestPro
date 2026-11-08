@@ -24,7 +24,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Ciclo de vida del expediente de viabilización (la instancia por proyecto).
+ * Ciclo de vida del expediente (la instancia por proyecto), que se arma con las plantillas del expediente.
  *
  * Reglas:
  * - Lleva una o varias plantillas, cada una con la versión con que entró (la vigente
@@ -656,7 +656,7 @@ final class ExpedienteService
             // Filas que dejaron de aplicar pero guardan trabajo hecho.
             'retenidos' => $expediente->requisitos()->where('aplica', false)
                 ->where(fn ($q) => $q->where('cumplido', true)->orWhereNotNull('observacion')->orWhereNotNull('soporte_archivo')
-                    ->orWhere('estado_aplicabilidad', '!=', ProyectoRequisito::APLICA)->orWhereNotNull('responsable_id'))
+                    ->orWhereNotIn('estado_aplicabilidad', [ProyectoRequisito::APLICA, ProyectoRequisito::POR_DEFINIR])->orWhereNotNull('responsable_id'))
                 ->count(),
         ];
     }

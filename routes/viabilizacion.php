@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Módulo de expedientes de viabilización SGR.
+ * Módulo de expedientes.
  * Se incluye desde routes/api.php DENTRO del grupo auth:api, así que todas
  * estas rutas exigen JWT; aquí solo se agrega el permiso de escritura.
  */
