@@ -37,6 +37,10 @@
 }
 .exv-titulo-texto { flex: 1; min-width: 240px; }
 .exv-titulo-texto h2 { font-size: 1.5rem; line-height: 1.2; font-weight: 800; margin: .2rem 0 0; color: var(--exv-tinta); }
+.exv-subtitulo { display: flex; flex-wrap: wrap; gap: .25rem .75rem; align-items: baseline; margin: .3rem 0 0; font-size: .9rem; color: var(--exv-tinta-suave); }
+.exv-subtitulo b { font-weight: 700; color: var(--exv-tinta); }
+.exv-vacio-plantillas { font-size: .85rem !important; color: var(--exv-tinta-suave); }
+.exv-resumen-impresion h2 small { margin-left: .5rem; font-size: .8rem; font-weight: 400; }
 .exv-eyebrow { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--exv-bronce-oscuro); }
 .exv-titulo-acciones { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 .exv-titulo-acciones select {

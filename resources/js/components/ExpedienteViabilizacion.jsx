@@ -5,24 +5,35 @@ import * as XLSX from 'xlsx';
 import { faArrowLeft, faCheck, faFileExcel, faPlus, faPrint, faSliders, faStamp, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
-import ExpedienteChecklist from './ExpedienteChecklist';
+import ExpedienteChecklist, { AvisosDuplicados } from './ExpedienteChecklist';
 import ExpedienteConfiguracion from './ExpedienteConfiguracion';
+import useOcupado from './useOcupado';
 import {
+    ANCHOS_HOJA_CHECKLIST,
+    actualizarExpedienteEnLista,
     construirHojasExcel,
+    datosPropio,
     faseLegible,
     mensajeError,
+    motivoNoEliminarPropio,
     nombreArchivoExcel,
     puedeRadicar,
+    requiereAprobacionNoAplica,
     sectoresConFuenteA12,
     sectoresSinTipo,
     seleccionDesde,
+    textoPlantillas,
 } from '../utils/expedienteChecklist';
+import { AVISO_SIN_SECTOR, avisoIncompatibles, hayCompatibleSgr, seleccionParaNuevo } from '../utils/plantillasExpediente';
+import { mensajeApi } from '../utils/plantillasChecklist';
+import { avisarError } from '../utils/avisosPlantillas';
 import '../../css/ExpedienteViabilizacion.css';
 
 const ROLES_EDICION = ['Administrador', 'Gestor'];
 const ESPERA_RECALCULO_MS = 350;
 
-const avisarError = (titulo, error) => Swal.fire({ icon: 'error', title: titulo, text: mensajeError(error) });
+/** "SGR v1 · Obras de agua v2", para el resumen impreso. */
+const plantillasConVersion = (plantillas) => plantillas.map((p) => `${p.nombre} v${p.version.numero}`).join(' · ');
 
 const ExpedienteViabilizacion = ({ user }) => {
     const { proyectoId } = useParams();
@@ -38,6 +49,10 @@ const ExpedienteViabilizacion = ({ user }) => {
     const [configAbierta, setConfigAbierta] = useState(false);
     const [errorCarga, setErrorCarga] = useState(null);
     const [responsables, setResponsables] = useState([]);
+    // Plantillas que se ofrecen al proyecto (y las que ya tiene el expediente abierto).
+    const [disponibles, setDisponibles] = useState(null);
+    const [errorPlantillas, setErrorPlantillas] = useState(null);
+    const [ocupado, ejecutar] = useOcupado();
 
     const puedeEditar = ROLES_EDICION.includes(user?.rol);
     const editable = puedeEditar && expediente?.estado === 'borrador';
@@ -54,11 +69,35 @@ const ExpedienteViabilizacion = ({ user }) => {
         return data;
     }, [proyectoId]);
 
+    // El selector de expedientes sale de la lista del proyecto: se pone al día con cada respuesta del expediente.
+    const actualizarEnLista = useCallback((data) => setDatosProyecto((prev) => (
+        prev ? { ...prev, expedientes: actualizarExpedienteEnLista(prev.expedientes, data) } : prev
+    )), []);
+
     const cargarExpediente = useCallback(async (id) => {
         const { data } = await axios.get(`/expedientes/${id}`);
         setExpediente(data);
         setSeleccion(seleccionDesde(data));
-    }, []);
+        actualizarEnLista(data);
+    }, [actualizarEnLista]);
+
+    // Solo vale la última petición: el expediente abierto puede cambiar mientras llega.
+    const peticionPlantillas = useRef(0);
+    const cargarPlantillas = useCallback(async (expedienteId) => {
+        const numero = ++peticionPlantillas.current;
+        setErrorPlantillas(null);
+        try {
+            const { data } = await axios.get(`/proyectos/${proyectoId}/plantillas-compatibles`, {
+                params: expedienteId ? { expediente: expedienteId } : {},
+            });
+            if (numero === peticionPlantillas.current) setDisponibles(data);
+        } catch (error) {
+            if (numero === peticionPlantillas.current) {
+                setDisponibles(null);
+                setErrorPlantillas(mensajeApi(error));
+            }
+        }
+    }, [proyectoId]);
 
     useEffect(() => {
         let vigente = true;
@@ -93,6 +132,15 @@ const ExpedienteViabilizacion = ({ user }) => {
         return () => { vigente = false; };
     }, [idActual, cargarExpediente]);
 
+    // También sin expediente: dice qué plantillas tendría uno nuevo. Espera al proyecto para
+    // saber cuál es el expediente abierto y no pedir la lista dos veces.
+    const proyectoCargado = Boolean(datosProyecto);
+    useEffect(() => {
+        if (!proyectoCargado) return;
+        setDisponibles(null);
+        cargarPlantillas(idActual);
+    }, [proyectoCargado, idActual, cargarPlantillas]);
+
     useEffect(() => () => clearTimeout(envio.current.temporizador), []);
 
     // Sin la lista, el checklist igual funciona: solo no se puede elegir responsable.
@@ -114,6 +162,7 @@ const ExpedienteViabilizacion = ({ user }) => {
         try {
             const { data } = await axios.put(`/expedientes/${id}/configuracion`, datos);
             if (!envio.current.pendiente) setExpediente(data);
+            actualizarEnLista(data);
         } catch (error) {
             envio.current.pendiente = null;
             avisarError('No se pudo actualizar la configuración', error);
@@ -125,7 +174,7 @@ const ExpedienteViabilizacion = ({ user }) => {
             if (siguiente) enviarConfiguracion(id, siguiente);
             else setRecalculando(false);
         }
-    }, [cargarExpediente]);
+    }, [cargarExpediente, actualizarEnLista]);
 
     const cambiarSeleccion = (nueva) => {
         setSeleccion(nueva);
@@ -141,6 +190,8 @@ const ExpedienteViabilizacion = ({ user }) => {
             setExpediente(data);
             setSeleccion(seleccionDesde(data));
             setConfigAbierta(false);
+            // Las plantillas nuevas ya son del expediente: la lista lo refleja.
+            cargarPlantillas(data.id);
             await cargarProyecto();
         } catch (error) {
             avisarError('No se pudo confirmar la configuración', error);
@@ -153,6 +204,19 @@ const ExpedienteViabilizacion = ({ user }) => {
         ...prev,
         progreso: progreso ?? prev.progreso,
         requisitos: prev.requisitos.map((f) => (f.id === fila.id ? fila : f)),
+    }));
+
+    // Un propio nuevo va al final: el backend ordena los propios después de toda plantilla.
+    const agregarFila = (fila, progreso) => setExpediente((prev) => ({
+        ...prev,
+        progreso: progreso ?? prev.progreso,
+        requisitos: [...prev.requisitos, fila],
+    }));
+
+    const quitarFila = (fila, progreso) => setExpediente((prev) => ({
+        ...prev,
+        progreso: progreso ?? prev.progreso,
+        requisitos: prev.requisitos.filter((f) => f.id !== fila.id),
     }));
 
     const urlFila = (fila) => `/expedientes/${expediente.id}/requisitos/${fila.id}`;
@@ -227,7 +291,7 @@ const ExpedienteViabilizacion = ({ user }) => {
     const marcarNoAplica = async (fila) => {
         const { isConfirmed, value } = await Swal.fire({
             title: 'Este requisito no aplica',
-            text: fila.requisito.requiere_aprobacion_no_aplica ? 'Otra persona deberá aprobarlo.' : undefined,
+            text: requiereAprobacionNoAplica(fila) ? 'Otra persona deberá aprobarlo.' : undefined,
             input: 'textarea',
             inputLabel: 'Justificación',
             inputPlaceholder: 'Explica por qué no aplica a este proyecto',
@@ -245,7 +309,7 @@ const ExpedienteViabilizacion = ({ user }) => {
         const { isConfirmed } = await Swal.fire({
             icon: 'warning',
             title: '¿Retirar el "no aplica"?',
-            text: 'El requisito volverá a estar pendiente. Si ya estaba aprobado, necesitará otra aprobación.',
+            text: 'El requisito volverá al estado que tenía antes de marcarlo: pendiente o por definir. Si ya estaba aprobado, necesitará otra aprobación.',
             showCancelButton: true,
             confirmButtonText: 'Sí, retirar',
             cancelButtonText: 'Cancelar',
@@ -260,7 +324,7 @@ const ExpedienteViabilizacion = ({ user }) => {
     const rechazarNoAplica = async (fila) => {
         const { isConfirmed, value } = await Swal.fire({
             title: '¿Rechazar el "no aplica"?',
-            text: 'El requisito volverá a estar pendiente.',
+            text: 'El requisito volverá al estado que tenía antes de marcarlo: pendiente o por definir.',
             input: 'textarea',
             inputLabel: 'Motivo (opcional)',
             inputAttributes: { maxlength: '2000' },
@@ -271,6 +335,65 @@ const ExpedienteViabilizacion = ({ user }) => {
         if (!isConfirmed) return;
         await accionFila(() => axios.post(`${urlFila(fila)}/no-aplica/rechazar`, { motivo: value || null }), 'No se pudo rechazar el "no aplica"');
     };
+
+    // Pasar de "por definir" a "aplica" no tiene vuelta atrás: después solo cabe un "no aplica" justificado.
+    const decidirAplica = (fila) => ejecutar(async () => {
+        const { isConfirmed } = await Swal.fire({
+            icon: 'question',
+            titleText: '¿Este requisito aplica al proyecto?',
+            text: 'Quedará pendiente de cumplir. Si luego no aplica, tendrás que marcarlo como "no aplica" con una justificación.',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, aplica',
+            cancelButtonText: 'Cancelar',
+        });
+        if (!isConfirmed) return;
+        await accionFila(() => axios.post(`${urlFila(fila)}/aplica`), 'No se pudo indicar que el requisito aplica');
+    });
+
+    const urlPropios = () => `/expedientes/${expediente.id}/requisitos-propios`;
+
+    /** Devuelve true si se guardó, para que el formulario se cierre. */
+    const guardarPropio = async (fila, formulario) => Boolean(await ejecutar(async () => {
+        const datos = datosPropio(formulario);
+        try {
+            if (fila) {
+                const { data } = await axios.put(`${urlPropios()}/${fila.id}`, datos);
+                reemplazarFila(data.requisito, data.progreso);
+            } else {
+                const { data } = await axios.post(urlPropios(), datos);
+                agregarFila(data.requisito, data.progreso);
+            }
+            return true;
+        } catch (error) {
+            avisarError(fila ? 'No se pudo guardar el requisito propio' : 'No se pudo agregar el requisito propio', error);
+            return false;
+        }
+    }));
+
+    const eliminarPropio = (fila) => ejecutar(async () => {
+        const motivo = motivoNoEliminarPropio(fila);
+        if (motivo) {
+            await Swal.fire({ icon: 'info', titleText: 'Este requisito no se puede eliminar', text: motivo });
+            return;
+        }
+        const { isConfirmed } = await Swal.fire({
+            icon: 'warning',
+            titleText: '¿Eliminar este requisito propio?',
+            text: fila.propio.titulo,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar',
+        });
+        if (!isConfirmed) return;
+        try {
+            const { data } = await axios.delete(`${urlPropios()}/${fila.id}`);
+            quitarFila(fila, data.progreso);
+        } catch (error) {
+            avisarError('No se pudo eliminar el requisito propio', error);
+            // Pudo cambiar en el servidor (otra persona lo marcó o le adjuntó un soporte).
+            cargarExpediente(expediente.id).catch(() => {});
+        }
+    });
 
     const asignarResponsable = async (fila, responsableId) => {
         reemplazarFila({ ...fila, responsable: responsables.find((r) => r.id === responsableId) ?? null });
@@ -303,20 +426,37 @@ const ExpedienteViabilizacion = ({ user }) => {
 
     const abrirExpediente = (id) => setSearchParams(id ? { expediente: String(id) } : {});
 
-    const crearExpediente = async () => {
-        // Uno nuevo parte de la configuración del abierto (caso re-radicación); sin
-        // ninguno, de la fase III y el sector sugerido por el proyecto. El cumplimiento
-        // no se copia: cada expediente se evalúa desde cero.
-        const sugerido = datosProyecto.sector_sugerido_id;
-        const datos = seleccion ?? { fase_sgr: 3, sector_ids: sugerido ? [sugerido] : [] };
+    const crearExpediente = () => ejecutar(async () => {
+        // Uno nuevo parte de la configuración del abierto (caso re-radicación), solo con las
+        // plantillas que hoy se ofrecen al proyecto. Sin ninguno, el servidor preselecciona la
+        // plantilla SGR compatible, si la hay; con ella van la fase III y el sector sugerido.
+        // El cumplimiento no se copia: cada expediente se evalúa desde cero.
+        let datos;
+        let quitadas = [];
+        if (seleccion) {
+            ({ datos, quitadas } = seleccionParaNuevo(seleccion, disponibles?.plantillas ?? null, expediente?.plantillas ?? []));
+        } else {
+            const sugerido = datosProyecto.sector_sugerido_id;
+            // Sin la lista no se sabe si habrá SGR: se envía el sector, que sin ella no tiene efecto.
+            const conSgr = disponibles ? hayCompatibleSgr(disponibles.plantillas) : true;
+            datos = { fase_sgr: 3, sector_ids: sugerido && conSgr ? [sugerido] : [] };
+        }
         try {
             const { data } = await axios.post(`/proyectos/${proyectoId}/expedientes`, datos);
             await cargarProyecto();
             abrirExpediente(data.id);
         } catch (error) {
             avisarError('No se pudo crear el expediente', error);
+            return;
         }
-    };
+        if (quitadas.length > 0) {
+            Swal.fire({
+                icon: 'warning',
+                titleText: quitadas.length === 1 ? 'Una plantilla no pasó al expediente nuevo' : 'Algunas plantillas no pasaron al expediente nuevo',
+                text: `${quitadas.length === 1 ? 'Ya no se ofrece' : 'Ya no se ofrecen'} a este proyecto: ${quitadas.join(', ')}. Revisa la configuración antes de confirmarla.`,
+            });
+        }
+    });
 
     const radicar = async () => {
         const { isConfirmed } = await Swal.fire({
@@ -363,7 +503,7 @@ const ExpedienteViabilizacion = ({ user }) => {
         hojaResumen['!cols'] = [{ wch: 24 }, { wch: 80 }];
         const hojaChecklist = XLSX.utils.json_to_sheet(checklist);
         // Un ancho por columna, en el orden de construirHojasExcel (17 columnas).
-        hojaChecklist['!cols'] = [28, 26, 30, 30, 14, 8, 80, 40, 18, 10, 14, 22, 22, 40, 22, 40, 26].map((wch) => ({ wch }));
+        hojaChecklist['!cols'] = ANCHOS_HOJA_CHECKLIST.map((wch) => ({ wch }));
         XLSX.utils.book_append_sheet(libro, hojaResumen, 'Resumen');
         XLSX.utils.book_append_sheet(libro, hojaChecklist, 'Checklist');
         XLSX.writeFile(libro, nombreArchivoExcel(expediente));
@@ -386,13 +526,17 @@ const ExpedienteViabilizacion = ({ user }) => {
     }
 
     const cargado = datosProyecto && catalogo && (!idActual || (expediente && seleccion));
-    const a12 = expediente ? sectoresConFuenteA12(expediente.configuracion.sectores) : [];
-    const esDesastre = expediente?.configuracion.tipologias.some((t) => t.clave === 'desastre');
+    // Lo propio de regalías solo se muestra si el expediente tiene una plantilla con motor sgr.
+    const conSgr = Boolean(expediente?.tiene_sgr);
+    const a12 = expediente && conSgr ? sectoresConFuenteA12(expediente.configuracion.sectores) : [];
+    const esDesastre = conSgr && expediente.configuracion.tipologias.some((t) => t.clave === 'desastre');
     const { cumplidos = 0, total = 0, porcentaje = 0 } = expediente?.progreso ?? {};
     const sinConfigurar = Boolean(expediente) && !expediente.configurado;
     const panelVisible = sinConfigurar ? editable : configAbierta;
     const hayBorrador = datosProyecto?.expedientes.some((e) => e.estado === 'borrador');
-    const sinTipo = sinConfigurar && seleccion ? sectoresSinTipo(seleccion, catalogo) : [];
+    const sinTipo = sinConfigurar && conSgr && seleccion ? sectoresSinTipo(seleccion, catalogo) : [];
+    const sinPlantillasElegidas = Boolean(seleccion) && seleccion.plantilla_ids.length === 0;
+    const incompatibles = avisoIncompatibles(expediente?.plantillas);
 
     return (
         <div className="exv-pagina">
@@ -406,8 +550,14 @@ const ExpedienteViabilizacion = ({ user }) => {
                                 <FontAwesomeIcon icon={faArrowLeft} /> Volver
                             </button>
                             <div className="exv-titulo-texto">
-                                <span className="exv-eyebrow">Viabilización de proyectos · Sistema General de Regalías</span>
+                                <span className="exv-eyebrow">Seguimiento de proyectos</span>
                                 <h2>{datosProyecto.proyecto.nombre}</h2>
+                                {expediente && (
+                                    <p className="exv-subtitulo">
+                                        <b>Expediente #{expediente.id}</b>
+                                        <span>{textoPlantillas(expediente.plantillas)}</span>
+                                    </p>
+                                )}
                             </div>
                             <div className="exv-titulo-acciones exv-no-imprimir">
                                 {datosProyecto.expedientes.length > 0 && (
@@ -418,13 +568,13 @@ const ExpedienteViabilizacion = ({ user }) => {
                                     >
                                         {datosProyecto.expedientes.map((e) => (
                                             <option key={e.id} value={e.id}>
-                                                #{e.id} · {e.estado === 'radicado' ? 'Radicado' : 'Borrador'} · catálogo v{e.catalogo_version.numero}
+                                                #{e.id} · {e.estado === 'radicado' ? 'Radicado' : 'Borrador'} · {e.plantillas.length ? e.plantillas.map((p) => p.nombre).join(', ') : 'Sin plantillas'}
                                             </option>
                                         ))}
                                     </select>
                                 )}
                                 {puedeEditar && !hayBorrador && (
-                                    <button type="button" className="exv-btn" onClick={crearExpediente}>
+                                    <button type="button" className="exv-btn" onClick={crearExpediente} disabled={ocupado}>
                                         <FontAwesomeIcon icon={faPlus} /> Nuevo expediente
                                     </button>
                                 )}
@@ -433,12 +583,20 @@ const ExpedienteViabilizacion = ({ user }) => {
 
                         {!expediente ? (
                             <div className="exv-vacio">
-                                <b>Este proyecto aún no tiene expediente de viabilización</b>
+                                <b>Este proyecto aún no tiene expediente</b>
                                 <p>
                                     {puedeEditar
-                                        ? 'Crea uno para armar su checklist de requisitos del SGR.'
+                                        ? 'Crea uno para armar su checklist de requisitos.'
                                         : 'Un Administrador o Gestor debe crearlo.'}
                                 </p>
+                                {puedeEditar && disponibles && (
+                                    <p className="exv-vacio-plantillas">
+                                        {disponibles.plantillas.length > 0
+                                            ? `Plantillas que se ofrecen a este proyecto: ${disponibles.plantillas.map((p) => p.nombre).join(', ')}.`
+                                            : 'Hoy no se le ofrece ninguna plantilla: el expediente nacerá sin plantillas.'}
+                                        {disponibles.sin_sector && ` ${AVISO_SIN_SECTOR}.`}
+                                    </p>
+                                )}
                             </div>
                         ) : (
                             <div className={`exv-shell${panelVisible ? '' : ' plegada'}`}>
@@ -450,6 +608,9 @@ const ExpedienteViabilizacion = ({ user }) => {
                                         deshabilitada={!editable}
                                         recalculando={recalculando}
                                         onCambiar={cambiarSeleccion}
+                                        disponibles={disponibles}
+                                        errorPlantillas={errorPlantillas}
+                                        onReintentarPlantillas={() => cargarPlantillas(expediente.id)}
                                     />
                                 )}
 
@@ -460,12 +621,18 @@ const ExpedienteViabilizacion = ({ user }) => {
                                                 <>
                                                     <h3>Configura el expediente para empezar a chequear</h3>
                                                     <p>
-                                                        Se hace una sola vez. Revisa en el panel la fase SGR, el sector, el tipo de proyecto y
-                                                        los componentes: definen qué requisitos aplican y, con eso, el porcentaje de avance.
+                                                        {conSgr
+                                                            ? 'Se hace una sola vez. Elige en el panel las plantillas y revisa la fase SGR, el sector, el tipo de proyecto y los componentes: definen qué requisitos aplican y, con eso, el porcentaje de avance.'
+                                                            : 'Se hace una sola vez. Elige en el panel las plantillas del expediente: definen qué requisitos aplican y, con eso, el porcentaje de avance.'}
                                                     </p>
-                                                    {seleccion.sector_ids.length === 0 && (
+                                                    {sinPlantillasElegidas && (
                                                         <div className="exv-aviso">
-                                                            <b>Sin sector.</b> Solo se cargarán los requisitos generales.
+                                                            <b>Sin plantillas.</b> Elige al menos una plantilla para armar el checklist.
+                                                        </div>
+                                                    )}
+                                                    {conSgr && seleccion.sector_ids.length === 0 && (
+                                                        <div className="exv-aviso">
+                                                            <b>Sin sector.</b> Solo se cargarán los requisitos generales del SGR.
                                                         </div>
                                                     )}
                                                     {sinTipo.length > 0 && (
@@ -473,6 +640,7 @@ const ExpedienteViabilizacion = ({ user }) => {
                                                             <b>Sin tipo de proyecto: {sinTipo.join(', ')}.</b> Se cargarán todos los requisitos de ese sector, incluidos los que no le apliquen al proyecto.
                                                         </div>
                                                     )}
+                                                    <AvisosDuplicados avisos={expediente.avisos_duplicados} />
                                                     <div className="exv-confirmar-pie">
                                                         <span>
                                                             {recalculando
@@ -483,7 +651,7 @@ const ExpedienteViabilizacion = ({ user }) => {
                                                             type="button"
                                                             className="exv-btn exv-btn-primario"
                                                             onClick={confirmarConfiguracion}
-                                                            disabled={recalculando || confirmando}
+                                                            disabled={recalculando || confirmando || sinPlantillasElegidas}
                                                         >
                                                             <FontAwesomeIcon icon={faCheck} /> Confirmar configuración
                                                         </button>
@@ -553,18 +721,22 @@ const ExpedienteViabilizacion = ({ user }) => {
                                     </div>
 
                                     <div className="exv-solo-impresion exv-resumen-impresion">
-                                        <h2>Expediente de viabilización SGR #{expediente.id}</h2>
+                                        <h2>Expediente #{expediente.id} <small>{textoPlantillas(expediente.plantillas)}</small></h2>
                                         <div>
-                                            <span>Fase {faseLegible(expediente.fase_sgr)}</span>
+                                            {conSgr && <span>Fase SGR {faseLegible(expediente.fase_sgr)}</span>}
                                             <span>{cumplidos} de {total} requisitos ({porcentaje}%)</span>
-                                            <span>Catálogo v{expediente.catalogo_version.numero}</span>
+                                            {expediente.plantillas.length > 0 && <span>{plantillasConVersion(expediente.plantillas)}</span>}
                                             <span>{expediente.estado === 'radicado' ? `Radicado ${new Date(expediente.fecha_radicado).toLocaleDateString('es-CO')}` : 'Borrador'}</span>
                                         </div>
-                                        <div>Sectores: {expediente.configuracion.sectores.map((s) => s.nombre).join('; ') || 'Sin sector (solo generales)'}</div>
-                                        {expediente.configuracion.tipos.length > 0 && <div>Tipos de proyecto: {expediente.configuracion.tipos.map((t) => t.nombre).join('; ')}</div>}
-                                        {expediente.configuracion.componentes.length > 0 && <div>Componentes: {expediente.configuracion.componentes.map((c) => c.nombre).join('; ')}</div>}
-                                        {expediente.configuracion.tipologias.length > 0 && <div>Tipologías: {expediente.configuracion.tipologias.map((t) => t.nombre).join('; ')}</div>}
-                                        <div className="exv-resumen-clave">A12 = Acuerdo 12/2024 · OT = Orientaciones Transitorias</div>
+                                        {conSgr && (
+                                            <>
+                                                <div>Sectores: {expediente.configuracion.sectores.map((s) => s.nombre).join('; ') || 'Sin sector (solo generales)'}</div>
+                                                {expediente.configuracion.tipos.length > 0 && <div>Tipos de proyecto: {expediente.configuracion.tipos.map((t) => t.nombre).join('; ')}</div>}
+                                                {expediente.configuracion.componentes.length > 0 && <div>Componentes: {expediente.configuracion.componentes.map((c) => c.nombre).join('; ')}</div>}
+                                                {expediente.configuracion.tipologias.length > 0 && <div>Tipologías: {expediente.configuracion.tipologias.map((t) => t.nombre).join('; ')}</div>}
+                                                <div className="exv-resumen-clave">A12 = Acuerdo 12/2024 · OT = Orientaciones Transitorias</div>
+                                            </>
+                                        )}
                                     </div>
 
                                     {expediente.estado === 'radicado' && (
@@ -573,15 +745,25 @@ const ExpedienteViabilizacion = ({ user }) => {
                                             Su checklist está congelado. Para corregirlo, crea un expediente nuevo.
                                         </div>
                                     )}
-                                    {!configAbierta && (
-                                        <div className="exv-config-resumen exv-no-imprimir">
-                                            <span><b>Fase</b> {faseLegible(expediente.fase_sgr)}</span>
-                                            <span><b>Sectores</b> {expediente.configuracion.sectores.map((s) => s.nombre).join('; ') || 'Solo generales'}</span>
-                                            {expediente.configuracion.tipos.length > 0 && <span><b>Tipos</b> {expediente.configuracion.tipos.map((t) => t.nombre).join('; ')}</span>}
-                                            {expediente.configuracion.componentes.length > 0 && <span><b>Componentes</b> {expediente.configuracion.componentes.map((c) => c.nombre).join('; ')}</span>}
+                                    {incompatibles && (
+                                        <div className="exv-aviso exv-no-imprimir">
+                                            <b>{incompatibles.titulo}:</b> {incompatibles.detalle}
                                         </div>
                                     )}
-                                    {configAbierta && expediente.configuracion.sectores.length > 0 && (
+                                    {!configAbierta && (
+                                        <div className="exv-config-resumen exv-no-imprimir">
+                                            <span><b>Plantillas</b> {expediente.plantillas.map((p) => p.nombre).join(', ') || 'Ninguna'}</span>
+                                            {conSgr && (
+                                                <>
+                                                    <span><b>Fase SGR</b> {faseLegible(expediente.fase_sgr)}</span>
+                                                    <span><b>Sectores</b> {expediente.configuracion.sectores.map((s) => s.nombre).join('; ') || 'Solo generales'}</span>
+                                                    {expediente.configuracion.tipos.length > 0 && <span><b>Tipos</b> {expediente.configuracion.tipos.map((t) => t.nombre).join('; ')}</span>}
+                                                    {expediente.configuracion.componentes.length > 0 && <span><b>Componentes</b> {expediente.configuracion.componentes.map((c) => c.nombre).join('; ')}</span>}
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                    {configAbierta && conSgr && expediente.configuracion.sectores.length > 0 && (
                                         <div className="exv-nota exv-no-imprimir">
                                             <b>Sectores seleccionados:</b> se suman los requisitos generales más los de cada sector marcado. Marca los <b>tipos de proyecto</b> para acotar cada sector (si no marcas ninguno de un sector, se muestra completo).
                                             {a12.length > 0 && <small>{a12.join(', ')}: se rige(n) por el Acuerdo 12/2024 (vigente), que reemplazó las Orientaciones Transitorias.</small>}
@@ -604,6 +786,10 @@ const ExpedienteViabilizacion = ({ user }) => {
                                     <ExpedienteChecklist
                                         expediente={expediente}
                                         editable={editable}
+                                        ocupado={ocupado}
+                                        onAplica={decidirAplica}
+                                        onGuardarPropio={guardarPropio}
+                                        onEliminarPropio={eliminarPropio}
                                         onMarcar={marcar}
                                         onObservacion={guardarObservacion}
                                         onSubirSoporte={subirSoporte}
