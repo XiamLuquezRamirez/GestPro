@@ -54,6 +54,7 @@ return new class extends Migration
 
     public function down(): void
     {
+        // Se revierte en mantenimiento: entre las comprobaciones y el DDL alguien podría crear un propio.
         $propios = Schema::hasColumn('proyectos_requisitos', 'titulo_propio')
             ? DB::table('proyectos_requisitos')->where(function ($q) {
                 $q->whereNull('requisito_catalogo_id');
@@ -63,7 +64,7 @@ return new class extends Migration
             })->exists()
             : DB::table('proyectos_requisitos')->whereNull('requisito_catalogo_id')->exists();
         if ($propios) {
-            throw new RuntimeException('No se puede revertir: hay requisitos propios de los proyectos que se perderían. Elimínelos o restaure un respaldo.');
+            throw new RuntimeException('No se puede revertir: hay requisitos propios de los proyectos que se perderían. Restaure un respaldo.');
         }
 
         if (DB::table('proyectos_expedientes')->whereNull('catalogo_version_id')->exists()) {
@@ -114,9 +115,12 @@ return new class extends Migration
     private function cambiarNulabilidad(string $tabla, string $columna, string $referida, bool $nullable): void
     {
         if ($this->esNullable($tabla, $columna) !== $nullable) {
-            if ($this->tieneForanea($tabla, $columna)) {
-                Schema::table($tabla, function (Blueprint $table) use ($columna) {
-                    $table->dropForeign([$columna]);
+            // Se quita por el nombre que entrega el esquema, sin depender de la convención.
+            // SQLite no da nombre: ahí se deja la deducción de Laravel.
+            if ($foranea = $this->foranea($tabla, $columna)) {
+                $nombre = $foranea['name'] ?? [$columna];
+                Schema::table($tabla, function (Blueprint $table) use ($nombre) {
+                    $table->dropForeign($nombre);
                 });
             }
             Schema::table($tabla, function (Blueprint $table) use ($columna, $nullable) {
@@ -144,8 +148,13 @@ return new class extends Migration
         return (bool) collect(Schema::getColumns($tabla))->firstWhere('name', $columna)['nullable'];
     }
 
+    private function foranea(string $tabla, string $columna): ?array
+    {
+        return collect(Schema::getForeignKeys($tabla))->first(fn ($f) => $f['columns'] === [$columna]);
+    }
+
     private function tieneForanea(string $tabla, string $columna): bool
     {
-        return collect(Schema::getForeignKeys($tabla))->contains(fn ($f) => $f['columns'] === [$columna]);
+        return $this->foranea($tabla, $columna) !== null;
     }
 };

@@ -60,6 +60,13 @@ class RequisitosPropiosTest extends TestCase
         return collect(Schema::getForeignKeys($tabla))->first(fn ($f) => $f['columns'] === [$columna]);
     }
 
+    private function restrict(): void
+    {
+        foreach ([['proyectos_requisitos', 'requisito_catalogo_id'], ['proyectos_expedientes', 'catalogo_version_id']] as [$tabla, $columna]) {
+            $this->assertSame('restrict', strtolower($this->foranea($tabla, $columna)['on_delete']), "$tabla.$columna");
+        }
+    }
+
     private function rollbackDetenido(string $mensaje): void
     {
         try {
@@ -88,6 +95,7 @@ class RequisitosPropiosTest extends TestCase
         $this->assertSame('requisitos_catalogo', $this->foranea('proyectos_requisitos', 'requisito_catalogo_id')['foreign_table']);
         $this->assertSame('catalogo_versiones', $this->foranea('proyectos_expedientes', 'catalogo_version_id')['foreign_table']);
         $this->assertTrue(Schema::hasIndex('proyectos_requisitos', 'proy_req_expediente_requisito_unique'));
+        $this->restrict();
     }
 
     public function test_un_expediente_admite_varios_requisitos_propios(): void
@@ -265,6 +273,7 @@ class RequisitosPropiosTest extends TestCase
         $this->assertFalse($this->nullable('proyectos_expedientes', 'catalogo_version_id'));
         $this->assertNotNull($this->foranea('proyectos_requisitos', 'requisito_catalogo_id'));
         $this->assertNotNull($this->foranea('proyectos_expedientes', 'catalogo_version_id'));
+        $this->restrict();
 
         $migracion->up();
         $migracion->up(); // repetirlo no falla
@@ -276,5 +285,51 @@ class RequisitosPropiosTest extends TestCase
         $this->assertNotNull($this->foranea('proyectos_requisitos', 'requisito_catalogo_id'));
         $this->assertNotNull($this->foranea('proyectos_expedientes', 'catalogo_version_id'));
         $this->assertTrue(Schema::hasIndex('proyectos_requisitos', 'proy_req_expediente_requisito_unique'));
+        $this->restrict();
+    }
+
+    // ------------------------------------------------- guardas y reintentos
+
+    public function test_el_rollback_no_se_detiene_si_las_filas_solo_vienen_de_la_sgr(): void
+    {
+        $sgr = $this->version();
+        $this->fila($this->expediente($sgr), $this->requisito($sgr, 'a1'));
+
+        // Con una sola plantilla y todo anclado en la SGR, ninguna guarda se dispara.
+        $this->migracion()->down();
+
+        $this->assertFalse(Schema::hasTable('proyecto_requisito_origenes'));
+        $this->assertFalse($this->nullable('proyectos_requisitos', 'requisito_catalogo_id'));
+    }
+
+    public function test_el_rollback_se_detiene_con_un_propio_sin_textos(): void
+    {
+        $this->fila($this->expediente($this->version()), null);
+
+        $this->rollbackDetenido('hay requisitos propios');
+    }
+
+    public function test_el_rollback_se_detiene_con_un_texto_propio_en_una_fila_de_catalogo(): void
+    {
+        $version = $this->version();
+        $this->fila($this->expediente($version), $this->requisito($version), ['descripcion_propia' => 'Detalle']);
+
+        $this->rollbackDetenido('hay requisitos propios');
+    }
+
+    public function test_migrar_reconstruye_una_tabla_de_origenes_sin_claves_foraneas(): void
+    {
+        // Resto de un intento fallido: la tabla existe pero sin sus claves foráneas.
+        Schema::drop('proyecto_requisito_origenes');
+        Schema::create('proyecto_requisito_origenes', function ($table) {
+            $table->unsignedBigInteger('proyecto_requisito_id');
+            $table->unsignedBigInteger('requisito_catalogo_id');
+        });
+        $this->assertNull($this->foranea('proyecto_requisito_origenes', 'proyecto_requisito_id'));
+
+        $this->migracion()->up();
+
+        $this->assertSame('proyectos_requisitos', $this->foranea('proyecto_requisito_origenes', 'proyecto_requisito_id')['foreign_table']);
+        $this->assertSame('requisitos_catalogo', $this->foranea('proyecto_requisito_origenes', 'requisito_catalogo_id')['foreign_table']);
     }
 }
