@@ -13,6 +13,7 @@ import {
     agruparChecklist,
     contenidoFila,
     formularioPropio,
+    formularioVigente,
     puedeMarcarRequisito,
     responsablesDisponibles,
     textoOrigenes,
@@ -437,6 +438,21 @@ const ExpedienteChecklist = ({ expediente, editable, ocupado, onGuardarPropio, o
     const propios = bloques.find((b) => b.tipo === 'propios');
     // Con una sola plantilla el checklist se ve como siempre; con varias, cada una lleva su nombre.
     const conCabecera = expediente.plantillas.length > 1 || deCatalogo.length > 1;
+
+    // Otro expediente: el formulario abierto era del anterior. Se cierra sin devolver el foco.
+    useEffect(() => {
+        retorno.current = null;
+        setFormulario(null);
+    }, [expediente.id]);
+
+    // Si el propio que se editaba ya no está (una recarga lo quitó), el formulario se cierra:
+    // si no, no se dibujaría nada y los demás botones de propios quedarían deshabilitados.
+    useEffect(() => {
+        if (formulario !== null && formularioVigente(formulario, expediente.requisitos) === null) {
+            retorno.current = null;
+            setFormulario(null);
+        }
+    }, [formulario, expediente.requisitos]);
 
     // Al cerrar el formulario, el foco vuelve al botón que lo abrió (si la fila sigue ahí).
     useEffect(() => {

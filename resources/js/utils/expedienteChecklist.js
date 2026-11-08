@@ -358,6 +358,15 @@ export const formularioPropio = (fila) => ({
     caracter: fila?.caracter === 'opcional' ? 'opcional' : 'obligatorio',
 });
 
+/**
+ * Formulario de propios que sigue abierto: null, 'nuevo' o el id de un propio que aún está entre
+ * las filas. Si ese propio ya no está (una recarga lo quitó), null.
+ */
+export const formularioVigente = (formulario, filas) => {
+    if (formulario === null || formulario === 'nuevo') return formulario;
+    return (filas ?? []).some((f) => f.id === formulario && esPropio(f)) ? formulario : null;
+};
+
 /** Lo que espera la API: textos recortados y lo vacío como null. */
 export const datosPropio = (formulario) => ({
     titulo: formulario.titulo.trim(),

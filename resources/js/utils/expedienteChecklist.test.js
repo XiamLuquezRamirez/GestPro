@@ -12,6 +12,7 @@ import {
     datosPropio,
     describirEvento,
     formularioPropio,
+    formularioVigente,
     mensajeError,
     motivoNoEliminarPropio,
     nombreArchivoExcel,
@@ -743,8 +744,34 @@ describe('plantillasConVersion', () => {
         expect(plantillasConVersion([{ nombre: 'Vías', version: null }])).toBe('Vías');
     });
 
+    it('omite las entradas sin nombre', () => {
+        expect(plantillasConVersion([null, { nombre: '', version: { numero: 3 } }, { nombre: 'SGR', version: { numero: 1 } }, {}]))
+            .toBe('SGR (v1)');
+        expect(plantillasConVersion([{ version: { numero: 2 } }, null])).toBe('Sin plantillas');
+    });
+
     it('vacío o ausente es "Sin plantillas"', () => {
         expect(plantillasConVersion([])).toBe('Sin plantillas');
         expect(plantillasConVersion(null)).toBe('Sin plantillas');
+    });
+});
+
+describe('formularioVigente', () => {
+    const filas = [filaPropia(4), fila(5, 'A')];
+
+    it('cerrado o para uno nuevo, queda igual', () => {
+        expect(formularioVigente(null, filas)).toBeNull();
+        expect(formularioVigente('nuevo', filas)).toBe('nuevo');
+        expect(formularioVigente('nuevo', [])).toBe('nuevo');
+    });
+
+    it('editando un propio que sigue, queda abierto', () => {
+        expect(formularioVigente(4, filas)).toBe(4);
+    });
+
+    it('si el propio ya no está, o el id no es de un propio, se cierra', () => {
+        expect(formularioVigente(9, filas)).toBeNull();
+        expect(formularioVigente(5, filas)).toBeNull();
+        expect(formularioVigente(4, undefined)).toBeNull();
     });
 });

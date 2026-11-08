@@ -78,6 +78,14 @@ const ExpedienteViabilizacion = ({ user }) => {
         prev ? { ...prev, expedientes: actualizarExpedienteEnLista(prev.expedientes, data) } : prev
     )), []);
 
+    // Contador de los GET de avisos (refrescarAvisos). Poner un expediente completo lo sube:
+    // un GET de avisos que aún está en vuelo traería avisos más viejos que los recién puestos.
+    const peticionAvisos = useRef(0);
+    const ponerExpediente = useCallback((data) => {
+        peticionAvisos.current += 1;
+        setExpediente(data);
+    }, []);
+
     // Como cargarPlantillas: solo vale la última petición, y solo si su expediente sigue abierto.
     // Una respuesta o un error que llegan tarde se descartan en silencio.
     const peticionExpediente = useRef(0);
@@ -93,14 +101,14 @@ const ExpedienteViabilizacion = ({ user }) => {
             return;
         }
         if (!alDia()) return;
-        setExpediente(data);
+        ponerExpediente(data);
         setSeleccion(seleccionDesde(data));
         actualizarEnLista(data);
-    }, [actualizarEnLista]);
+    }, [actualizarEnLista, ponerExpediente]);
 
     // Los avisos de duplicados cambian cuando una fila deja de aplicar o vuelve a aplicar, y la
     // respuesta de una acción por fila no los trae: se piden aparte, sin tocar nada más de la pantalla.
-    const peticionAvisos = useRef(0);
+    // Solo vale el último GET, y ninguno anterior a la última vez que se puso el expediente completo.
     const refrescarAvisos = useCallback(async (id) => {
         const numero = ++peticionAvisos.current;
         try {
@@ -156,7 +164,7 @@ const ExpedienteViabilizacion = ({ user }) => {
         setConfigAbierta(false);
 
         if (!idActual) {
-            setExpediente(null);
+            ponerExpediente(null);
             setSeleccion(null);
             return;
         }
@@ -165,7 +173,7 @@ const ExpedienteViabilizacion = ({ user }) => {
         cargarExpediente(idActual).catch((error) => {
             setErrorCarga(error?.response?.status === 404 ? 'El expediente no existe.' : mensajeApi(error));
         });
-    }, [idActual, cargarExpediente]);
+    }, [idActual, cargarExpediente, ponerExpediente]);
 
     // También sin expediente: dice qué plantillas tendría uno nuevo. Espera al proyecto para
     // saber cuál es el expediente abierto y no pedir la lista dos veces.
@@ -198,7 +206,7 @@ const ExpedienteViabilizacion = ({ user }) => {
             const { data } = await axios.put(`/expedientes/${id}/configuracion`, datos);
             // La lista del selector se indexa por id: ponerla al día vale aunque ya se muestre otro.
             actualizarEnLista(data);
-            if (id === idVigente.current && !envio.current.pendiente) setExpediente(data);
+            if (id === idVigente.current && !envio.current.pendiente) ponerExpediente(data);
         } catch (error) {
             // Si ya se muestra otro expediente, el error de este no se avisa ni se recarga.
             if (id === idVigente.current) {
@@ -213,7 +221,7 @@ const ExpedienteViabilizacion = ({ user }) => {
             if (siguiente) enviarConfiguracion(siguiente.id, siguiente.datos);
             else setRecalculando(false);
         }
-    }, [cargarExpediente, actualizarEnLista]);
+    }, [cargarExpediente, actualizarEnLista, ponerExpediente]);
 
     const cambiarSeleccion = (nueva) => {
         setSeleccion(nueva);
@@ -227,7 +235,7 @@ const ExpedienteViabilizacion = ({ user }) => {
         try {
             const { data } = await axios.post(`/expedientes/${expediente.id}/configuracion/confirmar`, seleccion);
             if (!esVigente(data.id)) return;
-            setExpediente(data);
+            ponerExpediente(data);
             setSeleccion(seleccionDesde(data));
             setConfigAbierta(false);
             // Las plantillas nuevas ya son del expediente: la lista lo refleja.
@@ -523,7 +531,7 @@ const ExpedienteViabilizacion = ({ user }) => {
         if (!isConfirmed) return;
         try {
             const { data } = await axios.post(`/expedientes/${id}/radicar`);
-            if (esVigente(id)) setExpediente(data);
+            if (esVigente(id)) ponerExpediente(data);
             await cargarProyecto();
         } catch (error) {
             avisarError('No se pudo radicar el expediente', error);
