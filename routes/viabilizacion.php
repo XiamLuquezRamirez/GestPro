@@ -10,6 +10,7 @@ use App\Http\Controllers\CatalogoRequisitosController;
 use App\Http\Controllers\ExpedienteController;
 use App\Http\Controllers\NoAplicaRequisitoController;
 use App\Http\Controllers\PlantillaChecklistController;
+use App\Http\Controllers\PlantillasExpedienteController;
 use Illuminate\Support\Facades\Route;
 
 // Lectura: cualquier usuario autenticado.
@@ -17,6 +18,8 @@ Route::get('/catalogo-requisitos/vigente', [CatalogoRequisitosController::class,
     ->name('catalogo-requisitos.vigente');
 Route::get('/proyectos/{proyecto}/expedientes', [ExpedienteController::class, 'index'])
     ->name('expedientes.index');
+Route::get('/proyectos/{proyecto}/plantillas-compatibles', [PlantillasExpedienteController::class, 'compatibles'])
+    ->name('expedientes.plantillas-compatibles');
 Route::get('/expedientes', [ExpedienteController::class, 'resumen'])
     ->name('expedientes.resumen');
 Route::get('/expedientes/{expediente}', [ExpedienteController::class, 'show'])
