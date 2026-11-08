@@ -233,6 +233,12 @@ describe('plantillas y fase SGR en el seguimiento', () => {
         expect(textoExpediente(fila)).toBe('#10 · Fase SGR III — Factibilidad');
     });
 
+    it('un expediente radicado con plantilla sgr también muestra su fase', () => {
+        const [fila] = construirFilas([proyecto(1, 'Acueducto')], [resumen(1, 'radicado', 8, 8, { fase_sgr: 2, fecha_radicado: '2026-11-05' })]);
+        expect(fila.estado).toBe('radicado');
+        expect(textoExpediente(fila)).toBe('#10 · Fase SGR II — Prefactibilidad');
+    });
+
     it('un expediente sin plantilla sgr no muestra "Fase SGR"', () => {
         const [fila] = construirFilas([proyecto(1, 'Acueducto')], [resumen(1, 'borrador', 8, 3, { plantillas: ['Obras de agua'], tiene_sgr: false })]);
         expect(textoExpediente(fila)).toBe('#10');

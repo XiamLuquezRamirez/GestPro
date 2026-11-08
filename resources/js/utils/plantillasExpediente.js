@@ -111,7 +111,10 @@ export const avisosPlantilla = (plantilla) => {
  * concordancia de una o varias; null si no hay ninguna.
  */
 export const avisoIncompatibles = (plantillas) => {
-    const nombres = (plantillas ?? []).filter((p) => !p.compatible).map((p) => p.nombre);
+    // Lo que no sea un objeto (una respuesta inesperada) se ignora.
+    const nombres = (Array.isArray(plantillas) ? plantillas : [])
+        .filter((p) => p !== null && typeof p === 'object' && !p.compatible)
+        .map((p) => p.nombre);
     if (nombres.length === 0) return null;
     const una = nombres.length === 1;
     return {

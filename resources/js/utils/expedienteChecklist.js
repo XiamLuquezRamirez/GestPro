@@ -475,7 +475,8 @@ export const construirHojasExcel = (expediente) => {
             'Tipo de proyecto': r?.tipo?.nombre ?? '',
             'Subtítulo': r?.subtitulo ?? '',
             'Código': contenido.codigo ?? '',
-            'Fuente': contenido.fuente ?? '',
+            // A12 u OT con su sigla; otra fuente normativa (una plantilla simple la escribe a mano), tal cual.
+            'Fuente': contenido.fuente ?? (contenido.propio ? '' : (r?.fuente ?? '')),
             'Requisito': contenido.texto,
             'Nota': contenido.nota ?? '',
             'Carácter': ETIQUETA_CARACTER[f.caracter] ?? '',

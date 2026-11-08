@@ -278,6 +278,12 @@ describe('avisoIncompatibles', () => {
         });
     });
 
+    it('ignora lo que no es una plantilla', () => {
+        expect(avisoIncompatibles([null, 'SGR', 7, undefined])).toBeNull();
+        expect(avisoIncompatibles([null, { nombre: 'Vías', compatible: false }, 'x'])?.detalle).toMatch(/^Vías\. /);
+        expect(avisoIncompatibles({ nombre: 'SGR', compatible: false })).toBeNull();
+    });
+
     it('con varias, en plural', () => {
         expect(avisoIncompatibles([{ nombre: 'SGR', compatible: false }, { nombre: 'Obras de agua', compatible: false }])).toEqual({
             titulo: 'Algunas plantillas ya no son compatibles con el proyecto',

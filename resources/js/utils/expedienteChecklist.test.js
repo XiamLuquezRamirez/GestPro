@@ -342,6 +342,16 @@ describe('Excel', () => {
         });
     });
 
+    it('una fuente normativa que no es A12 ni OT sale tal cual', () => {
+        const otra = { ...expediente, requisitos: [filaSimple(3, { requisito: { fuente: 'Resolución 0330 de 2017' } })] };
+        expect(construirHojasExcel(otra).checklist[0]['Fuente']).toBe('Resolución 0330 de 2017');
+    });
+
+    it('una fila simple copiada de la SGR no muestra sección aunque traiga una', () => {
+        const copiada = { ...expediente, requisitos: [filaSimple(3, { requisito: { seccion: 'A' } })] };
+        expect(construirHojasExcel(copiada).checklist[0]['Sección']).toBe('');
+    });
+
     it('hay un ancho por cada columna de la hoja de checklist', () => {
         const { checklist } = construirHojasExcel(expediente);
         expect(ANCHOS_HOJA_CHECKLIST).toHaveLength(Object.keys(checklist[0]).length);
@@ -494,6 +504,13 @@ describe('agruparChecklist', () => {
             filaSimple(2, { fila: { estado: 'no_aplica_pendiente', cumplido: true } }),
         ]);
         expect(bloque).toMatchObject({ total: 1, cumplidos: 0 });
+    });
+
+    it('un solo requisito propio conserva su bloque', () => {
+        const bloques = agruparChecklist([filaPropia(9)]);
+        expect(bloques).toHaveLength(1);
+        expect(bloques[0]).toMatchObject({ tipo: 'propios', clave: 'propios', total: 1, cumplidos: 0 });
+        expect(bloques[0].filas.map((f) => f.id)).toEqual([9]);
     });
 
     it('sin filas no hay bloques', () => {
