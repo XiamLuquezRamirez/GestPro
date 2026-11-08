@@ -328,6 +328,17 @@ export const textoAvisosDuplicados = (avisos, total) => {
     };
 };
 
+/**
+ * Plantillas del expediente con su versión: "SGR (v1), Obras de agua (v2)", o "Sin plantillas".
+ * Es el único formato: lo usan el Excel, la impresión y la franja de configuración.
+ */
+export const plantillasConVersion = (plantillas) => {
+    const textos = (plantillas ?? [])
+        .filter((pl) => pl?.nombre)
+        .map((pl) => (pl.version?.numero ? `${pl.nombre} (v${pl.version.numero})` : pl.nombre));
+    return textos.length ? textos.join(', ') : 'Sin plantillas';
+};
+
 /** Con más de un origen, las demás plantillas de las que viene la fila: "También en: Vías, Riego". */
 export const textoOrigenes = (fila) => {
     const origenes = fila.origenes ?? [];
@@ -427,13 +438,6 @@ export const faseLegible = (valor) => {
 const lista = (items) => (items.length ? items.map((i) => i.nombre).join('; ') : '—');
 const soloFecha = (iso) => (iso ? String(iso).slice(0, 10) : '');
 
-/** "SGR (v1), Obras de agua (v2)" o "Sin plantillas". */
-const plantillasConVersion = (plantillas) => (
-    (plantillas ?? []).length
-        ? plantillas.map((pl) => (pl.version ? `${pl.nombre} (v${pl.version.numero})` : pl.nombre)).join(', ')
-        : 'Sin plantillas'
-);
-
 /**
  * Filas de las dos hojas del Excel: resumen del expediente y checklist. La fase y la
  * configuración SGR solo van si el expediente tiene una plantilla con motor sgr.
@@ -460,7 +464,8 @@ export const construirHojasExcel = (expediente) => {
     const checklist = expediente.requisitos.map((f) => {
         const r = f.requisito;
         const contenido = contenidoFila(f);
-        // La sección solo es del motor sgr; una plantilla simple copiada de la SGR puede conservarla.
+        // La sección solo es del motor sgr. Una plantilla simple copiada de la SGR llega sin ella
+        // (PlantillaService::aSimple la deja null); si aun así trajera una, no se muestra.
         const seccion = !f.plantilla || f.plantilla.motor === MOTOR_SGR ? SECCIONES[r?.seccion] : null;
         return {
             'Plantilla': contenido.propio ? 'Propio del proyecto' : (f.plantilla?.nombre ?? ''),

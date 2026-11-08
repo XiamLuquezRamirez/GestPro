@@ -27,6 +27,18 @@ export const incluyeSgr = (plantillaIds, plantillas) => (plantillaIds ?? []).som
 /** Si entre las disponibles hay una plantilla sgr que hoy se ofrece al proyecto. */
 export const hayCompatibleSgr = (disponibles) => (disponibles ?? []).some((p) => esSgr(p) && seOfrece(p));
 
+/**
+ * Texto que se muestra antes de crear el expediente: entre qué plantillas se podrá elegir y,
+ * si la hay, que se preselecciona la de motor sgr (la única que el servidor preselecciona).
+ */
+export const textoPlantillasNuevo = (disponibles) => {
+    const lista = disponibles ?? [];
+    if (lista.length === 0) return 'Hoy no se le ofrece ninguna plantilla: el expediente nacerá sin plantillas.';
+    const texto = `Al crearlo podrás elegir entre: ${lista.map((p) => p.nombre).join(', ')}.`;
+    const sgr = lista.find((p) => esSgr(p) && seOfrece(p));
+    return sgr ? `${texto} Solo se preselecciona ${sgr.nombre}.` : texto;
+};
+
 /** Marca o quita una plantilla. La primera que se marca es la principal; si se quita la principal, pasa a la primera que queda. */
 export const alternarPlantilla = (seleccion, id) => {
     const marcada = seleccion.plantilla_ids.includes(id);

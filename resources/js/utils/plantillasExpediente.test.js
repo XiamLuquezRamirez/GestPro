@@ -10,6 +10,7 @@ import {
     incluyeSgr,
     opcionPlantilla,
     seleccionParaNuevo,
+    textoPlantillasNuevo,
 } from './plantillasExpediente';
 
 /** Plantilla como la devuelve GET /proyectos/{id}/plantillas-compatibles. */
@@ -270,5 +271,21 @@ describe('avisoIncompatibles', () => {
             titulo: 'Algunas plantillas ya no son compatibles con el proyecto',
             detalle: 'SGR, Obras de agua. Este expediente las conserva tal como están; un expediente nuevo no las tendrá.',
         });
+    });
+});
+
+describe('textoPlantillasNuevo', () => {
+    it('sin plantillas, el expediente nacerá sin ellas', () => {
+        expect(textoPlantillasNuevo([])).toBe('Hoy no se le ofrece ninguna plantilla: el expediente nacerá sin plantillas.');
+        expect(textoPlantillasNuevo(undefined)).toBe('Hoy no se le ofrece ninguna plantilla: el expediente nacerá sin plantillas.');
+    });
+
+    it('nombra entre cuáles se podrá elegir y que solo se preselecciona la sgr', () => {
+        expect(textoPlantillasNuevo([SGR, AGUA])).toBe('Al crearlo podrás elegir entre: SGR, Obras de agua. Solo se preselecciona SGR.');
+    });
+
+    it('sin una sgr que se ofrezca, no promete preselección', () => {
+        expect(textoPlantillasNuevo([AGUA, VIAS])).toBe('Al crearlo podrás elegir entre: Obras de agua, Vías.');
+        expect(textoPlantillasNuevo([{ ...SGR, version: null }, AGUA])).toBe('Al crearlo podrás elegir entre: SGR, Obras de agua.');
     });
 });

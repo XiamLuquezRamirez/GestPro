@@ -17,6 +17,7 @@ import {
     mensajeError,
     motivoNoEliminarPropio,
     nombreArchivoExcel,
+    plantillasConVersion,
     puedeRadicar,
     requiereAprobacionNoAplica,
     sectoresConFuenteA12,
@@ -24,16 +25,15 @@ import {
     seleccionDesde,
     textoPlantillas,
 } from '../utils/expedienteChecklist';
-import { AVISO_SIN_SECTOR, avisoIncompatibles, hayCompatibleSgr, seleccionParaNuevo } from '../utils/plantillasExpediente';
+import {
+    AVISO_SIN_SECTOR, avisoIncompatibles, hayCompatibleSgr, seleccionParaNuevo, textoPlantillasNuevo,
+} from '../utils/plantillasExpediente';
 import { mensajeApi } from '../utils/plantillasChecklist';
 import { avisarError } from '../utils/avisosPlantillas';
 import '../../css/ExpedienteViabilizacion.css';
 
 const ROLES_EDICION = ['Administrador', 'Gestor'];
 const ESPERA_RECALCULO_MS = 350;
-
-/** "SGR v1 · Obras de agua v2", para el resumen impreso. */
-const plantillasConVersion = (plantillas) => plantillas.map((p) => `${p.nombre} v${p.version.numero}`).join(' · ');
 
 const ExpedienteViabilizacion = ({ user }) => {
     const { proyectoId } = useParams();
@@ -502,7 +502,7 @@ const ExpedienteViabilizacion = ({ user }) => {
         const hojaResumen = XLSX.utils.json_to_sheet(resumen);
         hojaResumen['!cols'] = [{ wch: 24 }, { wch: 80 }];
         const hojaChecklist = XLSX.utils.json_to_sheet(checklist);
-        // Un ancho por columna, en el orden de construirHojasExcel (17 columnas).
+        // Un ancho por columna, en el orden de construirHojasExcel (20 columnas).
         hojaChecklist['!cols'] = ANCHOS_HOJA_CHECKLIST.map((wch) => ({ wch }));
         XLSX.utils.book_append_sheet(libro, hojaResumen, 'Resumen');
         XLSX.utils.book_append_sheet(libro, hojaChecklist, 'Checklist');
@@ -591,9 +591,7 @@ const ExpedienteViabilizacion = ({ user }) => {
                                 </p>
                                 {puedeEditar && disponibles && (
                                     <p className="exv-vacio-plantillas">
-                                        {disponibles.plantillas.length > 0
-                                            ? `Plantillas que se ofrecen a este proyecto: ${disponibles.plantillas.map((p) => p.nombre).join(', ')}.`
-                                            : 'Hoy no se le ofrece ninguna plantilla: el expediente nacerá sin plantillas.'}
+                                        {textoPlantillasNuevo(disponibles.plantillas)}
                                         {disponibles.sin_sector && ` ${AVISO_SIN_SECTOR}.`}
                                     </p>
                                 )}
@@ -721,11 +719,10 @@ const ExpedienteViabilizacion = ({ user }) => {
                                     </div>
 
                                     <div className="exv-solo-impresion exv-resumen-impresion">
-                                        <h2>Expediente #{expediente.id} <small>{textoPlantillas(expediente.plantillas)}</small></h2>
+                                        <h2>Expediente #{expediente.id} <small>{plantillasConVersion(expediente.plantillas)}</small></h2>
                                         <div>
                                             {conSgr && <span>Fase SGR {faseLegible(expediente.fase_sgr)}</span>}
                                             <span>{cumplidos} de {total} requisitos ({porcentaje}%)</span>
-                                            {expediente.plantillas.length > 0 && <span>{plantillasConVersion(expediente.plantillas)}</span>}
                                             <span>{expediente.estado === 'radicado' ? `Radicado ${new Date(expediente.fecha_radicado).toLocaleDateString('es-CO')}` : 'Borrador'}</span>
                                         </div>
                                         {conSgr && (
@@ -752,7 +749,7 @@ const ExpedienteViabilizacion = ({ user }) => {
                                     )}
                                     {!configAbierta && (
                                         <div className="exv-config-resumen exv-no-imprimir">
-                                            <span><b>Plantillas</b> {expediente.plantillas.map((p) => p.nombre).join(', ') || 'Ninguna'}</span>
+                                            <span><b>Plantillas</b> {plantillasConVersion(expediente.plantillas)}</span>
                                             {conSgr && (
                                                 <>
                                                     <span><b>Fase SGR</b> {faseLegible(expediente.fase_sgr)}</span>

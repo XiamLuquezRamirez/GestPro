@@ -15,6 +15,7 @@ import {
     mensajeError,
     motivoNoEliminarPropio,
     nombreArchivoExcel,
+    plantillasConVersion,
     puedeMarcarNoAplica,
     puedeMarcarRequisito,
     puedeRadicar,
@@ -710,5 +711,23 @@ describe('textoAvisosDuplicados', () => {
     it('sin total, o con uno menor, cuenta los que llegaron', () => {
         expect(textoAvisosDuplicados(avisos(2)).titulo).toBe('2 pares de requisitos se parecen');
         expect(textoAvisosDuplicados(avisos(2), 1).titulo).toBe('2 pares de requisitos se parecen');
+    });
+});
+
+describe('plantillasConVersion', () => {
+    it('nombra cada plantilla con su versión, en el orden del expediente', () => {
+        expect(plantillasConVersion([
+            { plantilla_id: 1, nombre: 'SGR', version: { id: 1, numero: 1 } },
+            { plantilla_id: 5, nombre: 'Obras de agua', version: { id: 8, numero: 2 } },
+        ])).toBe('SGR (v1), Obras de agua (v2)');
+    });
+
+    it('sin versión, solo el nombre', () => {
+        expect(plantillasConVersion([{ nombre: 'Vías', version: null }])).toBe('Vías');
+    });
+
+    it('vacío o ausente es "Sin plantillas"', () => {
+        expect(plantillasConVersion([])).toBe('Sin plantillas');
+        expect(plantillasConVersion(null)).toBe('Sin plantillas');
     });
 });

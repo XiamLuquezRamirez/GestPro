@@ -470,7 +470,11 @@ const ExpedienteChecklist = ({ expediente, editable, ocupado, onGuardarPropio, o
             )))}
 
             {(propios || editable) && (
-                <section className="exv-seccion exv-bloque exv-propios" aria-labelledby="exv-propios-titulo">
+                // Sin propios, la sección solo trae el botón de agregar: no sale en el PDF.
+                <section
+                    className={`exv-seccion exv-bloque exv-propios${propios ? '' : ' exv-no-imprimir'}`}
+                    aria-labelledby="exv-propios-titulo"
+                >
                     <div className="exv-plantilla-titulo">
                         <h3 id="exv-propios-titulo">{TITULO_PROPIOS}</h3>
                         {propios && <span className="exv-cita">{propios.cumplidos}/{propios.total}</span>}
