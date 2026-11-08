@@ -10,6 +10,14 @@ use Illuminate\Http\Request;
 /** Plantillas que se ofrecen al configurar el expediente de un proyecto. Lectura: autenticado. */
 class PlantillasExpedienteController extends Controller
 {
+    private const MENSAJES = [
+        'integer' => 'Revisa :attribute: debe ser un número entero.',
+    ];
+
+    private const ATRIBUTOS = [
+        'expediente' => 'el expediente',
+    ];
+
     public function __construct(private readonly PlantillasExpediente $plantillas)
     {
     }
@@ -17,7 +25,7 @@ class PlantillasExpedienteController extends Controller
     /** Con ?expediente={id}, agrega las que ese expediente ya tiene, aunque ya no se ofrezcan. */
     public function compatibles(Request $request, Proyecto $proyecto): JsonResponse
     {
-        $datos = $request->validate(['expediente' => ['sometimes', 'integer']]);
+        $datos = $request->validate(['expediente' => ['sometimes', 'integer']], self::MENSAJES, self::ATRIBUTOS);
 
         $expediente = null;
         if (isset($datos['expediente'])) {

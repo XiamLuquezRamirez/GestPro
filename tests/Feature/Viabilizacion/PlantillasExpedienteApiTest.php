@@ -234,6 +234,27 @@ class PlantillasExpedienteApiTest extends TestCase
             ->assertJsonPath('mensaje', 'El expediente no es de este proyecto.');
     }
 
+    public function test_un_expediente_que_no_es_un_numero_se_rechaza_en_espanol(): void
+    {
+        $this->como(Rol::Consulta)
+            ->getJson("/GestPro/proyectos/{$this->proyecto()->id}/plantillas-compatibles?expediente=abc")
+            ->assertStatus(422)
+            ->assertJsonPath('errors.expediente.0', 'Revisa el expediente: debe ser un número entero.');
+    }
+
+    public function test_un_proyecto_sin_fuentes_o_por_definir_solo_recibe_las_de_todas_las_fuentes(): void
+    {
+        $this->plantilla('Propios', ['fuentes' => ['recursos_propios']]);
+        $this->plantilla('General');
+
+        $sinFuentes = $this->compatibles($this->proyecto([]))->assertOk();
+        $porDefinir = $this->proyecto([]);
+        $porDefinir->update(['financiacion_por_definir' => true]);
+
+        $this->assertSame(['General'], $this->nombres($sinFuentes));
+        $this->assertSame(['General'], $this->nombres($this->compatibles($porDefinir)->assertOk()));
+    }
+
     public function test_exige_sesion(): void
     {
         $proyecto = $this->proyecto();
@@ -273,6 +294,47 @@ class PlantillasExpedienteApiTest extends TestCase
         ));
 
         $this->assertSame(['Un expediente admite como máximo una plantilla con motor SGR.'], $errores);
+    }
+
+    public function test_los_ids_repetidos_cuentan_como_una_sola_plantilla(): void
+    {
+        $proyecto = $this->proyecto(['sgr']);
+
+        $seleccion = $this->servicio()->validar(['plantilla_ids' => [$this->sgr->id, $this->sgr->id]], $proyecto, null);
+
+        $this->assertSame([$this->sgr->id => $this->sgr->versionVigente()->id], $seleccion['versiones']);
+        $this->assertSame($this->sgr->id, $seleccion['principal_id']);
+        $this->assertSame($this->sgr->versionVigente()->id, $seleccion['version_sgr_id']);
+    }
+
+    public function test_versiones_de_pone_la_principal_primero_y_luego_por_plantilla(): void
+    {
+        $proyecto = $this->proyecto(['sgr']);
+        $a = $this->plantilla('A');
+        $b = $this->plantilla('B');
+        $expediente = $this->expediente($proyecto);
+        $this->servicio()->guardar($expediente, $this->servicio()->validar(
+            ['plantilla_ids' => [$b->id, $this->sgr->id, $a->id], 'principal_id' => $b->id], $proyecto, $expediente
+        ));
+
+        $orden = $this->servicio()->versionesDe($expediente)->pluck('plantilla_id')->all();
+
+        $otras = [$this->sgr->id, $a->id];
+        sort($otras);
+        $this->assertSame([$b->id, ...$otras], $orden);
+        $this->assertGreaterThan($this->sgr->id, $b->id);
+    }
+
+    public function test_guardar_refresca_la_relacion_ya_cargada(): void
+    {
+        $proyecto = $this->proyecto(['sgr']);
+        $general = $this->plantilla('General');
+        $expediente = $this->expediente($proyecto);
+        $this->assertCount(1, $expediente->versionesPlantilla);
+
+        $this->servicio()->guardar($expediente, $this->servicio()->validar(['plantilla_ids' => [$general->id]], $proyecto, $expediente));
+
+        $this->assertSame([$general->versionVigente()->id], $expediente->versionesPlantilla->pluck('id')->all());
     }
 
     public function test_la_principal_debe_estar_entre_las_elegidas(): void
