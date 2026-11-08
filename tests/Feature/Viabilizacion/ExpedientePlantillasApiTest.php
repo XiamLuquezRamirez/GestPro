@@ -431,6 +431,68 @@ class ExpedientePlantillasApiTest extends TestCase
             ->assertJsonPath('avisos_duplicados.0.similitud', 0.8);
     }
 
+    /** @return array<string, array{0: null}> "Anexo 1" … "Anexo n", cada uno en su propia fila */
+    private function anexos(int $n): array
+    {
+        return collect(range(1, $n))->mapWithKeys(fn (int $i) => ["Anexo {$i}" => [null]])->all();
+    }
+
+    public function test_los_numeros_cuentan_al_comparar_textos(): void
+    {
+        $agua = $this->plantilla('Obras de agua', $this->anexos(30));
+        $vias = $this->plantilla('Vías', $this->anexos(30));
+
+        $r = $this->crear($this->proyecto(['recursos_propios']), ['plantilla_ids' => [$agua->id, $vias->id], 'principal_id' => $agua->id])
+            ->assertCreated();
+
+        // Solo cada anexo con el del mismo número, no 30 × 30.
+        $r->assertJsonCount(30, 'avisos_duplicados')->assertJsonPath('avisos_duplicados_total', 30);
+        foreach ($r->json('avisos_duplicados') as $aviso) {
+            $this->assertSame($aviso['textos'][0], $aviso['textos'][1]);
+        }
+    }
+
+    public function test_no_avisa_de_una_fila_en_no_aplica_y_si_de_una_pendiente_o_por_definir(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Certificación técnica del acueducto veredal' => [null]]);
+        $vias = $this->plantilla('Vías', ['Certificacion tecnica del acueducto veredal' => [null]]);
+        $id = $this->crear($this->proyecto(['recursos_propios']), ['plantilla_ids' => [$agua->id, $vias->id], 'principal_id' => $agua->id])
+            ->assertCreated()->json('id');
+        $fila = ProyectoExpediente::find($id)->requisitos()->whereHas('requisito', fn ($q) => $q->where('texto', 'Certificacion tecnica del acueducto veredal'))->sole();
+        $avisos = function (string $estado) use ($fila, $id) {
+            $fila->update(['estado_aplicabilidad' => $estado]);
+
+            return $this->como(Rol::Consulta)->getJson("/GestPro/expedientes/{$id}")->assertOk();
+        };
+
+        $avisos(ProyectoRequisito::NO_APLICA)->assertJsonPath('avisos_duplicados', [])->assertJsonPath('avisos_duplicados_total', 0);
+        $avisos(ProyectoRequisito::NO_APLICA_PENDIENTE)->assertJsonCount(1, 'avisos_duplicados');
+        $avisos(ProyectoRequisito::POR_DEFINIR)->assertJsonCount(1, 'avisos_duplicados');
+    }
+
+    public function test_los_avisos_van_del_mas_parecido_al_menos_y_llegan_hasta_cincuenta(): void
+    {
+        $certificado = 'Certificado de disponibilidad del servicio de acueducto';
+        // Jaccard 0,8 en el primer par y 1 en los demás.
+        $agua = $this->plantilla('Obras de agua', [$certificado => [null], ...$this->anexos(55)]);
+        $vias = $this->plantilla('Vías', ["{$certificado} vigente" => [null], ...$this->anexos(55)]);
+        $proyecto = $this->proyecto(['recursos_propios']);
+
+        $r = $this->crear($proyecto, ['plantilla_ids' => [$agua->id, $vias->id], 'principal_id' => $agua->id])->assertCreated();
+
+        $r->assertJsonCount(50, 'avisos_duplicados')->assertJsonPath('avisos_duplicados_total', 56);
+        $this->assertSame([1], collect($r->json('avisos_duplicados'))->pluck('similitud')->unique()->values()->all());
+
+        // Con pocos, el menos parecido va al final aunque sus filas vengan primero.
+        $pocas = ['plantilla_ids' => [$this->plantilla('Agua 2', [$certificado => [null], 'Anexo 1' => [null]])->id,
+            $this->plantilla('Vías 2', ["{$certificado} vigente" => [null], 'Anexo 1' => [null]])->id]];
+        $id = ProyectoExpediente::where('proyecto_id', $proyecto->id)->value('id');
+        $this->configurar($id, [...$pocas, 'principal_id' => $pocas['plantilla_ids'][0]])->assertOk()
+            ->assertJsonPath('avisos_duplicados.0.similitud', 1)
+            ->assertJsonPath('avisos_duplicados.1.similitud', 0.8)
+            ->assertJsonPath('avisos_duplicados_total', 2);
+    }
+
     // ---------------------------------------------------------------- resumen
 
     public function test_el_resumen_trae_las_plantillas_con_la_principal_primero_y_si_tiene_sgr(): void

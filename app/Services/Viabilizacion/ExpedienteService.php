@@ -48,6 +48,9 @@ final class ExpedienteService
 
     private const SIN_PLANTILLAS = 'Elige al menos una plantilla para armar el checklist.';
 
+    // Avisos de textos parecidos que se devuelven, los más parecidos primero.
+    private const MAX_AVISOS = 50;
+
     // Orden de una fila: posición de la plantilla del primer origen, sección (motor sgr) y orden
     // del requisito. La principal tiene posición 0: un expediente solo SGR conserva su orden.
     private const ORDEN_POR_PLANTILLA = 10_000_000;
@@ -612,6 +615,7 @@ final class ExpedienteService
         ]);
         $versiones = $this->plantillas->versionesDe($expediente);
         $posiciones = $this->posiciones($versiones);
+        $avisos = ['avisos' => [], 'total' => 0];
 
         $filas = $expediente->requisitos()
             ->where('aplica', true)
@@ -619,6 +623,9 @@ final class ExpedienteService
             ->orderBy('orden')
             ->orderBy('id')
             ->get();
+        if ($versiones->count() > 1) {
+            $avisos = $this->avisosDuplicados($filas, $posiciones);
+        }
 
         return [
             ...$this->presentarCabecera($expediente, $versiones),
@@ -630,7 +637,9 @@ final class ExpedienteService
             ],
             'progreso' => $this->progresoDe($expediente),
             'requisitos' => $filas->map(fn (ProyectoRequisito $f) => $this->presentarFila($f, $posiciones))->values(),
-            'avisos_duplicados' => $versiones->count() > 1 ? $this->avisosDuplicados($filas, $posiciones) : [],
+            // Los más parecidos, hasta MAX_AVISOS; el total dice cuántos hay en realidad.
+            'avisos_duplicados' => $avisos['avisos'],
+            'avisos_duplicados_total' => $avisos['total'],
             // Filas que dejaron de aplicar pero guardan trabajo hecho.
             'retenidos' => $expediente->requisitos()->where('aplica', false)
                 ->where(fn ($q) => $q->where('cumplido', true)->orWhereNotNull('observacion')->orWhereNotNull('soporte_archivo')
@@ -810,16 +819,21 @@ final class ExpedienteService
     }
 
     /**
-     * Pares de filas que aplican, de plantillas distintas y sin llave compartida, cuyos textos
+     * Pares de filas de plantilla, de plantillas distintas y sin llave compartida, cuyos textos
      * se parecen: Jaccard de sus palabras normalizadas de 0,8 o más. Solo es un aviso: nunca
      * se fusionan. Las filas comparten plantilla si alguna de sus plantillas de origen coincide.
      *
-     * @return list<array{filas: array{int, int}, textos: array{string, string}, plantillas: array{string, string}, similitud: float}>
+     * - Entran las filas que aplican y siguen en juego: pendientes, cumplidas, por definir o
+     *   con un "no aplica" por aprobar. Un "no aplica" ya decidido no avisa; un propio tampoco.
+     * - Devuelve los MAX_AVISOS más parecidos, de mayor a menor similitud (a igual similitud,
+     *   en el orden del checklist), y el total de pares encontrados.
+     *
+     * @return array{avisos: list<array{filas: array{int, int}, textos: array{string, string}, plantillas: array{string, string}, similitud: float}>, total: int}
      */
     private function avisosDuplicados(Collection $filas, array $posiciones): array
     {
         $candidatas = $filas
-            ->reject(fn (ProyectoRequisito $f) => $f->esPropio())
+            ->reject(fn (ProyectoRequisito $f) => $f->esPropio() || $f->estado_aplicabilidad === ProyectoRequisito::NO_APLICA)
             ->map(function (ProyectoRequisito $f) use ($posiciones) {
                 $origenes = $this->origenesOrdenados($f, $posiciones);
                 $mostrado = $origenes->first() ?? $f->requisito;
@@ -848,6 +862,7 @@ final class ExpedienteService
                 // comunes / todas >= 0,8, sin redondeo de coma flotante.
                 if ($comunes * 5 >= $todas * 4) {
                     $avisos[] = [
+                        'parecido' => $comunes / $todas,
                         'filas' => [$a['id'], $b['id']],
                         'textos' => [$a['texto'], $b['texto']],
                         'plantillas' => [$a['plantilla'], $b['plantilla']],
@@ -857,15 +872,26 @@ final class ExpedienteService
             }
         }
 
-        return $avisos;
+        // usort es estable: a igual parecido se conserva el orden del checklist.
+        usort($avisos, fn (array $x, array $y) => $y['parecido'] <=> $x['parecido']);
+
+        return [
+            'avisos' => array_map(fn (array $a) => array_diff_key($a, ['parecido' => true]), array_slice($avisos, 0, self::MAX_AVISOS)),
+            'total' => count($avisos),
+        ];
     }
 
-    /** @return array<string, true> palabras de más de 3 letras, en minúsculas y sin tildes ni signos */
+    /**
+     * Palabras de más de 3 letras y todos los números, en minúsculas y sin tildes ni signos.
+     * Los números distinguen "Anexo 1" de "Anexo 2".
+     *
+     * @return array<string, true>
+     */
     private function palabras(?string $texto): array
     {
         $palabras = preg_split('/[^a-z0-9]+/', Str::lower(Str::ascii((string) $texto)), -1, PREG_SPLIT_NO_EMPTY);
 
-        return array_fill_keys(array_filter($palabras, fn (string $p) => strlen($p) > 3), true);
+        return array_fill_keys(array_filter($palabras, fn (string $p) => strlen($p) > 3 || ctype_digit($p)), true);
     }
 
     // ------------------------------------------------------------ internos
