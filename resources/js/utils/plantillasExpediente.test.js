@@ -11,6 +11,7 @@ import {
     incluyeSgr,
     opcionPlantilla,
     plantillasDelPanel,
+    plantillasSinLista,
     seleccionParaNuevo,
     textoPlantillasNuevo,
 } from './plantillasExpediente';
@@ -321,5 +322,28 @@ describe('plantillasDelPanel', () => {
     it('aguanta la lista o la selección ausentes', () => {
         expect(plantillasDelPanel(undefined, { plantilla_ids: [1] }, true)).toEqual([]);
         expect(plantillasDelPanel([SGR], null, true)).toEqual([]);
+    });
+});
+
+describe('plantillasSinLista', () => {
+    const delExpediente = [
+        { plantilla_id: 1, nombre: 'SGR', es_principal: true, version: { id: 10, numero: 2 } },
+        { plantilla_id: 5, nombre: 'Obras de agua', es_principal: false, version: null },
+    ];
+
+    it('en solo lectura devuelve las plantillas del expediente en su orden', () => {
+        expect(plantillasSinLista(delExpediente, true)).toEqual([
+            { id: 1, nombre: 'SGR', principal: true, version: 'v2' },
+            { id: 5, nombre: 'Obras de agua', principal: false, version: 'Sin versión' },
+        ]);
+    });
+
+    it('editable no sustituye el error', () => {
+        expect(plantillasSinLista(delExpediente, false)).toBeNull();
+    });
+
+    it('sin plantillas en el expediente deja el error', () => {
+        expect(plantillasSinLista([], true)).toBeNull();
+        expect(plantillasSinLista(undefined, true)).toBeNull();
     });
 });

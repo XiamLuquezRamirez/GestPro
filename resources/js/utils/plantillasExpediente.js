@@ -99,6 +99,21 @@ export const plantillasDelPanel = (disponibles, seleccion, deshabilitada) => {
     return ids.map((id) => lista.find((p) => p.id === id)).filter(Boolean);
 };
 
+/**
+ * Qué mostrar cuando falló la lista de plantillas compatibles. En solo lectura (deshabilitado)
+ * no hace falta esa lista: basta con las plantillas que ya trae el expediente, con su versión
+ * y cuál es la principal. Editable, o sin plantillas que mostrar, devuelve null y se muestra el error.
+ */
+export const plantillasSinLista = (plantillasExpediente, deshabilitada) => {
+    if (!deshabilitada || !plantillasExpediente?.length) return null;
+    return plantillasExpediente.map((p) => ({
+        id: idDe(p),
+        nombre: p.nombre,
+        principal: Boolean(p.es_principal),
+        version: p.version ? `v${p.version.numero}` : 'Sin versión',
+    }));
+};
+
 /** Avisos de una plantilla disponible. Una inactiva tampoco es compatible: basta con decir que está inactiva. */
 export const avisosPlantilla = (plantilla) => {
     if (plantilla.activa === false) return ['Inactiva'];

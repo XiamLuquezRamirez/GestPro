@@ -3,6 +3,7 @@ import { FASES, alternarId, alternarSector } from '../utils/expedienteChecklist'
 import {
     AVISO_SIN_SECTOR, alternarPlantilla, avisosPlantilla, detallePlantilla, elegirPrincipal, incluyeSgr, opcionPlantilla,
     plantillasDelPanel,
+    plantillasSinLista,
 } from '../utils/plantillasExpediente';
 
 // Opciones del catálogo vigente más lo ya elegido que se haya desactivado después:
@@ -76,6 +77,21 @@ const ElegirPrincipal = ({ plantillas, principalId, onPrincipal }) => (
 /** Primer bloque del panel: las plantillas que se ofrecen al proyecto y las que ya tiene el expediente. */
 const BloquePlantillas = ({ disponibles, errorPlantillas, onReintentar, expediente, seleccion, deshabilitada, onCambiar }) => {
     if (errorPlantillas) {
+        // Solo lectura: la lista de compatibles no hace falta, el expediente ya trae sus plantillas.
+        const propias = plantillasSinLista(expediente.plantillas, deshabilitada);
+        if (propias) {
+            return (
+                <fieldset className="exv-plantillas">
+                    <legend>Plantillas <small>(definen el checklist)</small></legend>
+                    {propias.map((p) => (
+                        <div key={p.id} className="exv-plantilla">
+                            <b className="exv-plantilla-nombre">{p.nombre}</b> <small>{p.version}</small>
+                            {p.principal && propias.length > 1 && <span className="exv-plantilla-principal">Principal</span>}
+                        </div>
+                    ))}
+                </fieldset>
+            );
+        }
         return (
             <fieldset className="exv-plantillas">
                 <legend>Plantillas</legend>
