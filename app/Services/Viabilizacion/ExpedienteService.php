@@ -41,6 +41,14 @@ final class ExpedienteService
 
     private const ORDEN_SECCION = ['A' => 1, 'B' => 2, 'D' => 3, 'C' => 4];
 
+    // Orden de una fila: posición de la plantilla del primer origen, sección (motor sgr) y orden
+    // del requisito. La principal tiene posición 0: un expediente solo SGR conserva su orden.
+    private const ORDEN_POR_PLANTILLA = 10_000_000;
+    private const ORDEN_POR_SECCION = 100_000;
+
+    /** Del más al menos exigente: una fila con varios orígenes toma el primero que aparezca. */
+    private const CARACTER_POR_EXIGENCIA = [RequisitoCatalogo::OBLIGATORIO, RequisitoCatalogo::CONDICIONADO, RequisitoCatalogo::OPCIONAL];
+
     private const RELACIONES_FILA = [
         'requisito.sector:id,clave,nombre,fuente', 'requisito.tipo:id,clave,nombre', 'usuarioCumplido:id,name',
         'usuarioNoAplica:id,name', 'usuarioAprobo:id,name', 'responsable:id,nombre,cargo',
@@ -49,6 +57,7 @@ final class ExpedienteService
     public function __construct(
         private readonly EvaluadorRequisitos $evaluador,
         private readonly HistorialChecklist $historial,
+        private readonly PlantillasExpediente $plantillas,
     ) {
     }
 
@@ -309,65 +318,181 @@ final class ExpedienteService
     // ---------------------------------------------------------- recálculo
 
     /**
-     * Alinea el checklist con la configuración actual del expediente.
+     * Alinea el checklist con las plantillas y la configuración actuales del expediente.
+     *
+     * - Recorre las versiones del expediente, la principal primero y luego por plantilla.
+     *   Motor sgr: aplican los que decide el evaluador. Motor simple: todos los activos.
+     * - Cada llave (el código común del requisito, o req:{id} si no tiene) es una sola fila.
+     *   Sus orígenes son los requisitos que aplican con esa llave, de todas las plantillas.
+     * - La fila la crea el primer origen (su ancla, que no cambia) y se reconoce por la llave
+     *   de su ancla. Sin orígenes queda aplica = false y conserva su trabajo; al volver a
+     *   tenerlos se recupera tal cual.
+     * - Carácter: el más exigente de los orígenes. Una fila nueva condicionada nace por definir;
+     *   una existente no cambia de estado por recalcular.
+     * - Orden: el del primer origen, desplazado por la posición de su plantilla.
+     * - Los requisitos propios no se tocan.
      *
      * @return array{aplican:int, retenidos:int}
      */
     public function sincronizar(ProyectoExpediente $expediente): array
     {
-        $cfg = $this->configuracionDe($expediente);
+        $llaves = $this->origenesPorLlave($expediente);
 
-        $catalogo = RequisitoCatalogo::query()
-            ->where('catalogo_version_id', $expediente->catalogo_version_id)
-            ->where('activo', true)
-            ->with(['sector:id,clave', 'tipo:id,clave'])
-            ->orderBy('orden')
-            ->get();
-
-        $aplican = array_flip($this->evaluador->aplicables(
-            $catalogo->map(fn (RequisitoCatalogo $r) => [
-                'clave' => $r->clave,
-                'seccion' => $r->seccion,
-                'condicion' => $r->condicion,
-                'sector' => $r->sector?->clave,
-                'tipo' => $r->tipo?->clave,
-            ]),
-            $cfg
-        ));
-
-        $existentes = $expediente->requisitos()->get()->keyBy('requisito_catalogo_id');
-        $vistos = [];
-
-        foreach ($catalogo as $requisito) {
-            $vistos[$requisito->id] = true;
-            $aplica = isset($aplican[$requisito->clave]);
-            $orden = self::ORDEN_SECCION[$requisito->seccion] * 100000 + $requisito->orden;
-            $fila = $existentes->get($requisito->id);
-
-            if ($fila) {
-                if ($fila->aplica !== $aplica || $fila->orden !== $orden) {
-                    $fila->update(['aplica' => $aplica, 'orden' => $orden]);
-                }
-            } elseif ($aplica) {
-                $expediente->requisitos()->create([
-                    'requisito_catalogo_id' => $requisito->id,
-                    'aplica' => true,
-                    'caracter' => $requisito->caracter,
-                    'orden' => $orden,
-                ]);
+        $existentes = [];
+        $sinLlave = [];
+        $filas = $expediente->requisitos()->whereNotNull('requisito_catalogo_id')
+            ->with('requisito:id,codigo_comun')->orderBy('id')->get();
+        foreach ($filas as $fila) {
+            $llave = $this->llave($fila->requisito);
+            // Dos filas con la misma llave solo pueden venir de datos anteriores a esta regla:
+            // la primera conserva la llave y las demás quedan sin orígenes.
+            if (isset($existentes[$llave])) {
+                $sinLlave[] = $fila;
+            } else {
+                $existentes[$llave] = $fila;
             }
         }
 
-        // Filas de requisitos desactivados en el catálogo: dejan de aplicar.
-        $expediente->requisitos()
-            ->whereNotIn('requisito_catalogo_id', array_keys($vistos))
-            ->where('aplica', true)
-            ->update(['aplica' => false]);
+        $deseados = [];
+        foreach ($llaves as $llave => $datos) {
+            $cambios = ['aplica' => true, 'caracter' => $datos['caracter'], 'orden' => $datos['orden']];
+            $fila = $existentes[$llave] ?? null;
+            unset($existentes[$llave]);
+
+            if ($fila) {
+                $fila->fill($cambios);
+                if ($fila->isDirty()) {
+                    $fila->save();
+                }
+            } else {
+                $ancla = $datos['origenes'][0];
+                $fila = $expediente->requisitos()->create([
+                    ...$cambios,
+                    'requisito_catalogo_id' => $ancla->id,
+                    'estado_aplicabilidad' => $datos['caracter'] === RequisitoCatalogo::CONDICIONADO
+                        ? ProyectoRequisito::POR_DEFINIR
+                        : ProyectoRequisito::APLICA,
+                ]);
+            }
+            $deseados[$fila->id] = array_map(fn (RequisitoCatalogo $r) => $r->id, $datos['origenes']);
+        }
+
+        // Sin orígenes: la fila deja de aplicar y conserva cumplimiento, observación y soporte.
+        foreach ([...array_values($existentes), ...$sinLlave] as $fila) {
+            if ($fila->aplica) {
+                $fila->update(['aplica' => false]);
+            }
+        }
+
+        $this->guardarOrigenes($expediente, $deseados);
 
         return [
-            'aplican' => count($aplican),
+            'aplican' => count($llaves),
             'retenidos' => $expediente->requisitos()->where('aplica', false)->count(),
         ];
+    }
+
+    /**
+     * Requisitos que aplican en cada plantilla del expediente, agrupados por llave en el
+     * orden del checklist. Cada llave trae sus orígenes (el primero es el ancla de una fila
+     * nueva), el carácter más exigente y el orden que da el primer origen.
+     *
+     * @return array<string, array{origenes: list<RequisitoCatalogo>, caracter: string, orden: int}>
+     */
+    private function origenesPorLlave(ProyectoExpediente $expediente): array
+    {
+        $llaves = [];
+        $cfg = null;
+
+        foreach ($this->plantillas->versionesDe($expediente)->values() as $posicion => $version) {
+            $esSgr = $version->plantilla->motor === PlantillaChecklist::MOTOR_SGR;
+            $requisitos = RequisitoCatalogo::query()
+                ->where('catalogo_version_id', $version->id)
+                ->where('activo', true)
+                ->when($esSgr, fn ($q) => $q->with(['sector:id,clave', 'tipo:id,clave']))
+                ->orderBy('orden')
+                ->orderBy('id')
+                ->get();
+
+            if ($esSgr) {
+                $cfg ??= $this->configuracionDe($expediente);
+                $aplican = array_flip($this->evaluador->aplicables(
+                    $requisitos->map(fn (RequisitoCatalogo $r) => [
+                        'clave' => $r->clave,
+                        'seccion' => $r->seccion,
+                        'condicion' => $r->condicion,
+                        'sector' => $r->sector?->clave,
+                        'tipo' => $r->tipo?->clave,
+                    ]),
+                    $cfg
+                ));
+                $requisitos = $requisitos->filter(fn (RequisitoCatalogo $r) => isset($aplican[$r->clave]));
+            }
+
+            foreach ($requisitos as $requisito) {
+                $llave = $this->llave($requisito);
+                if (! isset($llaves[$llave])) {
+                    $llaves[$llave] = [
+                        'origenes' => [],
+                        'caracter' => $requisito->caracter,
+                        'orden' => $posicion * self::ORDEN_POR_PLANTILLA
+                            + ($esSgr ? self::ORDEN_SECCION[$requisito->seccion] * self::ORDEN_POR_SECCION : 0)
+                            + $requisito->orden,
+                    ];
+                }
+                $llaves[$llave]['origenes'][] = $requisito;
+                $llaves[$llave]['caracter'] = $this->masExigente($llaves[$llave]['caracter'], $requisito->caracter);
+            }
+        }
+
+        return $llaves;
+    }
+
+    /** Llave de fila: el código común; sin él, el propio requisito. */
+    private function llave(RequisitoCatalogo $requisito): string
+    {
+        return $requisito->codigo_comun ?? "req:{$requisito->id}";
+    }
+
+    private function masExigente(string $a, string $b): string
+    {
+        $rango = fn (string $c) => array_search($c, self::CARACTER_POR_EXIGENCIA, true);
+
+        return $rango($b) < $rango($a) ? $b : $a;
+    }
+
+    /**
+     * Deja en proyecto_requisito_origenes exactamente los orígenes calculados: las filas que
+     * no están en $deseados se quedan sin ninguno. Los propios nunca tienen orígenes.
+     *
+     * @param array<int, list<int>> $deseados fila => requisitos de catálogo
+     */
+    private function guardarOrigenes(ProyectoExpediente $expediente, array $deseados): void
+    {
+        $actuales = DB::table('proyecto_requisito_origenes')
+            ->whereIn('proyecto_requisito_id', $expediente->requisitos()->select('id'))
+            ->get()
+            ->groupBy('proyecto_requisito_id')
+            ->map(fn ($origenes) => $origenes->pluck('requisito_catalogo_id')->map(fn ($id) => (int) $id)->all());
+
+        $nuevos = [];
+        foreach ($deseados as $fila => $requisitos) {
+            foreach (array_diff($requisitos, $actuales->get($fila, [])) as $requisito) {
+                $nuevos[] = ['proyecto_requisito_id' => $fila, 'requisito_catalogo_id' => $requisito];
+            }
+        }
+        foreach ($actuales as $fila => $requisitos) {
+            $sobran = array_diff($requisitos, $deseados[$fila] ?? []);
+            if ($sobran) {
+                DB::table('proyecto_requisito_origenes')
+                    ->where('proyecto_requisito_id', $fila)
+                    ->whereIn('requisito_catalogo_id', $sobran)
+                    ->delete();
+            }
+        }
+        foreach (array_chunk($nuevos, 200) as $lote) {
+            DB::table('proyecto_requisito_origenes')->insert($lote);
+        }
     }
 
     public function configuracionDe(ProyectoExpediente $expediente): ConfiguracionExpediente
