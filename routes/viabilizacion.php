@@ -11,6 +11,7 @@ use App\Http\Controllers\ExpedienteController;
 use App\Http\Controllers\NoAplicaRequisitoController;
 use App\Http\Controllers\PlantillaChecklistController;
 use App\Http\Controllers\PlantillasExpedienteController;
+use App\Http\Controllers\RequisitoPropioController;
 use Illuminate\Support\Facades\Route;
 
 // Lectura: cualquier usuario autenticado.
@@ -44,7 +45,15 @@ Route::middleware('can:editar-datos')->group(function () {
     Route::delete('/expedientes/{expediente}', [ExpedienteController::class, 'destroy'])
         ->name('expedientes.destroy');
 
+    Route::post('/expedientes/{expediente}/requisitos-propios', [RequisitoPropioController::class, 'store'])
+        ->name('expedientes.requisitos-propios.store');
+
     Route::scopeBindings()->group(function () {
+        Route::put('/expedientes/{expediente}/requisitos-propios/{requisito}', [RequisitoPropioController::class, 'update'])
+            ->name('expedientes.requisitos-propios.update');
+        Route::delete('/expedientes/{expediente}/requisitos-propios/{requisito}', [RequisitoPropioController::class, 'destroy'])
+            ->name('expedientes.requisitos-propios.destroy');
+
         Route::patch('/expedientes/{expediente}/requisitos/{requisito}', [ExpedienteController::class, 'updateRequisito'])
             ->name('expedientes.requisitos.update');
         Route::post('/expedientes/{expediente}/requisitos/{requisito}/soporte', [ExpedienteController::class, 'subirSoporte'])

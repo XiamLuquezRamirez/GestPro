@@ -1003,10 +1003,16 @@ final class ExpedienteService
         return $responsable->id;
     }
 
-    public function exigirEditable(ProyectoExpediente $expediente, ProyectoRequisito $fila): void
+    /** El checklist admite cambios: el expediente está en borrador y con la configuración confirmada. */
+    public function exigirChecklistEditable(ProyectoExpediente $expediente): void
     {
         $this->exigirBorrador($expediente);
         $this->exigirConfigurado($expediente);
+    }
+
+    public function exigirEditable(ProyectoExpediente $expediente, ProyectoRequisito $fila): void
+    {
+        $this->exigirChecklistEditable($expediente);
 
         if ($fila->expediente_id !== $expediente->id) {
             throw new ReglaNegocioException('El requisito no pertenece a este expediente.');
