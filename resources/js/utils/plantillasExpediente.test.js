@@ -127,6 +127,14 @@ describe('opcionPlantilla', () => {
         expect(opcionPlantilla(SGR, { plantilla_ids: [1] }, enExpediente, [SGR, COPIA_SGR]).deshabilitada).toBe(false);
     });
 
+    it('la otra plantilla sgr se reconoce solo en las disponibles o solo en el expediente', () => {
+        const esperado = { marcada: false, deshabilitada: true, motivo: 'El expediente ya tiene una plantilla con motor SGR: solo admite una.' };
+        // Solo en disponibles: el expediente no la trae.
+        expect(opcionPlantilla(COPIA_SGR, { plantilla_ids: [1] }, [], [SGR, COPIA_SGR])).toEqual(esperado);
+        // Solo en el expediente: ya no está entre las disponibles.
+        expect(opcionPlantilla(COPIA_SGR, { plantilla_ids: [1] }, [{ plantilla_id: 1, motor: 'sgr' }], [COPIA_SGR])).toEqual(esperado);
+    });
+
     it('en un expediente configurado, la última plantilla no se puede quitar', () => {
         const enUno = { plantilla_ids: [5] };
         expect(opcionPlantilla(AGUA, enUno, [], [AGUA], { configurado: true }))
@@ -184,6 +192,18 @@ describe('detallePlantilla', () => {
         expect(detallePlantilla(p, [{ plantilla_id: 7, version: { id: 70, numero: 1 } }]).version).toBe('v1 en el expediente · v2 vigente');
     });
 
+    it('si la versión del expediente es la vigente, solo dice la vigente', () => {
+        const p = plantilla(7, { version: { id: 71, numero: 2 }, en_expediente: { version: { id: 71, numero: 2 }, es_principal: true } });
+        expect(detallePlantilla(p).version).toBe('v2');
+        expect(detallePlantilla(p, [{ plantilla_id: 7, version: { id: 71, numero: 2 } }]).version).toBe('v2');
+    });
+
+    it('sin vigente pero con versión en el expediente, dice cuál tiene', () => {
+        const p = plantilla(7, { version: null, en_expediente: { version: { id: 70, numero: 1 }, es_principal: true } });
+        expect(detallePlantilla(p).version).toBe('v1 en el expediente');
+        expect(detallePlantilla(p, [{ plantilla_id: 7, version: { id: 70, numero: 1 } }]).version).toBe('v1 en el expediente');
+    });
+
     it('sin versión vigente lo dice', () => {
         expect(detallePlantilla(plantilla(8, { version: null, todas_fuentes: false, fuentes: [] })))
             .toMatchObject({ fuentes: '—', version: 'Sin versión publicada' });
@@ -211,6 +231,11 @@ describe('seleccionParaNuevo', () => {
         const { datos, quitadas } = seleccionParaNuevo(seleccion, [SGR, { ...AGUA, version: null }], [{ plantilla_id: 6, nombre: 'Vías' }]);
         expect(datos).toMatchObject({ plantilla_ids: [1], principal_id: 1 });
         expect(quitadas).toEqual(['Obras de agua', 'Vías']);
+    });
+
+    it('una principal que no va primera sigue siendo la principal', () => {
+        const { datos } = seleccionParaNuevo({ ...base, plantilla_ids: [1, 5], principal_id: 5 }, [SGR, AGUA]);
+        expect(datos).toMatchObject({ plantilla_ids: [1, 5], principal_id: 5 });
     });
 
     it('sin nombre conocido, la nombra por su número', () => {

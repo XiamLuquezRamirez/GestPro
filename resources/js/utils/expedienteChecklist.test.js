@@ -63,8 +63,9 @@ const VIAS = { id: 6, nombre: 'Vías', motor: 'simple' };
 
 /** Fila de una plantilla simple: sin sección ni sector. */
 const filaSimple = (id, extra = {}) => {
-    const base = fila(id, null, { fila: extra.fila, requisito: { fuente: null, codigo: null, categoria: null, ...extra.requisito } });
-    return { ...base, plantilla: extra.plantilla ?? AGUA, origenes: extra.origenes ?? [{ plantilla_id: (extra.plantilla ?? AGUA).id, nombre: (extra.plantilla ?? AGUA).nombre }] };
+    const base = fila(id, null, { fila: extra.fila, requisito: { fuente: null, codigo: null, ...extra.requisito } });
+    // Como presentarFila: la categoría va en la fila, no dentro del requisito.
+    return { ...base, categoria: extra.categoria ?? null, plantilla: extra.plantilla ?? AGUA, origenes: extra.origenes ?? [{ plantilla_id: (extra.plantilla ?? AGUA).id, nombre: (extra.plantilla ?? AGUA).nombre }] };
 };
 
 /** Requisito propio: sin requisito de catálogo ni plantilla. */
@@ -320,7 +321,7 @@ describe('Excel', () => {
             tiene_sgr: false,
             plantillas: [{ plantilla_id: 5, nombre: 'Obras de agua', motor: 'simple', es_principal: true, version: { id: 8, numero: 2 } }],
             requisitos: [
-                filaSimple(3, { requisito: { categoria: 'tecnico' }, fila: { caracter: 'opcional' } }),
+                filaSimple(3, { categoria: 'tecnico', fila: { caracter: 'opcional' } }),
                 filaPropia(4, { propio: { titulo: 'Acta de vecinos', descripcion: 'Firmada', categoria: 'social' } }),
             ],
         };
@@ -454,11 +455,11 @@ describe('agruparChecklist', () => {
     it('las demás plantillas se agrupan por plantilla y luego por categoría, en el orden de la lista', () => {
         const bloques = agruparChecklist([
             sgr(1, 'A'),
-            filaSimple(2, { requisito: { categoria: 'juridico' } }),
-            filaSimple(3, { requisito: { categoria: 'tecnico' }, fila: { estado: 'cumplido', cumplido: true } }),
-            filaSimple(4, { requisito: { categoria: null } }),
-            filaSimple(5, { requisito: { categoria: 'juridico' } }),
-            filaSimple(6, { plantilla: VIAS, requisito: { categoria: 'ambiental' } }),
+            filaSimple(2, { categoria: 'juridico' }),
+            filaSimple(3, { categoria: 'tecnico', fila: { estado: 'cumplido', cumplido: true } }),
+            filaSimple(4, { categoria: null }),
+            filaSimple(5, { categoria: 'juridico' }),
+            filaSimple(6, { plantilla: VIAS, categoria: 'ambiental' }),
         ]);
 
         expect(bloques.map((b) => [b.tipo, b.plantilla?.nombre])).toEqual([['sgr', 'SGR'], ['simple', 'Obras de agua'], ['simple', 'Vías']]);
@@ -473,7 +474,7 @@ describe('agruparChecklist', () => {
     });
 
     it('una categoría desconocida cae en "Sin categoría"', () => {
-        const [bloque] = agruparChecklist([filaSimple(1, { requisito: { categoria: 'inventada' } })]);
+        const [bloque] = agruparChecklist([filaSimple(1, { categoria: 'inventada' })]);
         expect(bloque.categorias.map((c) => c.clave)).toEqual(['sin']);
     });
 
@@ -575,7 +576,7 @@ describe('contenidoFila', () => {
     });
 
     it('una fila simple sin código ni fuente no los inventa', () => {
-        const f = filaSimple(3, { requisito: { categoria: 'tecnico', cargo_revision: 'Interventor' } });
+        const f = filaSimple(3, { categoria: 'tecnico', requisito: { cargo_revision: 'Interventor' } });
         expect(contenidoFila(f)).toMatchObject({ codigo: null, fuente: null, categoria: 'Técnico', cargoRevision: 'Interventor' });
     });
 
@@ -604,6 +605,15 @@ describe('textoPorDefinir', () => {
     it('sin explicación, dice que falta decidir', () => {
         const f = filaSimple(2, { fila: { caracter: 'condicionado', estado: 'por_definir' } });
         expect(textoPorDefinir(f)).toBe('Falta decidir si este requisito aplica al proyecto.');
+    });
+
+    it('un obligatorio por definir también dice cuándo aplica', () => {
+        // Por definir basta para mostrar cuándo aplica, aunque el carácter sea obligatorio.
+        const f = filaSimple(3, { requisito: { condicion_descripcion: 'Si hay predios.' }, fila: { caracter: 'obligatorio', estado: 'por_definir' } });
+        expect(textoPorDefinir(f)).toBe('Aplica si: Si hay predios.');
+        expect(contenidoFila(f).aplicaSi).toBe('Si hay predios.');
+        const sin = filaSimple(4, { fila: { caracter: 'obligatorio', estado: 'por_definir' } });
+        expect(textoPorDefinir(sin)).toBe('Falta decidir si este requisito aplica al proyecto.');
     });
 });
 
@@ -654,6 +664,12 @@ describe('actualizarExpedienteEnLista', () => {
         const nueva = actualizarExpedienteEnLista(lista, actualizado);
         expect(nueva[0]).toEqual({ id: 3, estado: 'borrador', configurado: true, plantillas: [{ plantilla_id: 5, nombre: 'Obras de agua' }], tiene_sgr: false, progreso: { total: 4 } });
         expect(nueva[1]).toBe(lista[1]);
+    });
+
+    it('solo toma las claves que la lista ya tiene, aunque la respuesta traiga otras', () => {
+        const nueva = actualizarExpedienteEnLista(lista, { ...actualizado, clave_nueva: 'x' });
+        expect(nueva[0]).not.toHaveProperty('clave_nueva');
+        expect(nueva[0]).not.toHaveProperty('configuracion');
     });
 
     it('conserva la forma de la lista: no agrega el checklist', () => {
