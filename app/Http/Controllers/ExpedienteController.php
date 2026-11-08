@@ -21,19 +21,42 @@ class ExpedienteController extends Controller
 {
     // Sin plantilla_ids, las plantillas no cambian (al crear, se preselecciona la SGR si
     // corresponde). La fase solo la exige el servicio, y solo si hay plantilla con motor sgr.
-    private const REGLAS_CONFIGURACION = [
-        'plantilla_ids' => ['sometimes', 'array'],
-        'plantilla_ids.*' => ['integer'],
-        'principal_id' => ['sometimes', 'nullable', 'integer'],
-        'fase_sgr' => ['sometimes', 'integer', 'in:1,2,3'],
-        'sector_ids' => ['sometimes', 'array'],
-        'sector_ids.*' => ['integer'],
-        'tipo_ids' => ['sometimes', 'array'],
-        'tipo_ids.*' => ['integer'],
-        'componente_ids' => ['sometimes', 'array'],
-        'componente_ids.*' => ['integer'],
-        'tipologia_ids' => ['sometimes', 'array'],
-        'tipologia_ids.*' => ['integer'],
+    private function reglasConfiguracion(): array
+    {
+        // Enteros de verdad: `integer` admitiría true como 1 o "1".
+        $entero = fn (string $atributo, mixed $valor, \Closure $falla) => is_int($valor)
+            || $falla('Revisa :attribute: debe ser un número entero.');
+
+        return [
+            // Sin "sometimes": required_with exige las plantillas cuando llega una principal.
+            'plantilla_ids' => ['required_with:principal_id', 'array'],
+            'plantilla_ids.*' => ['bail', 'integer', $entero],
+            'principal_id' => ['sometimes', 'nullable', 'bail', 'integer', $entero],
+            'fase_sgr' => ['sometimes', 'integer', 'in:1,2,3'],
+            'sector_ids' => ['sometimes', 'array'],
+            'sector_ids.*' => ['integer'],
+            'tipo_ids' => ['sometimes', 'array'],
+            'tipo_ids.*' => ['integer'],
+            'componente_ids' => ['sometimes', 'array'],
+            'componente_ids.*' => ['integer'],
+            'tipologia_ids' => ['sometimes', 'array'],
+            'tipologia_ids.*' => ['integer'],
+        ];
+    }
+
+    private const ATRIBUTOS_CONFIGURACION = [
+        'plantilla_ids' => 'las plantillas', 'plantilla_ids.*' => 'cada plantilla', 'principal_id' => 'la plantilla principal',
+        'fase_sgr' => 'la fase SGR', 'sector_ids' => 'los sectores', 'sector_ids.*' => 'cada sector',
+        'tipo_ids' => 'los tipos de proyecto', 'tipo_ids.*' => 'cada tipo de proyecto',
+        'componente_ids' => 'los componentes', 'componente_ids.*' => 'cada componente',
+        'tipologia_ids' => 'las tipologías', 'tipologia_ids.*' => 'cada tipología',
+    ];
+
+    private const MENSAJES_CONFIGURACION = [
+        'array' => 'Revisa :attribute: debe ser una lista.',
+        'integer' => 'Revisa :attribute: debe ser un número entero.',
+        'in' => 'Revisa :attribute: no es un valor válido.',
+        'plantilla_ids.required_with' => 'Indica las plantillas junto con la plantilla principal.',
     ];
 
     // Documentos oficiales y sus escaneos.
@@ -72,7 +95,7 @@ class ExpedienteController extends Controller
 
     public function store(Request $request, Proyecto $proyecto): JsonResponse
     {
-        $datos = $request->validate(self::REGLAS_CONFIGURACION);
+        $datos = $request->validate($this->reglasConfiguracion(), self::MENSAJES_CONFIGURACION, self::ATRIBUTOS_CONFIGURACION);
         $expediente = $this->servicio->crear($proyecto, $datos, $request->user());
 
         return response()->json($this->servicio->presentar($expediente), 201);
@@ -85,7 +108,7 @@ class ExpedienteController extends Controller
 
     public function updateConfiguracion(Request $request, ProyectoExpediente $expediente): JsonResponse
     {
-        $datos = $request->validate(self::REGLAS_CONFIGURACION);
+        $datos = $request->validate($this->reglasConfiguracion(), self::MENSAJES_CONFIGURACION, self::ATRIBUTOS_CONFIGURACION);
         $this->servicio->actualizarConfiguracion($expediente, $datos, $request->user());
 
         return response()->json($this->servicio->presentar($expediente->refresh()));
@@ -93,7 +116,7 @@ class ExpedienteController extends Controller
 
     public function confirmarConfiguracion(Request $request, ProyectoExpediente $expediente): JsonResponse
     {
-        $datos = $request->validate(self::REGLAS_CONFIGURACION);
+        $datos = $request->validate($this->reglasConfiguracion(), self::MENSAJES_CONFIGURACION, self::ATRIBUTOS_CONFIGURACION);
         $this->servicio->confirmarConfiguracion($expediente, $datos, $request->user());
 
         return response()->json($this->servicio->presentar($expediente->refresh()));
