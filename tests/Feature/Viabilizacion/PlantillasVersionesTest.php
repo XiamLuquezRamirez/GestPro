@@ -5,6 +5,7 @@ namespace Tests\Feature\Viabilizacion;
 use App\Enums\Rol;
 use App\Models\CatalogoVersion;
 use App\Models\PlantillaChecklist;
+use App\Models\FuenteFinanciacion;
 use App\Models\Proyecto;
 use App\Models\User;
 use App\Services\Viabilizacion\CatalogoService;
@@ -22,6 +23,15 @@ class PlantillasVersionesTest extends TestCase
     {
         parent::setUp();
         $this->seed(CatalogoRequisitosSgrSeeder::class);
+    }
+
+    /** Proyecto con la fuente SGR: solo a esos se les preselecciona la plantilla SGR. */
+    private function proyectoSgr(array $datos): Proyecto
+    {
+        $proyecto = Proyecto::create($datos);
+        $proyecto->fuentes()->sync([FuenteFinanciacion::where('clave', FuenteFinanciacion::SGR)->value('id')]);
+
+        return $proyecto;
     }
 
     private function admin(): User
@@ -176,7 +186,7 @@ class PlantillasVersionesTest extends TestCase
             ->assertOk()->assertJsonPath('version.id', $sgr->id);
 
         $expediente = app(ExpedienteService::class)
-            ->crear(Proyecto::create(['nombre' => 'Acueducto']), ['fase_sgr' => 3], null);
+            ->crear($this->proyectoSgr(['nombre' => 'Acueducto']), ['fase_sgr' => 3], null);
 
         $this->assertSame($sgr->id, $expediente->catalogo_version_id);
     }
@@ -213,7 +223,7 @@ class PlantillasVersionesTest extends TestCase
     public function test_un_expediente_nuevo_registra_su_version_como_principal(): void
     {
         $servicio = app(ExpedienteService::class);
-        $expediente = $servicio->crear(Proyecto::create(['nombre' => 'Acueducto']), ['fase_sgr' => 3], null);
+        $expediente = $servicio->crear($this->proyectoSgr(['nombre' => 'Acueducto']), ['fase_sgr' => 3], null);
 
         $version = $expediente->versionesPlantilla()->sole();
         $this->assertSame($expediente->catalogo_version_id, $version->id);

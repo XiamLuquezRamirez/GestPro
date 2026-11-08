@@ -4,6 +4,7 @@ namespace Tests\Feature\Viabilizacion;
 
 use App\Enums\Rol;
 use App\Models\Municipio;
+use App\Models\FuenteFinanciacion;
 use App\Models\Proyecto;
 use App\Models\User;
 use Database\Seeders\CatalogoRequisitosSgrSeeder;
@@ -32,8 +33,17 @@ class ExpedienteApiTest extends TestCase
         $this->seed(CatalogoRequisitosSgrSeeder::class);
         $this->seed(\Database\Seeders\DepartamentosSeeder::class);
         $municipio = Municipio::create(['codigo' => '05001', 'nombre' => 'MEDELLÍN', 'activo' => true, 'departamento' => '05']);
-        $this->proyecto = Proyecto::create(['municipio' => $municipio->codigo, 'nombre' => 'Acueducto veredal']);
+        $this->proyecto = $this->proyectoSgr(['municipio' => $municipio->codigo, 'nombre' => 'Acueducto veredal']);
         Storage::fake('local');
+    }
+
+    /** Proyecto con la fuente SGR: solo a esos se les preselecciona la plantilla SGR. */
+    private function proyectoSgr(array $datos): Proyecto
+    {
+        $proyecto = Proyecto::create($datos);
+        $proyecto->fuentes()->sync([FuenteFinanciacion::where('clave', FuenteFinanciacion::SGR)->value('id')]);
+
+        return $proyecto;
     }
 
     private function como(Rol $rol): static
@@ -254,7 +264,7 @@ class ExpedienteApiTest extends TestCase
 
     private function otroProyecto(string $nombre): Proyecto
     {
-        return Proyecto::create(['municipio' => $this->proyecto->municipio, 'nombre' => $nombre]);
+        return $this->proyectoSgr(['municipio' => $this->proyecto->municipio, 'nombre' => $nombre]);
     }
 
     public function test_resumen_trae_el_expediente_mas_reciente_de_cada_proyecto(): void

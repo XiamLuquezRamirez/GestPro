@@ -19,8 +19,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class ExpedienteController extends Controller
 {
+    // Sin plantilla_ids, las plantillas no cambian (al crear, se preselecciona la SGR si
+    // corresponde). La fase solo la exige el servicio, y solo si hay plantilla con motor sgr.
     private const REGLAS_CONFIGURACION = [
-        'fase_sgr' => ['required', 'integer', 'in:1,2,3'],
+        'plantilla_ids' => ['sometimes', 'array'],
+        'plantilla_ids.*' => ['integer'],
+        'principal_id' => ['sometimes', 'nullable', 'integer'],
+        'fase_sgr' => ['sometimes', 'integer', 'in:1,2,3'],
         'sector_ids' => ['sometimes', 'array'],
         'sector_ids.*' => ['integer'],
         'tipo_ids' => ['sometimes', 'array'],

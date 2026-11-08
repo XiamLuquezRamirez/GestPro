@@ -4,6 +4,7 @@ namespace Tests\Feature\Viabilizacion;
 
 use App\Enums\Rol;
 use App\Models\Municipio;
+use App\Models\FuenteFinanciacion;
 use App\Models\Proyecto;
 use App\Models\User;
 use Database\Seeders\CatalogoRequisitosSgrSeeder;
@@ -19,6 +20,15 @@ class CatalogoRequisitosApiTest extends TestCase
     {
         parent::setUp();
         $this->seed(CatalogoRequisitosSgrSeeder::class);
+    }
+
+    /** Proyecto con la fuente SGR: solo a esos se les preselecciona la plantilla SGR. */
+    private function proyectoSgr(array $datos): Proyecto
+    {
+        $proyecto = Proyecto::create($datos);
+        $proyecto->fuentes()->sync([FuenteFinanciacion::where('clave', FuenteFinanciacion::SGR)->value('id')]);
+
+        return $proyecto;
     }
 
     private function como(Rol $rol): static
@@ -231,7 +241,7 @@ class CatalogoRequisitosApiTest extends TestCase
     {
         $this->seed(\Database\Seeders\DepartamentosSeeder::class);
         $municipio = Municipio::create(['codigo' => '05001', 'nombre' => 'MEDELLÍN', 'activo' => true, 'departamento' => '05']);
-        $proyecto = Proyecto::create(['municipio' => $municipio->codigo, 'nombre' => 'Vía terciaria']);
+        $proyecto = $this->proyectoSgr(['municipio' => $municipio->codigo, 'nombre' => 'Vía terciaria']);
 
         $antes = $this->admin()->postJson("/GestPro/proyectos/{$proyecto->id}/expedientes", ['fase_sgr' => 3])->assertCreated();
         $textoOriginal = collect($antes->json('requisitos'))->firstWhere('requisito.clave', 'a1')['requisito']['texto'];
@@ -250,7 +260,7 @@ class CatalogoRequisitosApiTest extends TestCase
         $this->assertSame($textoOriginal, collect($viejo->json('requisitos'))->firstWhere('requisito.clave', 'a1')['requisito']['texto']);
 
         // Uno nuevo usa v2.
-        $otroProyecto = Proyecto::create(['municipio' => $municipio->codigo, 'nombre' => 'Vía secundaria']);
+        $otroProyecto = $this->proyectoSgr(['municipio' => $municipio->codigo, 'nombre' => 'Vía secundaria']);
         $nuevo = $this->admin()->postJson("/GestPro/proyectos/{$otroProyecto->id}/expedientes", ['fase_sgr' => 3])->assertCreated();
         $nuevo->assertJsonPath('catalogo_version.numero', 2)->assertJsonPath('progreso.total', 7);
         $this->assertSame('Texto v2', collect($nuevo->json('requisitos'))->firstWhere('requisito.clave', 'a1')['requisito']['texto']);

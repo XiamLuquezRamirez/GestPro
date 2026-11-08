@@ -3,6 +3,7 @@
 namespace Tests\Feature\Viabilizacion;
 
 use App\Enums\Rol;
+use App\Models\FuenteFinanciacion;
 use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
 use App\Models\ProyectoRequisito;
@@ -28,9 +29,18 @@ class NoAplicaRequisitoApiTest extends TestCase
 
         // Fase III sin sectores: 8 requisitos generales.
         $servicio = app(ExpedienteService::class);
-        $this->expediente = $servicio->crear(Proyecto::create(['nombre' => 'Acueducto']), ['fase_sgr' => 3], null);
+        $this->expediente = $servicio->crear($this->proyectoSgr(['nombre' => 'Acueducto']), ['fase_sgr' => 3], null);
         $servicio->confirmarConfiguracion($this->expediente, ['fase_sgr' => 3]);
         $this->fila = $this->expediente->requisitos()->where('aplica', true)->orderBy('orden')->first();
+    }
+
+    /** Proyecto con la fuente SGR: solo a esos se les preselecciona la plantilla SGR. */
+    private function proyectoSgr(array $datos): Proyecto
+    {
+        $proyecto = Proyecto::create($datos);
+        $proyecto->fuentes()->sync([FuenteFinanciacion::where('clave', FuenteFinanciacion::SGR)->value('id')]);
+
+        return $proyecto;
     }
 
     private function usuario(Rol $rol): User
@@ -310,7 +320,7 @@ class NoAplicaRequisitoApiTest extends TestCase
     public function test_un_requisito_de_otro_expediente_no_sirve(): void
     {
         $servicio = app(ExpedienteService::class);
-        $otro = $servicio->crear(Proyecto::create(['nombre' => 'Vía']), ['fase_sgr' => 3], null);
+        $otro = $servicio->crear($this->proyectoSgr(['nombre' => 'Vía']), ['fase_sgr' => 3], null);
         $servicio->confirmarConfiguracion($otro, ['fase_sgr' => 3]);
         $ajena = $otro->requisitos()->where('aplica', true)->first();
 

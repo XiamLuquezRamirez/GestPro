@@ -4,6 +4,7 @@ namespace Tests\Feature\Viabilizacion;
 
 use App\Enums\Rol;
 use App\Models\ChecklistHistorial;
+use App\Models\FuenteFinanciacion;
 use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
 use App\Models\ProyectoRequisito;
@@ -32,9 +33,18 @@ class HistorialRequisitoApiTest extends TestCase
 
         $this->gestor = User::factory()->create(['rol' => Rol::Gestor, 'name' => 'Gestora Uno']);
         $servicio = app(ExpedienteService::class);
-        $this->expediente = $servicio->crear(Proyecto::create(['nombre' => 'Acueducto']), ['fase_sgr' => 3], $this->gestor);
+        $this->expediente = $servicio->crear($this->proyectoSgr(['nombre' => 'Acueducto']), ['fase_sgr' => 3], $this->gestor);
         $servicio->confirmarConfiguracion($this->expediente, ['fase_sgr' => 3], $this->gestor);
         $this->fila = $this->expediente->requisitos()->where('aplica', true)->orderBy('orden')->first();
+    }
+
+    /** Proyecto con la fuente SGR: solo a esos se les preselecciona la plantilla SGR. */
+    private function proyectoSgr(array $datos): Proyecto
+    {
+        $proyecto = Proyecto::create($datos);
+        $proyecto->fuentes()->sync([FuenteFinanciacion::where('clave', FuenteFinanciacion::SGR)->value('id')]);
+
+        return $proyecto;
     }
 
     private function como(Rol|User $quien): static
@@ -124,7 +134,7 @@ class HistorialRequisitoApiTest extends TestCase
         $this->subir('v2.pdf');
         $entrada = $this->historial()[0]['id'];
         $servicio = app(ExpedienteService::class);
-        $otro = $servicio->crear(Proyecto::create(['nombre' => 'Vía']), ['fase_sgr' => 3], null);
+        $otro = $servicio->crear($this->proyectoSgr(['nombre' => 'Vía']), ['fase_sgr' => 3], null);
 
         $this->como(Rol::Consulta)->get("/GestPro/expedientes/{$otro->id}/historial/{$entrada}/soporte")->assertNotFound();
     }
@@ -211,7 +221,7 @@ class HistorialRequisitoApiTest extends TestCase
 
     public function test_no_se_descarga_el_soporte_de_otro_expediente_subiendo_de_carpeta(): void
     {
-        $otro = app(ExpedienteService::class)->crear(Proyecto::create(['nombre' => 'Vía']), ['fase_sgr' => 3], null);
+        $otro = app(ExpedienteService::class)->crear($this->proyectoSgr(['nombre' => 'Vía']), ['fase_sgr' => 3], null);
         Storage::disk('local')->put("expedientes/{$otro->id}/x.pdf", 'x');
         $entrada = ChecklistHistorial::create([
             'entidad_tipo' => 'requisito', 'entidad_id' => $this->fila->id, 'expediente_id' => $this->expediente->id,

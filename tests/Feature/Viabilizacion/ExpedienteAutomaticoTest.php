@@ -147,11 +147,22 @@ class ExpedienteAutomaticoTest extends TestCase
         $this->assertDatabaseCount('proyectos_expedientes', 0);
     }
 
+    /**
+     * Un sector cuyo equivalente SGR está inactivo: la creación automática lo preselecciona y
+     * la validación de la configuración la rechaza. Sin versión vigente SGR ya no hay fallo:
+     * la plantilla deja de ser compatible y el expediente nace sin plantillas.
+     */
+    private function sectorConEquivalenteInactivo(): int
+    {
+        $sector = $this->sectorMapeado();
+        DB::table('requisitos_sectores')->where('clave', 'vivienda')->update(['activo' => false]);
+
+        return $sector;
+    }
+
     public function test_si_falla_la_creacion_el_proyecto_se_guarda_igual(): void
     {
-        DB::table('catalogo_versiones')->update(['vigente' => false]);
-
-        $this->guardar()->assertOk();
+        $this->guardar(['sector' => $this->sectorConEquivalenteInactivo()])->assertOk();
 
         $this->assertDatabaseHas('proyectos', ['nombre' => 'Acueducto veredal']);
         $this->assertDatabaseCount('proyectos_expedientes', 0);
@@ -160,9 +171,8 @@ class ExpedienteAutomaticoTest extends TestCase
     public function test_un_fallo_de_la_creacion_queda_registrado(): void
     {
         Exceptions::fake();
-        DB::table('catalogo_versiones')->update(['vigente' => false]);
 
-        $this->guardar()->assertOk();
+        $this->guardar(['sector' => $this->sectorConEquivalenteInactivo()])->assertOk();
 
         Exceptions::assertReported(ReglaNegocioException::class);
     }
@@ -356,7 +366,7 @@ class ExpedienteAutomaticoTest extends TestCase
 
         $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'fase' => $this->licitacion])
             ->assertOk()
-            ->assertJsonPath('advertencia', "El proyecto salió de Formulación con el expediente de viabilización #{$expediente->id} sin radicar.");
+            ->assertJsonPath('advertencia', "El proyecto salió de Formulación con el expediente #{$expediente->id} sin radicar.");
 
         $this->assertDatabaseHas('proyectos', ['id' => $proyecto->id, 'fase' => $this->licitacion]);
     }

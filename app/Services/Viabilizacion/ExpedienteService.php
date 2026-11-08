@@ -3,6 +3,7 @@
 namespace App\Services\Viabilizacion;
 
 use App\Exceptions\ReglaNegocioException;
+use App\Models\CatalogoVersion;
 use App\Models\Fase;
 use App\Models\FuenteFinanciacion;
 use App\Models\PlantillaChecklist;
@@ -17,15 +18,20 @@ use App\Models\RequisitoTipologia;
 use App\Models\Responsable;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Ciclo de vida del expediente de viabilización (la instancia por proyecto).
  *
  * Reglas:
- * - Se crea con la versión VIGENTE del catálogo y queda atada a ella.
+ * - Lleva una o varias plantillas, cada una con la versión con que entró (la vigente
+ *   de ese momento). Sin plantillas en el pedido, nace con la plantilla SGR si el
+ *   proyecto la admite, o sin plantillas.
+ * - La fase SGR solo se exige si el expediente tiene una plantilla con motor sgr.
  * - Cada proyecto tiene como máximo un expediente en borrador.
  * - Nace sin configurar: solo se chequea o radica tras confirmar la configuración,
  *   porque ella decide qué requisitos aplican y, con eso, el porcentaje de avance.
@@ -41,6 +47,8 @@ final class ExpedienteService
 
     private const ORDEN_SECCION = ['A' => 1, 'B' => 2, 'D' => 3, 'C' => 4];
 
+    private const SIN_PLANTILLAS = 'Elige al menos una plantilla para armar el checklist.';
+
     // Orden de una fila: posición de la plantilla del primer origen, sección (motor sgr) y orden
     // del requisito. La principal tiene posición 0: un expediente solo SGR conserva su orden.
     private const ORDEN_POR_PLANTILLA = 10_000_000;
@@ -50,8 +58,11 @@ final class ExpedienteService
     private const CARACTER_POR_EXIGENCIA = [RequisitoCatalogo::OBLIGATORIO, RequisitoCatalogo::CONDICIONADO, RequisitoCatalogo::OPCIONAL];
 
     private const RELACIONES_FILA = [
-        'requisito.sector:id,clave,nombre,fuente', 'requisito.tipo:id,clave,nombre', 'usuarioCumplido:id,name',
-        'usuarioNoAplica:id,name', 'usuarioAprobo:id,name', 'responsable:id,nombre,cargo',
+        'requisito.sector:id,clave,nombre,fuente', 'requisito.tipo:id,clave,nombre',
+        'requisito.version:id,plantilla_id', 'requisito.version.plantilla:id,nombre,motor',
+        'origenes.sector:id,clave,nombre,fuente', 'origenes.tipo:id,clave,nombre',
+        'origenes.version:id,plantilla_id', 'origenes.version.plantilla:id,nombre,motor',
+        'usuarioCumplido:id,name', 'usuarioNoAplica:id,name', 'usuarioAprobo:id,name', 'responsable:id,nombre,cargo',
     ];
 
     public function __construct(
@@ -63,30 +74,40 @@ final class ExpedienteService
 
     // -------------------------------------------------------------- escritura
 
+    /**
+     * @param array{plantilla_ids?: list<int>, principal_id?: ?int, fase_sgr?: int} $datos sin
+     *        plantilla_ids, se preselecciona la plantilla SGR compatible, si la hay
+     */
     public function crear(Proyecto $proyecto, array $datos, ?User $usuario): ProyectoExpediente
     {
-        $version = PlantillaChecklist::sgr()->versionVigente()
-            ?? throw new ReglaNegocioException('No hay una versión vigente del catálogo de requisitos.');
-
+        $plantillas = $this->plantillas->validar(
+            array_key_exists('plantilla_ids', $datos) ? $datos : $this->plantillas->preseleccion($proyecto),
+            $proyecto,
+            null
+        );
+        $this->exigirFaseSgr($datos, $plantillas['version_sgr_id'] !== null);
         $seleccion = $this->validarSeleccion($datos, null);
 
-        return DB::transaction(function () use ($proyecto, $version, $datos, $seleccion, $usuario) {
+        return DB::transaction(function () use ($proyecto, $plantillas, $datos, $seleccion, $usuario) {
             // El bloqueo evita dos borradores por una doble petición simultánea.
             Proyecto::query()->whereKey($proyecto->id)->lockForUpdate()->first();
             $this->exigirSinBorrador($proyecto);
 
+            // Sin fase en el pedido, la columna conserva su valor por defecto.
             $expediente = ProyectoExpediente::create([
                 'proyecto_id' => $proyecto->id,
-                'catalogo_version_id' => $version->id,
-                'fase_sgr' => (int) $datos['fase_sgr'],
                 'estado' => ProyectoExpediente::BORRADOR,
                 'usuario_creo_id' => $usuario?->id,
-            ]);
+                ...(isset($datos['fase_sgr']) ? ['fase_sgr' => (int) $datos['fase_sgr']] : []),
+            ])->refresh();
 
-            $expediente->versionesPlantilla()->attach($version->id, ['es_principal' => true]);
+            $this->plantillas->guardar($expediente, $plantillas);
             $this->guardarSeleccion($expediente, $seleccion);
             $this->sincronizar($expediente);
-            $this->historial->registrarExpediente($expediente, 'expediente_creado', [], ['catalogo_version_id' => $version->id], $usuario);
+            $this->historial->registrarExpediente($expediente, 'expediente_creado', [], [
+                'catalogo_version_id' => $expediente->catalogo_version_id,
+                'plantillas' => $this->plantillasRegistrables($expediente),
+            ], $usuario);
 
             return $expediente;
         });
@@ -124,6 +145,13 @@ final class ExpedienteService
 
     public function confirmarConfiguracion(ProyectoExpediente $expediente, array $datos, ?User $usuario = null): ProyectoExpediente
     {
+        $sinPlantillas = array_key_exists('plantilla_ids', $datos)
+            ? $datos['plantilla_ids'] === []
+            : ! $expediente->versionesPlantilla()->exists();
+        if ($sinPlantillas) {
+            throw new ReglaNegocioException(self::SIN_PLANTILLAS);
+        }
+
         return DB::transaction(function () use ($expediente, $datos, $usuario) {
             $this->actualizarConfiguracion($expediente, $datos, $usuario);
             if (! $expediente->estaConfigurado()) {
@@ -145,18 +173,36 @@ final class ExpedienteService
         $borrador = $proyecto->expedientes()->where('estado', ProyectoExpediente::BORRADOR)->latest('id')->first();
 
         return $borrador
-            ? "El proyecto salió de Formulación con el expediente de viabilización #{$borrador->id} sin radicar."
+            ? "El proyecto salió de Formulación con el expediente #{$borrador->id} sin radicar."
             : null;
     }
 
+    /**
+     * Sin plantilla_ids en el pedido, las plantillas del expediente no cambian. Mientras se
+     * arma puede quedarse sin plantillas; ya confirmado, no.
+     */
     public function actualizarConfiguracion(ProyectoExpediente $expediente, array $datos, ?User $usuario = null): ProyectoExpediente
     {
         $this->exigirBorrador($expediente);
+        $plantillas = array_key_exists('plantilla_ids', $datos)
+            ? $this->plantillas->validar($datos, $expediente->proyecto, $expediente)
+            : null;
+        if ($plantillas && $plantillas['versiones'] === [] && $expediente->estaConfigurado()) {
+            throw new ReglaNegocioException(self::SIN_PLANTILLAS);
+        }
+        $this->exigirFaseSgr($datos, $plantillas
+            ? $plantillas['version_sgr_id'] !== null
+            : $this->plantillas->tieneSgr($this->plantillas->versionesDe($expediente)));
         $seleccion = $this->validarSeleccion($datos, $expediente);
 
-        return DB::transaction(function () use ($expediente, $datos, $seleccion, $usuario) {
+        return DB::transaction(function () use ($expediente, $datos, $plantillas, $seleccion, $usuario) {
             $antes = $this->configuracionRegistrable($expediente);
-            $expediente->update(['fase_sgr' => (int) $datos['fase_sgr']]);
+            if (isset($datos['fase_sgr'])) {
+                $expediente->update(['fase_sgr' => (int) $datos['fase_sgr']]);
+            }
+            if ($plantillas) {
+                $this->plantillas->guardar($expediente, $plantillas);
+            }
             $this->guardarSeleccion($expediente, $seleccion);
             $this->sincronizar($expediente);
             $despues = $this->configuracionRegistrable($expediente);
@@ -513,18 +559,21 @@ final class ExpedienteService
     public function presentar(ProyectoExpediente $expediente): array
     {
         $expediente->load([
-            'proyecto:id,nombre', 'version:id,numero', 'usuarioRadico:id,name', 'usuarioCreo:id,name',
+            'proyecto:id,nombre,sector', 'version:id,numero', 'usuarioRadico:id,name', 'usuarioCreo:id,name',
             'sectores', 'tipos', 'componentes', 'tipologias',
         ]);
+        $versiones = $this->plantillas->versionesDe($expediente);
+        $posiciones = $this->posiciones($versiones);
 
         $filas = $expediente->requisitos()
             ->where('aplica', true)
             ->with(self::RELACIONES_FILA)
             ->orderBy('orden')
+            ->orderBy('id')
             ->get();
 
         return [
-            ...$this->presentarCabecera($expediente),
+            ...$this->presentarCabecera($expediente, $versiones),
             'configuracion' => [
                 'sectores' => $this->opciones($expediente->sectores),
                 'tipos' => $expediente->tipos->map(fn ($t) => ['id' => $t->id, 'sector_id' => $t->sector_id, 'clave' => $t->clave, 'nombre' => $t->nombre])->values(),
@@ -532,7 +581,8 @@ final class ExpedienteService
                 'tipologias' => $this->opciones($expediente->tipologias),
             ],
             'progreso' => $this->progresoDe($expediente),
-            'requisitos' => $filas->map(fn (ProyectoRequisito $f) => $this->presentarFila($f))->values(),
+            'requisitos' => $filas->map(fn (ProyectoRequisito $f) => $this->presentarFila($f, $posiciones))->values(),
+            'avisos_duplicados' => $versiones->count() > 1 ? $this->avisosDuplicados($filas, $posiciones) : [],
             // Filas que dejaron de aplicar pero guardan trabajo hecho.
             'retenidos' => $expediente->requisitos()->where('aplica', false)
                 ->where(fn ($q) => $q->where('cumplido', true)->orWhereNotNull('observacion')->orWhereNotNull('soporte_archivo')
@@ -574,14 +624,28 @@ final class ExpedienteService
             ->all();
     }
 
-    public function presentarCabecera(ProyectoExpediente $expediente): array
+    /** @param ?Collection<int, CatalogoVersion> $versiones las de versionesDe(), si ya se leyeron */
+    public function presentarCabecera(ProyectoExpediente $expediente, ?Collection $versiones = null): array
     {
-        $expediente->loadMissing(['proyecto:id,nombre', 'version:id,numero', 'usuarioRadico:id,name', 'usuarioCreo:id,name']);
+        $expediente->loadMissing(['proyecto:id,nombre,sector', 'version:id,numero', 'usuarioRadico:id,name', 'usuarioCreo:id,name']);
+        $versiones ??= $this->plantillas->versionesDe($expediente);
+        $compatibles = $versiones->isEmpty() ? [] : $this->plantillas->idsCompatibles($expediente->proyecto);
 
         return [
             'id' => $expediente->id,
             'proyecto' => ['id' => $expediente->proyecto->id, 'nombre' => $expediente->proyecto->nombre],
-            'catalogo_version' => ['id' => $expediente->version->id, 'numero' => $expediente->version->numero],
+            // Solo con plantilla SGR: es la versión que siguen las pantallas y rutas del catálogo SGR.
+            'catalogo_version' => $expediente->version ? ['id' => $expediente->version->id, 'numero' => $expediente->version->numero] : null,
+            'plantillas' => $versiones->map(fn (CatalogoVersion $v) => [
+                'plantilla_id' => $v->plantilla_id,
+                'nombre' => $v->plantilla->nombre,
+                'motor' => $v->plantilla->motor,
+                'es_principal' => (bool) $v->pivot->es_principal,
+                // Cambiar las fuentes o el sector del proyecto no altera el expediente: solo se avisa.
+                'compatible' => in_array($v->plantilla_id, $compatibles, true),
+                'version' => ['id' => $v->id, 'numero' => $v->numero],
+            ])->values()->all(),
+            'tiene_sgr' => $this->plantillas->tieneSgr($versiones),
             'fase_sgr' => $expediente->fase_sgr,
             'configurado' => $expediente->estaConfigurado(),
             'estado' => $expediente->estado,
@@ -601,10 +665,19 @@ final class ExpedienteService
         );
     }
 
-    public function presentarFila(ProyectoRequisito $fila): array
+    /**
+     * Se muestra el requisito del primer origen (la principal primero); sin orígenes, el ancla.
+     * Un requisito propio no tiene requisito de catálogo: trae sus textos en `propio`.
+     *
+     * @param ?array<int, int> $posiciones plantilla_id => posición en el expediente, si ya se leyeron
+     */
+    public function presentarFila(ProyectoRequisito $fila, ?array $posiciones = null): array
     {
         $fila->loadMissing(self::RELACIONES_FILA);
-        $r = $fila->requisito;
+        $posiciones ??= $this->posiciones($this->plantillas->versionesDe($fila->expediente));
+        $origenes = $this->origenesOrdenados($fila, $posiciones);
+        $r = $origenes->first() ?? $fila->requisito;
+        $plantilla = $r?->version->plantilla;
 
         return [
             'id' => $fila->id,
@@ -626,7 +699,7 @@ final class ExpedienteService
             'usuario_cumplido' => $fila->usuarioCumplido?->name,
             'observacion' => $fila->observacion,
             'soporte' => $fila->soporte_archivo ? ['nombre' => $fila->soporte_nombre] : null,
-            'requisito' => [
+            'requisito' => $r ? [
                 'id' => $r->id,
                 'clave' => $r->clave,
                 'seccion' => $r->seccion,
@@ -637,11 +710,99 @@ final class ExpedienteService
                 'codigo' => $r->codigo,
                 'texto' => $r->texto,
                 'nota' => $r->nota,
+                'descripcion' => $r->descripcion,
+                // En palabras, cuándo aplica un condicionado: lo lee quien decide si aplica.
+                'condicion_descripcion' => $r->condicion_descripcion,
+                'soporte_requerido' => $r->soporte_requerido,
                 'cargo_cumplimiento' => $r->cargo_cumplimiento,
                 'cargo_revision' => $r->cargo_revision,
                 'requiere_aprobacion_no_aplica' => $r->requiere_aprobacion_no_aplica,
-            ],
+            ] : null,
+            'plantilla' => $plantilla ? ['id' => $plantilla->id, 'nombre' => $plantilla->nombre, 'motor' => $plantilla->motor] : null,
+            'origenes' => $origenes->map(fn (RequisitoCatalogo $o) => [
+                'plantilla_id' => $o->version->plantilla_id,
+                'nombre' => $o->version->plantilla->nombre,
+            ])->values()->all(),
+            'propio' => $fila->esPropio() ? [
+                'titulo' => $fila->titulo_propio,
+                'descripcion' => $fila->descripcion_propia,
+                'categoria' => $fila->categoria_propia,
+            ] : null,
+            'categoria' => $fila->esPropio() ? $fila->categoria_propia : $r->categoria,
         ];
+    }
+
+    /** @return array<int, int> plantilla_id => posición (0 es la principal) */
+    private function posiciones(Collection $versiones): array
+    {
+        return $versiones->values()->pluck('plantilla_id')->flip()->map(fn ($posicion) => (int) $posicion)->all();
+    }
+
+    /** Orígenes de la fila en el orden de las plantillas del expediente, la principal primero. */
+    private function origenesOrdenados(ProyectoRequisito $fila, array $posiciones): Collection
+    {
+        return $fila->origenes
+            ->sortBy(fn (RequisitoCatalogo $o) => [$posiciones[$o->version->plantilla_id] ?? PHP_INT_MAX, $o->id])
+            ->values();
+    }
+
+    /**
+     * Pares de filas que aplican, de plantillas distintas y sin llave compartida, cuyos textos
+     * se parecen: Jaccard de sus palabras normalizadas de 0,8 o más. Solo es un aviso: nunca
+     * se fusionan. Las filas comparten plantilla si alguna de sus plantillas de origen coincide.
+     *
+     * @return list<array{filas: array{int, int}, textos: array{string, string}, plantillas: array{string, string}, similitud: float}>
+     */
+    private function avisosDuplicados(Collection $filas, array $posiciones): array
+    {
+        $candidatas = $filas
+            ->reject(fn (ProyectoRequisito $f) => $f->esPropio())
+            ->map(function (ProyectoRequisito $f) use ($posiciones) {
+                $origenes = $this->origenesOrdenados($f, $posiciones);
+                $mostrado = $origenes->first() ?? $f->requisito;
+
+                return [
+                    'id' => $f->id,
+                    'texto' => $mostrado->texto,
+                    'plantilla' => $mostrado->version->plantilla->nombre,
+                    'plantillas' => $origenes->map(fn (RequisitoCatalogo $o) => $o->version->plantilla_id)->unique()->all(),
+                    'palabras' => $this->palabras($mostrado->texto),
+                ];
+            })
+            ->filter(fn (array $c) => $c['palabras'] !== [])
+            ->values()
+            ->all();
+
+        $avisos = [];
+        foreach ($candidatas as $i => $a) {
+            for ($j = $i + 1; $j < count($candidatas); $j++) {
+                $b = $candidatas[$j];
+                if (array_intersect($a['plantillas'], $b['plantillas'])) {
+                    continue;
+                }
+                $comunes = count(array_intersect_key($a['palabras'], $b['palabras']));
+                $todas = count($a['palabras'] + $b['palabras']);
+                // comunes / todas >= 0,8, sin redondeo de coma flotante.
+                if ($comunes * 5 >= $todas * 4) {
+                    $avisos[] = [
+                        'filas' => [$a['id'], $b['id']],
+                        'textos' => [$a['texto'], $b['texto']],
+                        'plantillas' => [$a['plantilla'], $b['plantilla']],
+                        'similitud' => round($comunes / $todas, 2),
+                    ];
+                }
+            }
+        }
+
+        return $avisos;
+    }
+
+    /** @return array<string, true> palabras de más de 3 letras, en minúsculas y sin tildes ni signos */
+    private function palabras(?string $texto): array
+    {
+        $palabras = preg_split('/[^a-z0-9]+/', Str::lower(Str::ascii((string) $texto)), -1, PREG_SPLIT_NO_EMPTY);
+
+        return array_fill_keys(array_filter($palabras, fn (string $p) => strlen($p) > 3), true);
     }
 
     // ------------------------------------------------------------ internos
@@ -700,19 +861,41 @@ final class ExpedienteService
         return (new $modelo())->getTable();
     }
 
-    /** Fase e ids ordenados de cada selección, para comparar y registrar la configuración. */
+    /** Plantillas, fase e ids ordenados de cada selección, para comparar y registrar la configuración. */
     private function configuracionRegistrable(ProyectoExpediente $expediente): array
     {
         $ids = fn (string $relacion, string $tabla) => $expediente->{$relacion}()
             ->orderBy("{$tabla}.id")->pluck("{$tabla}.id")->map(fn ($id) => (int) $id)->all();
 
         return [
+            'plantillas' => $this->plantillasRegistrables($expediente),
             'fase_sgr' => (int) $expediente->fase_sgr,
             'sector_ids' => $ids('sectores', 'requisitos_sectores'),
             'tipo_ids' => $ids('tipos', 'requisitos_tipos'),
             'componente_ids' => $ids('componentes', 'requisitos_componentes'),
             'tipologia_ids' => $ids('tipologias', 'requisitos_tipologias'),
         ];
+    }
+
+    /** @return list<array{plantilla_id: int, catalogo_version_id: int, es_principal: bool}> */
+    private function plantillasRegistrables(ProyectoExpediente $expediente): array
+    {
+        return $this->plantillas->versionesDe($expediente)
+            ->map(fn (CatalogoVersion $v) => [
+                'plantilla_id' => $v->plantilla_id,
+                'catalogo_version_id' => $v->id,
+                'es_principal' => (bool) $v->pivot->es_principal,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /** La fase solo se pide si el expediente tiene una plantilla con motor sgr. */
+    private function exigirFaseSgr(array $datos, bool $tieneSgr): void
+    {
+        if ($tieneSgr && ! isset($datos['fase_sgr'])) {
+            throw ValidationException::withMessages(['fase_sgr' => 'Elige la fase SGR del expediente.']);
+        }
     }
 
     private function guardarSeleccion(ProyectoExpediente $expediente, array $seleccion): void
