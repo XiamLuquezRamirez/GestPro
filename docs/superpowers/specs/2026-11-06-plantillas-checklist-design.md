@@ -363,6 +363,17 @@ Reglas para este cambio:
 - **Etapa 5 (requisitos propios y orígenes):** `NoAplicaRequisito::marcar` y `ExpedienteService::presentarFila` suponen que la fila tiene requisito de catálogo; con `requisito_catalogo_id = null` fallarían. Con varias plantillas, la exigencia de aprobación del "no aplica" debe salir de los orígenes (si alguno la exige), no de una sola fila del catálogo. El estado previo a un "no aplica" queda en `antes.estado` del evento `no_aplica_marcado`.
 - **Etapa 6:** antes de retirar `catalogo_version_id`, la migración 11 debe comprobar que todo expediente tiene su fila en `expediente_plantillas`. Una rama anterior que cree expedientes sobre la base ya migrada no la escribiría.
 
+**Notas de la etapa 4 para los planes siguientes:**
+
+- **Rutas del front:** la API vive bajo el prefijo `GestPro`, igual que el SPA en Apache, así que una ruta del front no puede coincidir con una de la API. La administración quedó en `/plantillas-checklist` (`RUTA_PLANTILLAS`), y la API sigue en `/plantillas`. Toda pantalla nueva debe comprobarlo con `php artisan route:list`.
+- **Etapa 5:** solo la plantilla SGR crea expedientes. Las plantillas simples ya se publican, pero ningún expediente las usa todavía. Sus condicionados deben nacer `por_definir`, y la descripción "Condición original: …" que deja la copia de SGR a simple no debe llegar al expediente: publicar ya la bloquea.
+- **Pendientes menores, sin prisa:**
+  - Ordenar escribe un `UPDATE` por requisito, y duplicar crea los requisitos uno a uno (207 en la SGR).
+  - La carrera de `claveLibre` acaba en 500, y el nombre de la plantilla no tiene índice único.
+  - Los mensajes genéricos de validación están repetidos en dos controladores.
+  - La ruta antigua `POST /catalogo-requisitos/versiones` ya no la usa ninguna pantalla.
+  - En la SGR, las flechas de orden pueden cruzar secciones sin efecto visible en el expediente.
+
 ---
 
 ## Etapas de entrega
