@@ -378,6 +378,69 @@ class ExpedientePlantillasApiTest extends TestCase
             ->assertJsonPath('expedientes.0.plantillas.1.compatible', false);
     }
 
+    // -------------------------------------------------------------- consultas
+
+    /** @return array{0: int, 1: int} [consultas, consultas de plantillas compatibles] */
+    private function contarConsultas(callable $accion): array
+    {
+        $todas = 0;
+        $compatibles = 0;
+        DB::listen(function ($q) use (&$todas, &$compatibles) {
+            $todas++;
+            // Solo idsCompatibles filtra por todas_fuentes.
+            $compatibles += str_contains($q->sql, '"todas_fuentes"') ? 1 : 0;
+        });
+        $accion();
+
+        // Los oyentes de llamadas anteriores siguen activos, pero cuentan en sus propias variables.
+        return [$todas, $compatibles];
+    }
+
+    public function test_validar_lee_las_versiones_vigentes_junto_con_las_plantillas(): void
+    {
+        $proyecto = $this->proyecto(['recursos_propios']);
+        $plantillas = collect(range(1, 4))->map(fn ($n) => $this->plantilla("Plantilla {$n}", ['Planos' => [null]])->id)->all();
+        $validar = fn (array $ids) => $this->contarConsultas(fn () => app(\App\Services\Viabilizacion\PlantillasExpediente::class)
+            ->validar(['plantilla_ids' => $ids, 'principal_id' => $ids[0]], $proyecto, null));
+
+        $this->assertSame($validar([$plantillas[0]]), $validar($plantillas));
+    }
+
+    public function test_crear_calcula_las_plantillas_compatibles_una_vez(): void
+    {
+        $servicio = app(ExpedienteService::class);
+        $enFormulacion = $this->proyecto();
+        $enFormulacion->update(['fase' => DB::table('fases')->insertGetId(['nombre' => 'Formulación'])]);
+
+        [, $alCrear] = $this->contarConsultas(fn () => $servicio->crear($this->proyecto(), ['fase_sgr' => 3], null));
+        [, $automatico] = $this->contarConsultas(fn () => $this->assertNotNull($servicio->crearAutomatico($enFormulacion, null)));
+
+        $this->assertSame(1, $alCrear);
+        $this->assertSame(1, $automatico);
+    }
+
+    public function test_el_listado_de_expedientes_no_hace_mas_consultas_con_mas_expedientes(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos firmados' => [null]]);
+        $proyecto = $this->proyecto();
+        $nuevo = function () use ($proyecto, $agua) {
+            ProyectoExpediente::where('proyecto_id', $proyecto->id)->update(['estado' => ProyectoExpediente::RADICADO]);
+            $this->crear($proyecto, ['fase_sgr' => 3, 'plantilla_ids' => [$this->sgr->id, $agua->id], 'principal_id' => $this->sgr->id])->assertCreated();
+        };
+        $listar = fn () => $this->contarConsultas(fn () => $this->como(Rol::Consulta)
+            ->getJson("/GestPro/proyectos/{$proyecto->id}/expedientes")->assertOk()->assertJsonPath('expedientes.0.progreso.total', 9));
+
+        $nuevo();
+        $uno = $listar();
+        foreach (range(1, 3) as $_) {
+            $nuevo();
+        }
+        $cuatro = $listar();
+
+        $this->assertSame(1, $uno[1]);
+        $this->assertSame($uno, $cuatro);
+    }
+
     // ------------------------------------------------------ avisos duplicados
 
     public function test_avisa_de_textos_parecidos_entre_plantillas_sin_fusionarlos(): void

@@ -100,18 +100,22 @@ final class PlantillasExpediente
      *
      * @return array{plantilla_ids: list<int>, principal_id: ?int}
      */
-    public function preseleccion(Proyecto $proyecto): array
+    public function preseleccion(Proyecto $proyecto, ?array $compatibles = null): array
     {
-        $sgr = $this->sgrCompatible($proyecto);
+        $sgr = $this->sgrCompatible($proyecto, $compatibles);
 
         return ['plantilla_ids' => $sgr ? [$sgr->id] : [], 'principal_id' => $sgr?->id];
     }
 
-    /** Plantilla compatible con motor sgr que se preselecciona: la de clave sgr antes que una copia. */
-    public function sgrCompatible(Proyecto $proyecto): ?PlantillaChecklist
+    /**
+     * Plantilla compatible con motor sgr que se preselecciona: la de clave sgr antes que una copia.
+     *
+     * @param ?list<int> $compatibles las de idsCompatibles(), si ya se calcularon
+     */
+    public function sgrCompatible(Proyecto $proyecto, ?array $compatibles = null): ?PlantillaChecklist
     {
         return PlantillaChecklist::query()
-            ->whereIn('id', $this->idsCompatibles($proyecto))
+            ->whereIn('id', $compatibles ?? $this->idsCompatibles($proyecto))
             ->where('motor', PlantillaChecklist::MOTOR_SGR)
             ->get()
             ->sortBy(fn (PlantillaChecklist $p) => [$p->clave === PlantillaChecklist::CLAVE_SGR ? 0 : 1, $p->id])
@@ -132,9 +136,19 @@ final class PlantillasExpediente
      */
     public function versionesDe(ProyectoExpediente $expediente): Collection
     {
-        return $expediente->versionesPlantilla()
-            ->with('plantilla')
-            ->get()
+        return $this->ordenar($expediente->versionesPlantilla()->with('plantilla')->get());
+    }
+
+    /**
+     * Las versiones de un expediente, ya leídas con su plantilla y su pivote, en el orden de
+     * versionesDe(): sirve a quien las cargó junto con varios expedientes.
+     *
+     * @param Collection<int, CatalogoVersion> $versiones
+     * @return Collection<int, CatalogoVersion>
+     */
+    public function ordenar(Collection $versiones): Collection
+    {
+        return $versiones
             ->sortBy([
                 fn (CatalogoVersion $a, CatalogoVersion $b) => (int) $b->pivot->es_principal <=> (int) $a->pivot->es_principal,
                 fn (CatalogoVersion $a, CatalogoVersion $b) => $a->plantilla_id <=> $b->plantilla_id,
@@ -146,16 +160,20 @@ final class PlantillasExpediente
      * Comprueba la selección pedida y decide la versión de cada plantilla.
      *
      * @param array{plantilla_ids?: list<int>, principal_id?: ?int} $datos
+     * @param ?list<int> $compatibles las de idsCompatibles(), si ya se calcularon
      * @return array{versiones: array<int, int>, principal_id: ?int, version_sgr_id: ?int}
      *         versiones: plantilla_id => catalogo_version_id, en el orden pedido
      */
-    public function validar(array $datos, Proyecto $proyecto, ?ProyectoExpediente $expediente): array
+    public function validar(array $datos, Proyecto $proyecto, ?ProyectoExpediente $expediente, ?array $compatibles = null): array
     {
         $ids = array_values(array_unique(array_map('intval', $datos['plantilla_ids'] ?? [])));
         $principal = isset($datos['principal_id']) ? (int) $datos['principal_id'] : null;
         $previas = $expediente ? $this->versionesDe($expediente)->keyBy('plantilla_id') : collect();
-        $compatibles = $this->idsCompatibles($proyecto);
-        $encontradas = PlantillaChecklist::query()->whereIn('id', $ids)->get()->keyBy('id');
+        $compatibles ??= $this->idsCompatibles($proyecto);
+        // La vigente de cada una en la misma lectura: una consulta, no una por plantilla.
+        $encontradas = PlantillaChecklist::query()->whereIn('id', $ids)
+            ->with(['versiones' => fn ($q) => $q->vigente()])
+            ->get()->keyBy('id');
 
         $errores = [];
         $versiones = [];
@@ -167,7 +185,7 @@ final class PlantillasExpediente
                 continue;
             }
 
-            $version = $previas->get($id) ?? $plantilla->versionVigente();
+            $version = $previas->get($id) ?? $plantilla->versiones->first();
             if (! $previas->has($id)) {
                 if (! $plantilla->activo) {
                     $errores[] = "La plantilla \"{$plantilla->nombre}\" está inactiva.";

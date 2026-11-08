@@ -82,10 +82,17 @@ final class ExpedienteService
      */
     public function crear(Proyecto $proyecto, array $datos, ?User $usuario): ProyectoExpediente
     {
+        return $this->crearCon($proyecto, $datos, $usuario, $this->plantillas->idsCompatibles($proyecto));
+    }
+
+    /** @param list<int> $compatibles las plantillas que hoy se ofrecen al proyecto: se calculan una vez */
+    private function crearCon(Proyecto $proyecto, array $datos, ?User $usuario, array $compatibles): ProyectoExpediente
+    {
         $plantillas = $this->plantillas->validar(
-            array_key_exists('plantilla_ids', $datos) ? $datos : $this->plantillas->preseleccion($proyecto),
+            array_key_exists('plantilla_ids', $datos) ? $datos : $this->plantillas->preseleccion($proyecto, $compatibles),
             $proyecto,
-            null
+            null,
+            $compatibles
         );
         $this->exigirFaseSgr($datos, $plantillas['version_sgr_id'] !== null);
         $seleccion = $this->validarSeleccion($datos, null);
@@ -128,7 +135,9 @@ final class ExpedienteService
         }
 
         try {
-            return $this->crear($proyecto, $this->seleccionAutomatica($proyecto), $usuario);
+            $compatibles = $this->plantillas->idsCompatibles($proyecto);
+
+            return $this->crearCon($proyecto, $this->seleccionAutomatica($proyecto, $compatibles), $usuario, $compatibles);
         } catch (\Throwable $e) {
             report($e);
 
@@ -147,9 +156,9 @@ final class ExpedienteService
     }
 
     /** @return array{plantilla_ids: list<int>, principal_id: ?int, fase_sgr?: int, sector_ids?: list<int>} */
-    private function seleccionAutomatica(Proyecto $proyecto): array
+    private function seleccionAutomatica(Proyecto $proyecto, array $compatibles): array
     {
-        $seleccion = $this->plantillas->preseleccion($proyecto);
+        $seleccion = $this->plantillas->preseleccion($proyecto, $compatibles);
         if ($seleccion['plantilla_ids'] === []) {
             return $seleccion;
         }
@@ -694,12 +703,40 @@ final class ExpedienteService
             ->all();
     }
 
-    /** @param ?Collection<int, CatalogoVersion> $versiones las de versionesDe(), si ya se leyeron */
-    public function presentarCabecera(ProyectoExpediente $expediente, ?Collection $versiones = null): array
+    /**
+     * Expedientes del proyecto, el más reciente primero, con su cabecera y su avance. Las
+     * consultas no crecen con los expedientes: todo se lee junto y las plantillas compatibles
+     * se calculan una vez por proyecto.
+     */
+    public function presentarDeProyecto(Proyecto $proyecto): array
+    {
+        $expedientes = $proyecto->expedientes()
+            ->with(['versionesPlantilla.plantilla', 'version:id,numero', 'usuarioRadico:id,name', 'usuarioCreo:id,name'])
+            ->withCount([
+                'requisitos as requisitos_aplican' => fn ($q) => $q->cuenta(),
+                'requisitos as requisitos_cumplidos' => fn ($q) => $q->cumplidaQueCuenta(),
+            ])
+            ->orderByDesc('id')
+            ->get();
+        $compatibles = $expedientes->contains(fn (ProyectoExpediente $e) => $e->versionesPlantilla->isNotEmpty())
+            ? $this->plantillas->idsCompatibles($proyecto)
+            : [];
+
+        return $expedientes->map(fn (ProyectoExpediente $e) => [
+            ...$this->presentarCabecera($e->setRelation('proyecto', $proyecto), $this->plantillas->ordenar($e->versionesPlantilla), $compatibles),
+            'progreso' => $this->progreso((int) $e->requisitos_aplican, (int) $e->requisitos_cumplidos),
+        ])->values()->all();
+    }
+
+    /**
+     * @param ?Collection<int, CatalogoVersion> $versiones las de versionesDe(), si ya se leyeron
+     * @param ?list<int> $compatibles las de idsCompatibles() del proyecto, si ya se calcularon
+     */
+    public function presentarCabecera(ProyectoExpediente $expediente, ?Collection $versiones = null, ?array $compatibles = null): array
     {
         $expediente->loadMissing(['proyecto:id,nombre,sector', 'version:id,numero', 'usuarioRadico:id,name', 'usuarioCreo:id,name']);
         $versiones ??= $this->plantillas->versionesDe($expediente);
-        $compatibles = $versiones->isEmpty() ? [] : $this->plantillas->idsCompatibles($expediente->proyecto);
+        $compatibles ??= $versiones->isEmpty() ? [] : $this->plantillas->idsCompatibles($expediente->proyecto);
 
         return [
             'id' => $expediente->id,

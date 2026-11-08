@@ -77,11 +77,7 @@ class ExpedienteController extends Controller
 
     public function index(Proyecto $proyecto): JsonResponse
     {
-        $expedientes = $proyecto->expedientes()->orderByDesc('id')->get()
-            ->map(fn (ProyectoExpediente $e) => [
-                ...$this->servicio->presentarCabecera($e),
-                'progreso' => $this->servicio->progresoDe($e),
-            ]);
+        $expedientes = $this->servicio->presentarDeProyecto($proyecto);
 
         $proyecto->loadMissing('sectorRel');
 
