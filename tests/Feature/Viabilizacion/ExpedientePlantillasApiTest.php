@@ -419,6 +419,34 @@ class ExpedientePlantillasApiTest extends TestCase
         $this->assertSame(1, $automatico);
     }
 
+    public function test_el_listado_trae_el_avance_y_las_plantillas_en_orden_de_cada_expediente(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos firmados' => [null], 'Licencia' => [null, RequisitoCatalogo::OPCIONAL]]);
+        $proyecto = $this->proyecto();
+        // Anterior: solo la SGR, 3 de 8 cumplidos, ya radicado.
+        $anterior = ProyectoExpediente::findOrFail($this->crear($proyecto, ['fase_sgr' => 3])->json('id'));
+        $anterior->requisitos()->where('aplica', true)->orderBy('orden')->take(3)->get()->each->update(['cumplido' => true]);
+        $anterior->update(['estado' => ProyectoExpediente::RADICADO]);
+        // Actual: Obras de agua es la principal aunque se pidió después de la SGR. Cuentan 9;
+        // la opcional cumplida no suma.
+        $actual = ProyectoExpediente::findOrFail($this->crear($proyecto, [
+            'fase_sgr' => 3, 'plantilla_ids' => [$this->sgr->id, $agua->id], 'principal_id' => $agua->id,
+        ])->json('id'));
+        $actual->requisitos()->whereHas('requisito', fn ($q) => $q->whereIn('texto', ['Planos firmados', 'Licencia']))->update(['cumplido' => true]);
+
+        $r = $this->como(Rol::Consulta)->getJson("/GestPro/proyectos/{$proyecto->id}/expedientes")->assertOk();
+
+        $r->assertJsonPath('expedientes.0.id', $actual->id)
+            ->assertJsonPath('expedientes.0.progreso', ['total' => 9, 'cumplidos' => 1, 'porcentaje' => 11])
+            ->assertJsonPath('expedientes.1.id', $anterior->id)
+            ->assertJsonPath('expedientes.1.progreso', ['total' => 8, 'cumplidos' => 3, 'porcentaje' => 38]);
+        $this->assertSame(['Obras de agua', 'SGR'], collect($r->json('expedientes.0.plantillas'))->pluck('nombre')->all());
+        $this->assertSame(['SGR'], collect($r->json('expedientes.1.plantillas'))->pluck('nombre')->all());
+        $servicio = app(ExpedienteService::class);
+        $this->assertSame($servicio->progresoDe($actual), $r->json('expedientes.0.progreso'));
+        $this->assertSame($servicio->presentar($actual)['plantillas'], $r->json('expedientes.0.plantillas'));
+    }
+
     public function test_el_listado_de_expedientes_no_hace_mas_consultas_con_mas_expedientes(): void
     {
         $agua = $this->plantilla('Obras de agua', ['Planos firmados' => [null]]);

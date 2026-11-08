@@ -445,6 +445,24 @@ class ComposicionExpedienteTest extends TestCase
         $this->assertSame([], $this->origenes($retirada));
     }
 
+    public function test_la_fila_anclada_en_un_origen_gana_aunque_este_retirada_y_la_otra_aplique(): void
+    {
+        // Los otros dos criterios favorecen a la fila sin ancla: aplica y tiene el id menor.
+        $expediente = $this->expediente();
+        $a1 = $this->sgrA1();
+        $this->fila($expediente, $a1)->delete();
+        $sinAncla = $this->filaAnclada($expediente, $this->copiaAnterior($a1, 98), true, true);
+        $anclada = $this->filaAnclada($expediente, $a1, false);
+
+        $this->servicio->sincronizar($expediente->refresh());
+
+        $this->assertTrue($anclada->refresh()->aplica);
+        $this->assertSame([$a1->id], $this->origenes($anclada));
+        $this->assertFalse($sinAncla->refresh()->aplica);
+        $this->assertTrue($sinAncla->cumplido); // retirada, conserva su trabajo
+        $this->assertSame([], $this->origenes($sinAncla));
+    }
+
     public function test_sin_ancla_en_los_origenes_gana_la_fila_que_aplica_y_luego_la_de_id_menor(): void
     {
         $expediente = $this->expediente();
