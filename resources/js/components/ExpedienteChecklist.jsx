@@ -66,6 +66,13 @@ const FormularioPropio = ({ fila, ocupado, onGuardar, onCancelar }) => {
             className="exv-propio-form"
             aria-label={fila ? 'Editar requisito propio' : 'Agregar requisito propio'}
             onSubmit={(e) => { e.preventDefault(); onGuardar(formulario); }}
+            // Escape cierra como "Cancelar", y el foco vuelve al botón que abrió el formulario.
+            onKeyDown={(e) => {
+                if (e.key !== 'Escape' || ocupado) return;
+                e.preventDefault();
+                e.stopPropagation();
+                onCancelar();
+            }}
         >
             <label className="exv-campo" htmlFor={`${prefijo}-titulo`}>
                 <span>Título</span>
@@ -125,11 +132,12 @@ const FormularioPropio = ({ fila, ocupado, onGuardar, onCancelar }) => {
 };
 
 const ItemRequisito = ({
-    fila, editable, usuario, responsables, ocupado, onMarcar, onObservacion, onSubirSoporte, onDescargarSoporte, onEliminarSoporte,
+    fila, editable, usuario, responsables, ocupado, formularioAbierto, onMarcar, onObservacion, onSubirSoporte, onDescargarSoporte, onEliminarSoporte,
     onAplica, onNoAplica, onRetirarNoAplica, onAprobarNoAplica, onRechazarNoAplica, onResponsable, onCargarHistorial, onDescargarHistorial,
     onEditarPropio, onEliminarPropio,
 }) => {
     const contenido = contenidoFila(fila);
+    const nombre = nombreFila(contenido);
     const [viendoObservacion, setViendoObservacion] = useState(Boolean(fila.observacion));
     const [viendoHistorial, setViendoHistorial] = useState(false);
     const acciones = editable ? accionesAplicabilidad(fila, usuario) : [];
@@ -206,7 +214,7 @@ const ItemRequisito = ({
                 {editable ? (
                     <select
                         value={fila.responsable?.id ?? ''}
-                        aria-label={`Responsable del requisito ${nombreFila(contenido)}`}
+                        aria-label={`Responsable del requisito ${nombre}`}
                         onChange={(e) => onResponsable(fila, e.target.value ? Number(e.target.value) : null)}
                     >
                         <option value="">Sin asignar</option>
@@ -243,7 +251,13 @@ const ItemRequisito = ({
                     </label>
                 )}
                 {acciones.includes('aplica') && (
-                    <button type="button" className="exv-mini exv-mini-exito" disabled={ocupado} onClick={() => onAplica(fila)}>
+                    <button
+                        type="button"
+                        className="exv-mini exv-mini-exito"
+                        disabled={ocupado}
+                        aria-label={`Aplica el requisito ${nombre}`}
+                        onClick={() => onAplica(fila)}
+                    >
                         <FontAwesomeIcon icon={faCircleCheck} /> Aplica
                     </button>
                 )}
@@ -259,20 +273,34 @@ const ItemRequisito = ({
                 )}
                 {acciones.includes('aprobar') && (
                     <>
-                        <button type="button" className="exv-mini exv-mini-exito" onClick={() => onAprobarNoAplica(fila)}>
+                        <button type="button" className="exv-mini exv-mini-exito" disabled={ocupado} onClick={() => onAprobarNoAplica(fila)}>
                             <FontAwesomeIcon icon={faCheck} /> Aprobar
                         </button>
-                        <button type="button" className="exv-mini exv-mini-peligro" onClick={() => onRechazarNoAplica(fila)}>
+                        <button type="button" className="exv-mini exv-mini-peligro" disabled={ocupado} onClick={() => onRechazarNoAplica(fila)}>
                             <FontAwesomeIcon icon={faXmark} /> Rechazar
                         </button>
                     </>
                 )}
                 {editable && contenido.propio && (
                     <>
-                        <button type="button" className="exv-mini" disabled={ocupado} data-foco={`editar-propio-${fila.id}`} onClick={() => onEditarPropio(fila)}>
+                        {/* Un solo formulario a la vez: con uno abierto, no se edita ni se elimina otro propio. */}
+                        <button
+                            type="button"
+                            className="exv-mini"
+                            disabled={ocupado || formularioAbierto}
+                            data-foco={`editar-propio-${fila.id}`}
+                            aria-label={`Editar el requisito propio ${nombre}`}
+                            onClick={() => onEditarPropio(fila)}
+                        >
                             <FontAwesomeIcon icon={faPen} /> Editar
                         </button>
-                        <button type="button" className="exv-mini exv-mini-peligro" disabled={ocupado} onClick={() => onEliminarPropio(fila)}>
+                        <button
+                            type="button"
+                            className="exv-mini exv-mini-peligro"
+                            disabled={ocupado || formularioAbierto}
+                            aria-label={`Eliminar el requisito propio ${nombre}`}
+                            onClick={() => onEliminarPropio(fila)}
+                        >
                             <FontAwesomeIcon icon={faTrash} /> Eliminar
                         </button>
                     </>
@@ -306,7 +334,7 @@ const ItemRequisito = ({
                         rows={2}
                         maxLength={2000}
                         placeholder="Observación sobre este requisito"
-                        aria-label={`Observación del requisito ${nombreFila(contenido)}`}
+                        aria-label={`Observación del requisito ${nombre}`}
                         defaultValue={fila.observacion ?? ''}
                         onBlur={(e) => {
                             if (e.target.value.trim() !== (fila.observacion ?? '')) {
@@ -440,7 +468,8 @@ const ExpedienteChecklist = ({ expediente, editable, ocupado, onGuardarPropio, o
                 key={fila.id}
                 fila={fila}
                 editable={editable}
-                ocupado={ocupado || formulario !== null}
+                ocupado={ocupado}
+                formularioAbierto={formulario !== null}
                 onEditarPropio={abrir}
                 onEliminarPropio={onEliminarPropio}
                 {...acciones}
