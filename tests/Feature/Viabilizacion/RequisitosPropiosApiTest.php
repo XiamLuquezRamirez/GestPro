@@ -10,6 +10,7 @@ use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
 use App\Models\ProyectoRequisito;
 use App\Models\RequisitoCatalogo;
+use App\Models\Responsable;
 use App\Models\User;
 use App\Services\Viabilizacion\ExpedienteService;
 use Database\Seeders\CatalogoRequisitosSgrSeeder;
@@ -151,7 +152,7 @@ class RequisitosPropiosApiTest extends TestCase
         $this->agregar(['categoria' => 'deportivo'])->assertStatus(422)
             ->assertJsonValidationErrors(['categoria' => 'Elige una categoría de la lista.']);
         $this->agregar(['caracter' => 'condicionado'])->assertStatus(422)
-            ->assertJsonValidationErrors(['caracter' => 'El carácter de un requisito propio es obligatorio u opcional.']);
+            ->assertJsonValidationErrors(['caracter' => 'Elige si el requisito es obligatorio u opcional.']);
         $this->agregar(['titulo' => ['a']])->assertStatus(422)
             ->assertJsonValidationErrors(['titulo' => 'Revisa el título: debe ser un texto.']);
 
@@ -264,7 +265,8 @@ class RequisitosPropiosApiTest extends TestCase
         $this->assertNull(ProyectoRequisito::find($fila->id));
         $this->assertSame(['requisito_propio_eliminado', [
             'titulo' => 'Acta de socialización con la comunidad', 'descripcion' => null, 'categoria' => 'social',
-            'caracter' => 'obligatorio', 'observacion' => null,
+            'caracter' => 'obligatorio', 'observacion' => null, 'responsable_id' => null, 'responsable' => null,
+            'estado_aplicabilidad' => 'aplica', 'justificacion_no_aplica' => null,
         ], null], $this->eventos($fila)[1]);
         $this->assertSame($this->expediente->id, (int) DB::table('checklist_historial')->where('evento', 'requisito_propio_eliminado')->value('expediente_id'));
     }
@@ -291,8 +293,10 @@ class RequisitosPropiosApiTest extends TestCase
         $fila = $this->propio();
         $url = "/GestPro/expedientes/{$this->expediente->id}/requisitos/{$fila->id}";
 
-        $this->como()->patchJson($url, ['cumplido' => true, 'observacion' => 'Entregada'])->assertOk()
+        $responsable = Responsable::create(['nombre' => 'Juan Pérez', 'activo' => true]);
+        $this->como()->patchJson($url, ['cumplido' => true, 'observacion' => 'Entregada', 'responsable_id' => $responsable->id])->assertOk()
             ->assertJsonPath('requisito.estado', 'cumplido')
+            ->assertJsonPath('requisito.responsable.id', $responsable->id)
             ->assertJsonPath('progreso.cumplidos', 1);
         $this->como()->post("{$url}/soporte", ['archivo' => UploadedFile::fake()->create('acta.pdf', 10, 'application/pdf')])->assertOk()
             ->assertJsonPath('requisito.soporte.nombre', 'acta.pdf');
@@ -300,7 +304,8 @@ class RequisitosPropiosApiTest extends TestCase
         $this->como()->deleteJson("{$url}/soporte")->assertOk()->assertJsonPath('requisito.soporte', null);
 
         $eventos = collect($this->como(Rol::Consulta)->getJson("{$url}/historial")->assertOk()->json())->pluck('evento')->all();
-        $this->assertSame(['soporte_eliminado', 'soporte_subido', 'observacion_cambiada', 'cumplido_marcado', 'requisito_propio_agregado'], $eventos);
+        $this->assertSame(['soporte_eliminado', 'soporte_subido', 'responsable_cambiado', 'observacion_cambiada', 'cumplido_marcado', 'requisito_propio_agregado'], $eventos);
+        $this->assertSame(['responsable_cambiado', ['responsable_id' => null, 'responsable' => null], ['responsable_id' => $responsable->id, 'responsable' => 'Juan Pérez']], $this->eventos($fila)[3]);
     }
 
     public function test_un_propio_admite_no_aplica_sin_aprobacion(): void
@@ -353,5 +358,69 @@ class RequisitosPropiosApiTest extends TestCase
         $resumen = collect($this->como(Rol::Consulta)->getJson('/GestPro/expedientes')->assertOk()->json())
             ->firstWhere('expediente_id', $this->expediente->id);
         $this->assertSame(9, $resumen['progreso']['total']);
+    }
+
+    public function test_valida_tambien_al_editar(): void
+    {
+        $fila = $this->propio();
+
+        $this->como()->putJson($this->url($fila), ['titulo' => 'Acta', 'caracter' => 'condicionado'])->assertStatus(422)
+            ->assertJsonValidationErrors(['caracter' => 'Elige si el requisito es obligatorio u opcional.']);
+        $this->como()->putJson($this->url($fila), ['titulo' => str_repeat('a', 501)])->assertStatus(422)
+            ->assertJsonValidationErrors(['titulo' => 'El título admite hasta 500 caracteres.']);
+        $this->como()->putJson($this->url($fila), ['titulo' => 'Acta', 'categoria' => 'deportivo'])->assertStatus(422)
+            ->assertJsonValidationErrors(['categoria' => 'Elige una categoría de la lista.']);
+        $this->como()->putJson($this->url($fila), ['titulo' => '   '])->assertStatus(422)
+            ->assertJsonValidationErrors(['titulo' => 'Escribe el título del requisito.']);
+
+        $this->assertSame('Acta de socialización con la comunidad', $fila->fresh()->titulo_propio);
+        $this->assertCount(1, $this->eventos($fila));
+    }
+
+    public function test_la_foto_de_eliminacion_es_completa_por_si_sola(): void
+    {
+        $fila = $this->propio(['descripcion' => 'Con la junta', 'categoria' => 'social']);
+        $responsable = Responsable::create(['nombre' => 'Juan Pérez', 'activo' => true]);
+        $base = "/GestPro/expedientes/{$this->expediente->id}/requisitos/{$fila->id}";
+        $this->como()->patchJson($base, ['observacion' => 'Pendiente de firma', 'responsable_id' => $responsable->id])->assertOk();
+        $this->como()->postJson("{$base}/no-aplica", ['justificacion' => 'Ya se socializó en otro proyecto.'])->assertOk();
+
+        $this->como()->deleteJson($this->url($fila))->assertOk();
+
+        $eventos = $this->eventos($fila);
+        $this->assertSame(['requisito_propio_eliminado', [
+            'titulo' => 'Acta de socialización con la comunidad', 'descripcion' => 'Con la junta', 'categoria' => 'social',
+            'caracter' => 'obligatorio', 'observacion' => 'Pendiente de firma',
+            'responsable_id' => $responsable->id, 'responsable' => 'Juan Pérez',
+            'estado_aplicabilidad' => 'no_aplica', 'justificacion_no_aplica' => 'Ya se socializó en otro proyecto.',
+        ], null], $eventos[count($eventos) - 1]);
+    }
+
+    public function test_agregar_editar_y_eliminar_actualizan_el_expediente(): void
+    {
+        $marca = fn () => $this->expediente->fresh()->updated_at->getTimestamp();
+
+        $this->travel(1)->hours();
+        $fila = $this->propio();
+        $this->assertSame(now()->getTimestamp(), $marca(), 'agregar');
+
+        $this->travel(1)->hours();
+        $this->como()->putJson($this->url($fila), ['titulo' => 'Acta firmada'])->assertOk();
+        $this->assertSame(now()->getTimestamp(), $marca(), 'editar');
+
+        $this->travel(1)->hours();
+        $this->como()->deleteJson($this->url($fila))->assertOk();
+        $this->assertSame(now()->getTimestamp(), $marca(), 'eliminar');
+    }
+
+    public function test_una_fila_de_plantilla_retirada_dice_que_viene_de_la_plantilla(): void
+    {
+        $fila = $this->filaSgr();
+        $fila->update(['aplica' => false]);
+
+        $this->como()->putJson($this->url($fila), ['titulo' => 'Otro'])->assertStatus(422)
+            ->assertJsonPath('mensaje', 'Este requisito viene de una plantilla: solo se editan los requisitos propios del proyecto.');
+        $this->como()->deleteJson($this->url($fila))->assertStatus(422)
+            ->assertJsonPath('mensaje', 'Este requisito viene de una plantilla: solo se eliminan los requisitos propios del proyecto.');
     }
 }

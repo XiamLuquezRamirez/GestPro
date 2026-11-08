@@ -23,7 +23,7 @@ class RequisitoPropioController extends Controller
         'titulo.max' => 'El título admite hasta 500 caracteres.',
         'descripcion.max' => 'La descripción admite hasta 2000 caracteres.',
         'categoria.in' => 'Elige una categoría de la lista.',
-        'caracter.in' => 'El carácter de un requisito propio es obligatorio u opcional.',
+        'caracter.in' => 'Elige si el requisito es obligatorio u opcional.',
     ];
 
     private const ATRIBUTOS = [

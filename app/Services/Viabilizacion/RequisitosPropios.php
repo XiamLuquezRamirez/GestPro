@@ -110,6 +110,10 @@ final class RequisitosPropios
             $this->historial->registrarFila($actual, 'requisito_propio_eliminado', [
                 ...$this->valoresDe($actual),
                 'observacion' => $actual->observacion,
+                'responsable_id' => $actual->responsable_id,
+                'responsable' => $actual->responsable?->nombre,
+                'estado_aplicabilidad' => $actual->estado_aplicabilidad,
+                'justificacion_no_aplica' => $actual->justificacion_no_aplica,
             ], [], $usuario);
             $actual->delete();
             $expediente->touch();
@@ -118,10 +122,11 @@ final class RequisitosPropios
 
     private function exigirPropio(ProyectoExpediente $expediente, ProyectoRequisito $fila, string $motivo): void
     {
-        $this->expedientes->exigirEditable($expediente, $fila);
+        // Primero la naturaleza de la fila: una de plantilla retirada debe decir que viene de la plantilla.
         if (! $fila->esPropio()) {
             throw new ReglaNegocioException("Este requisito viene de una plantilla: {$motivo}");
         }
+        $this->expedientes->exigirEditable($expediente, $fila);
     }
 
     /** Valores del pedido en el orden de CAMPOS, con los textos recortados y los vacíos como null. */
