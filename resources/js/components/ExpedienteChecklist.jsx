@@ -16,6 +16,7 @@ import {
     puedeMarcarRequisito,
     responsablesDisponibles,
     textoOrigenes,
+    textoAvisosDuplicados,
     textoPorDefinir,
 } from '../utils/expedienteChecklist';
 import ExpedienteHistorialRequisito from './ExpedienteHistorialRequisito';
@@ -28,20 +29,25 @@ const fechaCorta = (iso) => (iso ? new Date(iso).toLocaleDateString('es-CO') : '
 const nombreFila = (contenido) => contenido.codigo ?? (contenido.texto.length > 60 ? `${contenido.texto.slice(0, 60)}…` : contenido.texto);
 
 /** Textos parecidos entre plantillas distintas. Solo avisan: el sistema nunca los fusiona. */
-export const AvisosDuplicados = ({ avisos }) => {
-    if (!avisos?.length) return null;
+export const AvisosDuplicados = ({ avisos, total }) => {
+    const textos = textoAvisosDuplicados(avisos, total);
+    if (!textos) return null;
+    // La lista va plegada: un role="status" no debe leer de corrido hasta 50 pares.
     return (
         <div className="exv-aviso exv-duplicados exv-no-imprimir" role="status">
-            <b>{avisos.length === 1 ? 'Un requisito podría estar repetido' : `${avisos.length} requisitos podrían estar repetidos`}</b>{' '}
-            entre plantillas: sus textos se parecen, pero no comparten código común. Revísalos; el sistema no los une.
-            <ul>
-                {avisos.map((aviso) => (
-                    <li key={aviso.filas.join('-')}>
-                        «{aviso.textos[0]}» ({aviso.plantillas[0]}) y «{aviso.textos[1]}» ({aviso.plantillas[1]})
-                        <span className="exv-duplicados-similitud"> · {Math.round(aviso.similitud * 100)} % de palabras en común</span>
-                    </li>
-                ))}
-            </ul>
+            <b>{textos.titulo}.</b>{' '}
+            Están en plantillas distintas y no comparten código común. Revísalos; el sistema no los une.
+            <details>
+                <summary>{textos.resumen}</summary>
+                <ul>
+                    {avisos.map((aviso) => (
+                        <li key={aviso.filas.join('-')}>
+                            «{aviso.textos[0]}» ({aviso.plantillas[0]}) y «{aviso.textos[1]}» ({aviso.plantillas[1]})
+                            <span className="exv-duplicados-similitud"> · {Math.round(aviso.similitud * 100)} % de palabras en común</span>
+                        </li>
+                    ))}
+                </ul>
+            </details>
         </div>
     );
 };
@@ -444,7 +450,7 @@ const ExpedienteChecklist = ({ expediente, editable, ocupado, onGuardarPropio, o
 
     return (
         <div ref={contenedor}>
-            <AvisosDuplicados avisos={expediente.avisos_duplicados} />
+            <AvisosDuplicados avisos={expediente.avisos_duplicados} total={expediente.avisos_duplicados_total} />
 
             {deCatalogo.length === 0 && !propios && (
                 <div className="exv-vacio">

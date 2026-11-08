@@ -423,6 +423,8 @@ span.exv-plantilla-principal { cursor: default; }
 .exv-por-definir { border-left-color: var(--exv-bronce); }
 .exv-item-descripcion { display: block; margin-top: .25rem; font-size: .82rem; color: var(--exv-tinta-suave); white-space: pre-wrap; }
 .exv-estado-propio { color: var(--exv-a12); background: var(--exv-a12-tinte); }
+.exv-duplicados details { margin-top: .35rem; }
+.exv-duplicados summary { cursor: pointer; font-weight: 600; }
 .exv-duplicados ul { margin: .4rem 0 0; padding-left: 1.1rem; }
 .exv-duplicados li { margin-top: .2rem; }
 .exv-duplicados-similitud { color: var(--exv-tinta-suave); }

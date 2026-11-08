@@ -309,6 +309,25 @@ export const textoPlantillas = (plantillas) => {
     return `${nombres.length === 1 ? 'Plantilla' : 'Plantillas'}: ${nombres.join(', ')}`;
 };
 
+/**
+ * Textos del aviso de requisitos parecidos entre plantillas. Cada aviso es un par de filas; el
+ * backend manda los más parecidos, hasta un tope, y en `total` cuántos pares hay en realidad.
+ * - `titulo`: "1 par de requisitos se parece", "3 pares de requisitos se parecen" o, con tope,
+ *   "73 pares de requisitos se parecen; se muestran los 50 más parecidos".
+ * - `resumen`: el texto que despliega la lista.
+ * Sin avisos devuelve null.
+ */
+export const textoAvisosDuplicados = (avisos, total) => {
+    const mostrados = avisos?.length ?? 0;
+    if (mostrados === 0) return null;
+    const pares = Math.max(Number(total) || 0, mostrados);
+    const titulo = pares === 1 ? '1 par de requisitos se parece' : `${pares} pares de requisitos se parecen`;
+    return {
+        titulo: pares > mostrados ? `${titulo}; se muestran los ${mostrados} más parecidos` : titulo,
+        resumen: mostrados === 1 ? 'Ver el par' : `Ver los ${mostrados} pares`,
+    };
+};
+
 /** Con más de un origen, las demás plantillas de las que viene la fila: "También en: Vías, Riego". */
 export const textoOrigenes = (fila) => {
     const origenes = fila.origenes ?? [];

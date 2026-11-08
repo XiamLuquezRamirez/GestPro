@@ -640,7 +640,7 @@ const ExpedienteViabilizacion = ({ user }) => {
                                                             <b>Sin tipo de proyecto: {sinTipo.join(', ')}.</b> Se cargarán todos los requisitos de ese sector, incluidos los que no le apliquen al proyecto.
                                                         </div>
                                                     )}
-                                                    <AvisosDuplicados avisos={expediente.avisos_duplicados} />
+                                                    <AvisosDuplicados avisos={expediente.avisos_duplicados} total={expediente.avisos_duplicados_total} />
                                                     <div className="exv-confirmar-pie">
                                                         <span>
                                                             {recalculando

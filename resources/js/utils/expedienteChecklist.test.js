@@ -24,6 +24,7 @@ import {
     sectoresSinTipo,
     seleccionDesde,
     sectoresConFuenteA12,
+    textoAvisosDuplicados,
     textoOrigenes,
     textoPlantillas,
     textoPorDefinir,
@@ -679,5 +680,35 @@ describe('actualizarExpedienteEnLista', () => {
     it('sin lista, o si el expediente no está, no cambia nada', () => {
         expect(actualizarExpedienteEnLista(undefined, actualizado)).toBeUndefined();
         expect(actualizarExpedienteEnLista(lista, { ...actualizado, id: 9 })).toEqual(lista);
+    });
+});
+
+describe('textoAvisosDuplicados', () => {
+    const aviso = (n) => ({ filas: [n, n + 100], textos: ['a', 'b'], plantillas: ['SGR', 'Agua'], similitud: 0.9 });
+    const avisos = (n) => Array.from({ length: n }, (_, i) => aviso(i + 1));
+
+    it('sin avisos no hay texto', () => {
+        expect(textoAvisosDuplicados([], 0)).toBeNull();
+        expect(textoAvisosDuplicados(undefined, undefined)).toBeNull();
+    });
+
+    it('un solo par va en singular', () => {
+        expect(textoAvisosDuplicados(avisos(1), 1)).toEqual({ titulo: '1 par de requisitos se parece', resumen: 'Ver el par' });
+    });
+
+    it('varios pares, todos a la vista', () => {
+        expect(textoAvisosDuplicados(avisos(3), 3)).toEqual({ titulo: '3 pares de requisitos se parecen', resumen: 'Ver los 3 pares' });
+    });
+
+    it('con tope dice el total real y cuántos se muestran', () => {
+        expect(textoAvisosDuplicados(avisos(50), 73)).toEqual({
+            titulo: '73 pares de requisitos se parecen; se muestran los 50 más parecidos',
+            resumen: 'Ver los 50 pares',
+        });
+    });
+
+    it('sin total, o con uno menor, cuenta los que llegaron', () => {
+        expect(textoAvisosDuplicados(avisos(2)).titulo).toBe('2 pares de requisitos se parecen');
+        expect(textoAvisosDuplicados(avisos(2), 1).titulo).toBe('2 pares de requisitos se parecen');
     });
 });
