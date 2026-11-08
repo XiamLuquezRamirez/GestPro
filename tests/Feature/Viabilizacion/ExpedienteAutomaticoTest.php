@@ -170,6 +170,8 @@ class ExpedienteAutomaticoTest extends TestCase
         $this->assertTrue($servicio->correspondeAutomatico($this->proyecto([], [$this->fuenteSgr])));
         $this->assertTrue($servicio->correspondeAutomatico($this->proyecto([], [$this->fuentePropios])));
         $this->assertFalse($servicio->correspondeAutomatico($this->proyecto(['financiacion_por_definir' => true], [])));
+        // "Por definir" no es una fuente definida, aunque queden fuentes de antes.
+        $this->assertFalse($servicio->correspondeAutomatico($this->proyecto(['financiacion_por_definir' => true], [$this->fuenteSgr])));
         $this->assertFalse($servicio->correspondeAutomatico($this->proyecto(['fase' => $this->licitacion])));
         $this->assertFalse($servicio->correspondeAutomatico($conExpediente));
     }
@@ -191,6 +193,51 @@ class ExpedienteAutomaticoTest extends TestCase
         $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id])->assertOk();
 
         $this->assertDatabaseCount('proyectos_expedientes', 0);
+    }
+
+    public function test_definir_la_financiacion_de_un_proyecto_por_definir_crea_su_expediente(): void
+    {
+        $proyecto = $this->proyecto(['financiacion_por_definir' => true], []);
+
+        // Seguir por definir no lo crea.
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'fuenteIds' => [], 'financiacionPorDefinir' => true])->assertOk();
+        $this->assertDatabaseCount('proyectos_expedientes', 0);
+
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'fuenteIds' => [$this->fuenteSgr]])->assertOk();
+
+        $expediente = $proyecto->expedientes()->sole();
+        $this->assertNull($expediente->fecha_configuracion);
+        $this->assertSame([PlantillaChecklist::sgr()->id], $expediente->versionesPlantilla()->pluck('plantilla_id')->all());
+
+        // Un borrador eliminado a propósito no vuelve a nacer con la siguiente edición.
+        app(ExpedienteService::class)->eliminar($expediente);
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'fuenteIds' => [$this->fuentePropios]])->assertOk();
+        $this->assertDatabaseCount('proyectos_expedientes', 0);
+    }
+
+    public function test_definir_la_financiacion_fuera_de_formulacion_no_crea_expediente(): void
+    {
+        $proyecto = $this->proyecto(['financiacion_por_definir' => true, 'fase' => $this->licitacion], []);
+
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'fase' => $this->licitacion, 'fuenteIds' => [$this->fuenteSgr]])->assertOk();
+
+        $this->assertDatabaseCount('proyectos_expedientes', 0);
+    }
+
+    public function test_un_fallo_al_decidir_si_corresponde_tampoco_interrumpe(): void
+    {
+        Exceptions::fake();
+        $proyecto = $this->proyecto();
+        // Falla la consulta de la fase, la primera que hace correspondeAutomatico.
+        DB::listen(function ($q) {
+            if (str_contains($q->sql, '"fases"')) {
+                throw new \RuntimeException('Se cayó la conexión.');
+            }
+        });
+
+        $this->assertNull(app(ExpedienteService::class)->crearAutomatico($proyecto, null));
+
+        Exceptions::assertReported(\RuntimeException::class);
     }
 
     /**

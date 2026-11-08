@@ -297,6 +297,11 @@ class ProyectoController extends Controller
         $financiacion = $esNuevo || array_key_exists('fuenteIds', $proyecto) || array_key_exists('financiacionPorDefinir', $proyecto)
             ? $fuentes->validar($proyecto, $esNuevo ? null : (int) $proyectoId)
             : null;
+        // Antes de la transacción, como la fase: un proyecto "por definir" que pasa a tener
+        // fuente crea su expediente. Solo entonces: en cada edición volvería a nacer un
+        // borrador que alguien eliminó a propósito.
+        $estabaPorDefinir = ! $esNuevo
+            && (bool) DB::table('proyectos')->where('id', $proyectoId)->value('financiacion_por_definir');
 
         DB::beginTransaction();
 
@@ -394,9 +399,11 @@ class ProyectoController extends Controller
         // Después del commit: el proyecto queda guardado pase lo que pase con el expediente.
         $respuesta = ['success' => 'Proyecto guardado correctamente'];
         $guardado = Proyecto::find($proyectoId);
-        if ($guardado && $proyecto['accion'] == 'Agregar') {
+        // crearAutomatico decide si corresponde: Formulación, alguna fuente y sin expediente.
+        if ($guardado && ($esNuevo || ($estabaPorDefinir && ! $guardado->financiacion_por_definir))) {
             $expedientes->crearAutomatico($guardado, $request->user());
-        } elseif ($guardado && ($advertencia = $expedientes->advertenciaAlSalirDeFormulacion($guardado, $faseAnterior))) {
+        }
+        if ($guardado && ! $esNuevo && ($advertencia = $expedientes->advertenciaAlSalirDeFormulacion($guardado, $faseAnterior))) {
             $respuesta['advertencia'] = $advertencia;
         }
 

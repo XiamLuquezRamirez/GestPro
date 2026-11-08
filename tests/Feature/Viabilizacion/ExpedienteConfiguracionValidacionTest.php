@@ -208,13 +208,23 @@ class ExpedienteConfiguracionValidacionTest extends TestCase
 
     public function test_con_una_copia_sgr_compatible_se_preselecciona_la_de_clave_sgr(): void
     {
-        // La copia tiene un id menor que el de la SGR: solo la clave decide.
-        $copia = $this->plantilla('SGR copia', ['Planos' => null], ['id' => 0, 'clave' => 'sgr-copia', 'motor' => PlantillaChecklist::MOTOR_SGR]);
+        $copia = $this->plantilla('SGR copia', ['Planos' => null], ['clave' => 'sgr-copia', 'motor' => PlantillaChecklist::MOTOR_SGR]);
+        // La SGR pasa a un id mayor que el de la copia: si decidiera el id, ganaría la copia.
+        // SQLite revisa las claves foráneas al final de la transacción de la prueba, ya consistentes.
+        $nuevoId = $copia->id + 100;
+        DB::statement('PRAGMA defer_foreign_keys = ON');
+        DB::table('plantillas_checklist')->where('id', $this->sgr->id)->update(['id' => $nuevoId]);
+        foreach (['catalogo_versiones', 'plantilla_fuentes', 'plantilla_sectores'] as $tabla) {
+            DB::table($tabla)->where('plantilla_id', $this->sgr->id)->update(['plantilla_id' => $nuevoId]);
+        }
+        $this->sgr = PlantillaChecklist::sgr();
         $this->assertLessThan($this->sgr->id, $copia->id);
+        $proyecto = $this->proyecto();
+        $this->assertSame([$copia->id, $this->sgr->id], app(PlantillasExpediente::class)->idsCompatibles($proyecto));
 
-        $r = $this->crear($this->proyecto(), ['fase_sgr' => 3])->assertCreated();
-
-        $r->assertJsonCount(1, 'plantillas')->assertJsonPath('plantillas.0.plantilla_id', $this->sgr->id);
+        $this->assertSame($this->sgr->id, app(PlantillasExpediente::class)->sgrCompatible($proyecto)?->id);
+        $this->crear($proyecto, ['fase_sgr' => 3])->assertCreated()
+            ->assertJsonCount(1, 'plantillas')->assertJsonPath('plantillas.0.plantilla_id', $this->sgr->id);
     }
 
     // -------------------------------------------------------- avisos duplicados

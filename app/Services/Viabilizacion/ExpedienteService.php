@@ -130,11 +130,11 @@ final class ExpedienteService
      */
     public function crearAutomatico(Proyecto $proyecto, ?User $usuario): ?ProyectoExpediente
     {
-        if (! $this->correspondeAutomatico($proyecto)) {
-            return null;
-        }
-
         try {
+            // Dentro del try: un fallo al consultarlo tampoco interrumpe el guardado.
+            if (! $this->correspondeAutomatico($proyecto)) {
+                return null;
+            }
             $compatibles = $this->plantillas->idsCompatibles($proyecto);
 
             return $this->crearCon($proyecto, $this->seleccionAutomatica($proyecto, $compatibles), $usuario, $compatibles);

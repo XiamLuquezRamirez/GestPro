@@ -579,6 +579,34 @@ class ExpedientePlantillasApiTest extends TestCase
         $this->assertFalse($resumen[$sinPlantillas->id]['tiene_sgr']);
     }
 
+    public function test_el_resumen_de_un_expediente_con_solo_una_plantilla_simple_no_tiene_sgr(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos firmados' => [null]]);
+        $proyecto = $this->proyecto(['recursos_propios']);
+        $this->crear($proyecto, ['plantilla_ids' => [$agua->id]])->assertCreated();
+
+        $resumen = collect($this->como(Rol::Consulta)->getJson('/GestPro/expedientes')->assertOk()->json())->keyBy('proyecto_id');
+
+        $this->assertSame(['Obras de agua'], $resumen[$proyecto->id]['plantillas']);
+        $this->assertFalse($resumen[$proyecto->id]['tiene_sgr']);
+    }
+
+    public function test_el_resumen_ordena_tras_la_principal_por_plantilla_y_no_por_version(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos firmados' => [null]]);
+        $vias = $this->plantilla('Vías', ['Licencia' => [null]]);
+        // La vigente de la SGR queda con un id mayor que la de Obras de agua.
+        $this->sgr->versionVigente()->update(['vigente' => false]);
+        $v2 = $this->sgr->versiones()->create(['numero' => 2, 'estado' => CatalogoVersion::PUBLICADA, 'vigente' => true]);
+        $this->assertGreaterThan($agua->versionVigente()->id, $v2->id);
+        $proyecto = $this->proyecto();
+        $this->crear($proyecto, ['fase_sgr' => 3, 'plantilla_ids' => [$agua->id, $this->sgr->id, $vias->id], 'principal_id' => $vias->id])->assertCreated();
+
+        $resumen = collect($this->como(Rol::Consulta)->getJson('/GestPro/expedientes')->assertOk()->json())->keyBy('proyecto_id');
+
+        $this->assertSame(['Vías', 'SGR', 'Obras de agua'], $resumen[$proyecto->id]['plantillas']);
+    }
+
     public function test_el_resumen_hace_tres_consultas_sin_importar_cuantos_proyectos_haya(): void
     {
         $agua = $this->plantilla('Obras de agua', ['Planos firmados' => [null]]);
