@@ -188,6 +188,55 @@
 .exv-opt input:disabled { cursor: not-allowed; }
 .exv-opt-sub { display: block; font-size: .74rem; color: var(--exv-tinta-tenue); }
 
+/* Plantillas del expediente: primer bloque del panel */
+.exv-config-aviso, .exv-config-nota { margin: 0 0 .6rem; font-size: .78rem; line-height: 1.45; }
+.exv-config-aviso { padding: .4rem .55rem; color: var(--exv-tinta); background: var(--exv-alerta-tinte); border-left: 3px solid var(--exv-alerta); border-radius: 2px; }
+.exv-config-nota { color: var(--exv-tinta-tenue); }
+.exv-plantilla { padding: .5rem .6rem; margin-bottom: .5rem; border: 1px solid var(--exv-linea-suave); border-radius: var(--exv-radio); }
+.exv-plantilla:last-child { margin-bottom: 0; }
+.exv-plantilla.marcada { border-color: var(--gp-azul); background: var(--exv-a12-tinte); }
+.exv-plantilla .exv-opt { padding: 0; }
+.exv-plantilla-nombre { font-weight: 700; color: var(--exv-tinta); }
+.exv-plantilla-aviso {
+    display: inline-block;
+    margin-left: .4rem;
+    padding: .02rem .35rem;
+    font-size: .64rem;
+    font-weight: 600;
+    color: var(--exv-tinta);
+    background: var(--exv-alerta-tinte);
+    border-radius: 2px;
+}
+.exv-plantilla-detalle { margin: .3rem 0 0 calc(15px + .6rem); font-size: .74rem; line-height: 1.4; color: var(--exv-tinta-suave); }
+.exv-plantilla-detalle p { margin: 0 0 .25rem; }
+.exv-plantilla-detalle dl { margin: 0; }
+.exv-plantilla-detalle dl div { display: flex; gap: .35rem; }
+.exv-plantilla-detalle dt { flex-shrink: 0; font-weight: 600; color: var(--exv-tinta-tenue); }
+.exv-plantilla-detalle dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.exv-plantilla-motivo { margin-top: .3rem !important; font-style: italic; color: var(--exv-tinta-tenue); }
+.exv-plantilla-principal {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin: .35rem 0 0 calc(15px + .6rem);
+    font-size: .74rem;
+    font-weight: 600;
+    color: var(--exv-bronce-oscuro);
+    cursor: pointer;
+}
+span.exv-plantilla-principal { cursor: default; }
+.exv-plantilla-principal input { margin: 0; accent-color: var(--gp-azul); }
+.exv-panel-sgr { border-top: 1px solid var(--exv-linea-suave); }
+.exv-panel-sgr-titulo {
+    margin: 0;
+    padding: .8rem 1.1rem 0;
+    font-size: .76rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--exv-tinta);
+}
+
 .exv-seg { display: flex; gap: .4rem; clear: both; }
 .exv-seg label {
     position: relative;
