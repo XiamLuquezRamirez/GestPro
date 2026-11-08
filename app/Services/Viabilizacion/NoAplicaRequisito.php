@@ -112,6 +112,8 @@ final class NoAplicaRequisito
     /**
      * Cambios que quitan el "no aplica": la fila vuelve al estado que tenía al marcarlo
      * (antes.estado del último no_aplica_marcado). Sin ese registro, aplica.
+     * La decisión y la lectura del historial ocurren después de bloquear la fila en `guardar`;
+     * estas acciones no deben correr dentro de otra transacción que ya haya leído el historial.
      */
     private function sinNoAplica(ProyectoRequisito $fila): array
     {

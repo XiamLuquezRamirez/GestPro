@@ -3,6 +3,7 @@
 namespace Tests\Feature\Viabilizacion;
 
 use App\Enums\Rol;
+use App\Exceptions\ReglaNegocioException;
 use App\Models\CatalogoVersion;
 use App\Models\FuenteFinanciacion;
 use App\Models\PlantillaChecklist;
@@ -12,6 +13,7 @@ use App\Models\ProyectoRequisito;
 use App\Models\RequisitoCatalogo;
 use App\Models\User;
 use App\Services\Viabilizacion\ExpedienteService;
+use App\Services\Viabilizacion\NoAplicaRequisito;
 use Database\Seeders\CatalogoRequisitosSgrSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -260,6 +262,35 @@ class NoAplicaOrigenesApiTest extends TestCase
         $this->como()->deleteJson($this->url($fila, '/no-aplica'))->assertOk()
             ->assertJsonPath('requisito.estado', 'por_definir');
         $this->assertNull($fila->fresh()->usuario_aprobo_id);
+        $this->assertNull($fila->fresh()->fecha_aprobacion);
+    }
+
+    public function test_el_estado_previo_sale_del_historial_de_la_misma_fila(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos firmados' => [null], 'Permiso de vertimientos' => [null, 'condicionado']]);
+        $expediente = $this->expediente($agua);
+        $planos = $this->fila($expediente, 'Planos firmados');
+        $this->marcar($planos)->assertOk();
+        $this->marcar($this->fila($expediente, 'Permiso de vertimientos'))->assertOk();
+
+        $this->como()->deleteJson($this->url($planos, '/no-aplica'))->assertOk()->assertJsonPath('requisito.estado', 'pendiente');
+    }
+
+    public function test_aplica_con_una_lectura_vieja_no_pisa_un_no_aplica(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Permiso de vertimientos' => [null, 'condicionado']]);
+        $expediente = $this->expediente($agua);
+        $fila = $this->fila($expediente, 'Permiso de vertimientos');
+        $vieja = $fila->fresh(); // la cargó otra petición, todavía por definir
+        $this->marcar($fila)->assertOk();
+
+        try {
+            app(NoAplicaRequisito::class)->decidirAplica($expediente, $vieja, User::factory()->create(['rol' => Rol::Gestor]));
+            $this->fail('Debía rechazar la decisión.');
+        } catch (ReglaNegocioException $e) {
+            $this->assertSame('Este requisito no está por definir.', $e->getMessage());
+        }
+        $this->assertSame(ProyectoRequisito::NO_APLICA, $fila->fresh()->estado_aplicabilidad);
     }
 
     public function test_cuenta_el_ultimo_no_aplica_marcado(): void
