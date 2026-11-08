@@ -16,7 +16,7 @@ const MINUTOS_ENTRE_RECARGAS = 5;
 const MINUTOS_ENTRE_RENOVACIONES = 30;
 const SEGUNDOS_CONTROLES_VISIBLES = 4;
 
-const TITULOS_ANALISIS = { [VISTA.CONTRATOS]: 'Contratos', [VISTA.EXPEDIENTES]: 'Expedientes SGR' };
+const TITULOS_ANALISIS = { [VISTA.CONTRATOS]: 'Contratos', [VISTA.EXPEDIENTES]: 'Expedientes' };
 
 const horaCorta = (fecha) => fecha.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
 

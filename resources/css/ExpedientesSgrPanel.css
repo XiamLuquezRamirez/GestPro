@@ -1,6 +1,7 @@
-/* Seguimiento de expedientes SGR por proyecto. */
+/* Seguimiento de expedientes por proyecto. */
 .exs-panel { display: grid; gap: 1rem; align-content: start; }
 .exs-secundario { font-size: .72rem; font-weight: 400; color: var(--gp-texto-3); }
+.exs-plantillas { max-width: 16rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 .exs-mensaje { padding: 1.5rem; font-size: .9rem; text-align: center; color: var(--gp-texto-2); background: var(--gp-superficie); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
 .exs-reintentar { margin-top: .75rem; }

@@ -58,7 +58,7 @@ describe('resumirFases', () => {
         expect(licitacion).toMatchObject({ cantidad: 0, presupuesto: 0, proporcion: 0 });
     });
 
-    it('en Formulación mide requisitos SGR, no contratos', () => {
+    it('en Formulación mide requisitos, no contratos', () => {
         const resumenes = [{
             proyecto_id: 1,
             estado: 'borrador',
@@ -66,7 +66,7 @@ describe('resumirFases', () => {
             progreso: { total: 10, cumplidos: 5, porcentaje: 50 },
         }];
 
-        expect(resumirFases(fases, proyectos, resumenes)[0].metrica).toEqual({ pct: 50, etiqueta: 'Requisitos SGR', detalle: '1 de 2 configurados' });
+        expect(resumirFases(fases, proyectos, resumenes)[0].metrica).toEqual({ pct: 50, etiqueta: 'Requisitos', detalle: '1 de 2 configurados' });
     });
 
     it('sin datos no inventa un 0 %', () => {

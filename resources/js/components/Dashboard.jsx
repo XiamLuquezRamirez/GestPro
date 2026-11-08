@@ -21,7 +21,7 @@ import { VISTA, filasEnSala, resolverVista, resumirFases, slugFase } from '../ut
 const VISTAS_ANALISIS = [
     { id: VISTA.ESTADISTICAS, titulo: 'Estadísticas', icono: faChartColumn },
     { id: VISTA.CONTRATOS, titulo: 'Contratos', icono: faFileSignature },
-    { id: VISTA.EXPEDIENTES, titulo: 'Expedientes SGR', icono: faClipboardCheck },
+    { id: VISTA.EXPEDIENTES, titulo: 'Expedientes', icono: faClipboardCheck },
 ];
 
 const hoyEnTexto = () => new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });

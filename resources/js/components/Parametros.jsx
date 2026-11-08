@@ -1784,9 +1784,9 @@ const Parametros = () => {
                                                 <button
                                                     onClick={() => navigate(`/viabilizacion/${item.id}`)}
                                                     className="btn-add-contrato-list btn-expediente"
-                                                    title="Expediente de viabilización SGR"
+                                                    title="Expediente"
                                                 >
-                                                    <FontAwesomeIcon icon={faClipboardCheck} /> Expediente SGR
+                                                    <FontAwesomeIcon icon={faClipboardCheck} /> Expediente
                                                 </button>
                                             )}
 

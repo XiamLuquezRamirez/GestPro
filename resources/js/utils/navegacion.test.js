@@ -69,6 +69,13 @@ describe('puedeVer', () => {
 });
 
 describe('buscarEnPaleta', () => {
+    it('"SGR" sigue llevando a Expedientes aunque el título ya no lo diga', () => {
+        const expedientes = DESTINOS.find((d) => d.id === 'expedientes');
+        expect(expedientes.titulo).toBe('Expedientes');
+        expect(buscarEnPaleta('SGR', DESTINOS, []).map((r) => r.clave)).toContain('expedientes');
+        expect(buscarEnPaleta('viabilización', DESTINOS, []).map((r) => r.clave)).toContain('expedientes');
+    });
+
     it('sin texto muestra solo los destinos', () => {
         const resultados = buscarEnPaleta('', DESTINOS, proyectos);
 
@@ -114,7 +121,7 @@ describe('destinoActivo', () => {
         expect(destinoActivo('/dashboard', '?vista=expedientes')).toBe('expedientes');
     });
 
-    it('un expediente pertenece al seguimiento SGR', () => {
+    it('un expediente pertenece a Expedientes', () => {
         expect(destinoActivo('/viabilizacion/4', '')).toBe('expedientes');
     });
 });
@@ -123,7 +130,7 @@ describe('tituloDeRuta', () => {
     it('da el título de la barra móvil', () => {
         expect(tituloDeRuta('/parametros/tipos-evento', '')).toBe('Tipos de evento');
         expect(tituloDeRuta('/dashboard', '')).toBe('Tablero');
-        expect(tituloDeRuta('/viabilizacion/4', '')).toBe('Expedientes SGR');
+        expect(tituloDeRuta('/viabilizacion/4', '')).toBe('Expedientes');
         expect(tituloDeRuta('/otra', '')).toBe('GestPro');
     });
 });

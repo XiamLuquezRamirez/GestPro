@@ -118,10 +118,10 @@ const ModalProyecto = ({ proyecto, resumenExpedientes, onCerrar }) => {
                             <Dato etiqueta="Entidad que presenta">{proyecto.descripcion_entidad_presenta}</Dato>
                             <Dato etiqueta="Entidad que financia">{proyecto.descripcion_entidad_financia}</Dato>
                             <Dato etiqueta="Fuente de financiación">{proyecto.fuente_financiacion}</Dato>
-                            <Dato etiqueta="Requisitos SGR cumplidos">{textoAvanceProyecto(proyecto.id, resumenExpedientes)}</Dato>
+                            <Dato etiqueta="Requisitos cumplidos">{textoAvanceProyecto(proyecto.id, resumenExpedientes)}</Dato>
                         </dl>
                         <button type="button" className="gp-boton gp-boton-primario tb-modal-accion" onClick={() => navigate(`/viabilizacion/${proyecto.id}`)}>
-                            <FontAwesomeIcon icon={faClipboardCheck} /> Abrir expediente de viabilización SGR
+                            <FontAwesomeIcon icon={faClipboardCheck} /> Abrir expediente
                         </button>
                     </>
                 )}

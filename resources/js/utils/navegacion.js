@@ -28,7 +28,7 @@ export const RUTA_PLANTILLAS = '/plantillas-checklist';
 export const DESTINOS = [
     { id: 'tablero', titulo: 'Tablero', ruta: '/dashboard', grupo: GRUPO.TRABAJO, icono: 'faGaugeHigh', palabras: 'inicio dashboard panel mapa' },
     ...SECCIONES_PARAMETROS.filter((s) => s.grupo === GRUPO.TRABAJO).map((s) => ({ ...s, id: s.slug, ruta: `/parametros/${s.slug}` })),
-    { id: 'expedientes', titulo: 'Expedientes SGR', ruta: '/dashboard?vista=expedientes', grupo: GRUPO.TRABAJO, icono: 'faClipboardCheck', palabras: 'viabilizacion regalias requisitos checklist seguimiento' },
+    { id: 'expedientes', titulo: 'Expedientes', ruta: '/dashboard?vista=expedientes', grupo: GRUPO.TRABAJO, icono: 'faClipboardCheck', palabras: 'sgr viabilizacion regalias requisitos checklist plantillas seguimiento' },
     { id: 'contratos', titulo: 'Contratos', ruta: '/dashboard?vista=contratos', grupo: GRUPO.ANALISIS, icono: 'faFileSignature', palabras: 'avance fisico financiero desfase' },
     { id: 'estadisticas', titulo: 'Estadísticas', ruta: '/dashboard?vista=estadisticas', grupo: GRUPO.ANALISIS, icono: 'faChartColumn', palabras: 'graficas filtros cadena presupuestal' },
     ...SECCIONES_PARAMETROS.filter((s) => s.grupo === GRUPO.CATALOGOS).map((s) => ({ ...s, id: s.slug, ruta: `/parametros/${s.slug}` })),

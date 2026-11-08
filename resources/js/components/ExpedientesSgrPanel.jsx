@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import '../../css/ExpedientesSgrPanel.css';
-import { faseLegible } from '../utils/expedienteChecklist';
-import { ESTADO, construirFilas, contarPorEstado, filtrarFilas, rutaExpediente } from '../utils/expedientesResumen';
+import { textoPlantillas } from '../utils/expedienteChecklist';
+import { ESTADO, construirFilas, contarPorEstado, filtrarFilas, rutaExpediente, textoExpediente } from '../utils/expedientesResumen';
 import { filasEnSala } from '../utils/tablero';
 
 const ETIQUETA_ESTADO = {
@@ -30,7 +30,11 @@ const FilaExpediente = ({ fila }) => {
             <td data-etiqueta="Expediente">
                 {tieneExpediente ? (
                     <>
-                        <div>#{fila.expedienteId}{medible && ` · Fase ${faseLegible(fila.faseSgr)}`}</div>
+                        <div>{textoExpediente(fila)}</div>
+                        {/* En una línea: si no caben todas, se recortan y el título las muestra completas. */}
+                        <div className="exs-secundario exs-plantillas" title={textoPlantillas(fila.plantillas)}>
+                            {textoPlantillas(fila.plantillas)}
+                        </div>
                         {fila.cantidad > 1 && <div className="exs-secundario">{fila.cantidad} expedientes en total</div>}
                     </>
                 ) : '—'}

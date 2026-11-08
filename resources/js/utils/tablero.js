@@ -28,7 +28,7 @@ export const resolverVista = (pedida, fases) => {
 const metricaDeFase = (fase, delGrupo, resumenes) => {
     if (esFormulacion(fase.nombre)) {
         const { pct, medidos, total } = avanceRequisitos(delGrupo, resumenes);
-        return { pct, etiqueta: 'Requisitos SGR', detalle: `${medidos} de ${total} configurados` };
+        return { pct, etiqueta: 'Requisitos', detalle: `${medidos} de ${total} configurados` };
     }
 
     const avance = calcularAvanceGrupo(delGrupo);

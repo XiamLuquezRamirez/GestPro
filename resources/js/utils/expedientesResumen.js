@@ -1,6 +1,8 @@
 // Lógica del seguimiento de expedientes en el Dashboard: une los proyectos con el
 // resumen de GET /expedientes, que solo trae los proyectos que tienen expediente.
 
+import { faseLegible } from './expedienteChecklist';
+
 export const ESTADO = {
     SIN_CONFIGURAR: 'sin_configurar',
     SIN_EXPEDIENTE: 'sin_expediente',
@@ -45,6 +47,9 @@ const construirFila = (proyecto, resumen) => {
         expedienteId: resumen?.expediente_id ?? null,
         cantidad: resumen?.cantidad_expedientes ?? 0,
         faseSgr: resumen?.fase_sgr ?? null,
+        // La fase solo es de regalías: se muestra si el expediente tiene una plantilla con motor sgr.
+        tieneSgr: Boolean(resumen?.tiene_sgr),
+        plantillas: resumen?.plantillas ?? [],
         fechaRadicado: resumen?.fecha_radicado ?? null,
         actualizado: resumen?.actualizado ?? null,
         total,
@@ -88,6 +93,16 @@ export const filtrarFilas = (filas, { estado, texto }) => {
             (estado === 'todos' || f.estado === estado) &&
             (buscado === '' || normalizar(`${f.nombre} ${f.municipio}`).includes(buscado)),
     );
+};
+
+/**
+ * Columna "Expediente" del seguimiento: "#12 · Fase SGR III — Factibilidad" o "#12".
+ * La fase SGR solo se muestra en un expediente medible con plantilla de motor sgr.
+ */
+export const textoExpediente = (fila) => {
+    if (fila.expedienteId === null) return '—';
+    const medible = fila.estado === ESTADO.BORRADOR || fila.estado === ESTADO.RADICADO;
+    return medible && fila.tieneSgr ? `#${fila.expedienteId} · Fase SGR ${faseLegible(fila.faseSgr)}` : `#${fila.expedienteId}`;
 };
 
 export const rutaExpediente = (fila) =>

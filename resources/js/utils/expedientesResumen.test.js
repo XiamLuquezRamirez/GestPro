@@ -7,6 +7,7 @@ import {
     esFormulacion,
     filtrarFilas,
     rutaExpediente,
+    textoExpediente,
     textoAvanceProyecto,
 } from './expedientesResumen';
 
@@ -23,6 +24,8 @@ const resumen = (proyectoId, estado, total, cumplidos, extra = {}) => ({
     expediente_id: proyectoId * 10,
     estado,
     fase_sgr: 3,
+    plantillas: ['SGR'],
+    tiene_sgr: true,
     configurado: true,
     fecha_radicado: null,
     actualizado: '2026-11-04T10:00:00-05:00',
@@ -211,5 +214,43 @@ describe('textoAvanceProyecto', () => {
         expect(textoAvanceProyecto(3, resumenes)).toBe('100% (8 de 8) · Radicado');
         expect(textoAvanceProyecto(4, resumenes)).toBe('Sin expediente');
         expect(textoAvanceProyecto(1, null)).toBe('—');
+    });
+});
+
+describe('plantillas y fase SGR en el seguimiento', () => {
+    it('la fila lleva las plantillas del expediente y si tiene SGR', () => {
+        const [fila] = construirFilas([proyecto(1, 'Acueducto')], [resumen(1, 'borrador', 8, 3, { plantillas: ['SGR', 'Obras de agua'] })]);
+        expect(fila).toMatchObject({ plantillas: ['SGR', 'Obras de agua'], tieneSgr: true, faseSgr: 3 });
+    });
+
+    it('sin expediente no hay plantillas ni SGR', () => {
+        const [fila] = construirFilas([proyecto(1, 'Acueducto')], []);
+        expect(fila).toMatchObject({ plantillas: [], tieneSgr: false });
+    });
+
+    it('un expediente con plantilla sgr muestra su fase SGR', () => {
+        const [fila] = construirFilas([proyecto(1, 'Acueducto')], [resumen(1, 'borrador', 8, 3)]);
+        expect(textoExpediente(fila)).toBe('#10 · Fase SGR III — Factibilidad');
+    });
+
+    it('un expediente sin plantilla sgr no muestra "Fase SGR"', () => {
+        const [fila] = construirFilas([proyecto(1, 'Acueducto')], [resumen(1, 'borrador', 8, 3, { plantillas: ['Obras de agua'], tiene_sgr: false })]);
+        expect(textoExpediente(fila)).toBe('#10');
+        expect(textoExpediente(fila)).not.toContain('Fase SGR');
+    });
+
+    it('sin configurar o sin expediente, tampoco', () => {
+        const [sinConfigurar] = construirFilas([proyecto(1, 'Acueducto')], [resumen(1, 'borrador', 0, 0, { configurado: false })]);
+        expect(textoExpediente(sinConfigurar)).toBe('#10');
+        const [sinExpediente] = construirFilas([proyecto(2, 'Vía')], []);
+        expect(textoExpediente(sinExpediente)).toBe('—');
+    });
+
+    it('un resumen anterior a las plantillas no rompe la fila', () => {
+        const viejo = resumen(1, 'borrador', 8, 3);
+        delete viejo.plantillas;
+        delete viejo.tiene_sgr;
+        const [fila] = construirFilas([proyecto(1, 'Acueducto')], [viejo]);
+        expect(fila).toMatchObject({ plantillas: [], tieneSgr: false });
     });
 });
