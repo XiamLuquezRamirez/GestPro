@@ -167,6 +167,19 @@ class CatalogoRequisitosApiTest extends TestCase
         $this->assertSame('fase=3 & comp=suelo', $this->requisitoDe($borrador, 'a5')->condicion);
     }
 
+    public function test_el_orden_de_un_requisito_sgr_no_sale_de_su_seccion(): void
+    {
+        $borrador = $this->crearBorrador();
+        $c = DB::table('requisitos_catalogo')->where('catalogo_version_id', $borrador)->where('seccion', 'C')->orderBy('id')->first();
+        $url = "/GestPro/catalogo-requisitos/versiones/{$borrador}/requisitos/{$c->id}";
+
+        $this->admin()->putJson($url, $this->datosDe($c, ['orden' => 100_000]))
+            ->assertStatus(422)
+            ->assertJsonPath('errors.orden.0', 'Revisa el orden: el máximo es 99999.');
+        $this->admin()->putJson($url, $this->datosDe($c, ['orden' => 99_999]))->assertOk();
+        $this->assertSame(99_999, (int) $this->requisitoDe($borrador, $c->clave)->orden);
+    }
+
     public function test_un_requisito_sectorial_exige_sector_y_tipo_coherente(): void
     {
         $borrador = $this->crearBorrador();

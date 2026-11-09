@@ -339,11 +339,12 @@ class PlantillasRequisitosApiTest extends TestCase
             ->assertJsonPath('errors.orden.0', 'Revisa el orden: el mínimo es 0.');
     }
 
-    public function test_el_orden_de_un_requisito_tiene_tope_para_no_invadir_la_plantilla_siguiente(): void
+    public function test_el_orden_de_un_requisito_tiene_tope_para_no_invadir_el_bloque_siguiente(): void
     {
-        $this->crear(['orden' => 10_000_000])->assertStatus(422)
-            ->assertJsonPath('errors.orden.0', 'Revisa el orden: el máximo es 9999999.');
-        $this->crear(['orden' => 9_999_999])->assertCreated();
+        // El mismo tope en todos los motores: en la SGR, el bloque es la sección.
+        $this->crear(['orden' => 100_000])->assertStatus(422)
+            ->assertJsonPath('errors.orden.0', 'Revisa el orden: el máximo es 99999.');
+        $this->crear(['orden' => 99_999])->assertCreated();
     }
 
     public function test_ordenar_con_un_id_que_no_es_entero_nombra_el_campo_en_espanol(): void

@@ -56,6 +56,11 @@ final class ExpedienteService
     // del requisito. La principal tiene posición 0: un expediente solo SGR conserva su orden.
     private const ORDEN_POR_PLANTILLA = 10_000_000;
     private const ORDEN_POR_SECCION = 100_000;
+    // Tope del orden del requisito dentro de su bloque: la sección en el motor sgr, la plantilla
+    // en los demás. El catálogo ya no admite órdenes de 100 000 o más, pero datos anteriores
+    // pueden tenerlos y no deben pasar a la sección ni a la plantilla siguientes.
+    private const TOPE_ORDEN_EN_SECCION = self::ORDEN_POR_SECCION - 1;
+    private const TOPE_ORDEN_EN_PLANTILLA = self::ORDEN_POR_PLANTILLA - 1;
 
     /** Del más al menos exigente: una fila con varios orígenes toma el primero que aparezca. */
     private const CARACTER_POR_EXIGENCIA = [RequisitoCatalogo::OBLIGATORIO, RequisitoCatalogo::CONDICIONADO, RequisitoCatalogo::OPCIONAL];
@@ -567,7 +572,7 @@ final class ExpedienteService
                         'caracter' => $requisito->caracter,
                         'orden' => $posicion * self::ORDEN_POR_PLANTILLA
                             + ($esSgr ? self::ORDEN_SECCION[$requisito->seccion] * self::ORDEN_POR_SECCION : 0)
-                            + $requisito->orden,
+                            + min((int) $requisito->orden, $esSgr ? self::TOPE_ORDEN_EN_SECCION : self::TOPE_ORDEN_EN_PLANTILLA),
                     ];
                 }
                 $llaves[$llave]['origenes'][] = $requisito;

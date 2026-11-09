@@ -335,6 +335,29 @@ class ComposicionExpedienteTest extends TestCase
         $this->assertSame(100_002, $this->fila($expediente, $a2)->orden);
     }
 
+    public function test_un_orden_sgr_grande_de_datos_anteriores_no_sale_de_su_seccion(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos' => [null, 'obligatorio']]);
+        $expediente = $this->expediente($this->configuracion(['fase_sgr' => 3, 'sectores' => ['justicia'], 'tipos' => [], 'componentes' => [], 'tipologias' => []]));
+        $filasC = $expediente->requisitos()->whereHas('requisito', fn ($q) => $q->where('seccion', 'C'))
+            ->with('requisito')->orderBy('orden')->get();
+        $this->assertGreaterThanOrEqual(3, $filasC->count());
+        [$primera, $segunda, $tercera] = $filasC->take(3)->map->requisito->all();
+        // Ya guardados así antes del tope del catálogo: el servicio no los valida.
+        RequisitoCatalogo::whereKey($primera->id)->update(['orden' => 150_000]);
+        RequisitoCatalogo::whereKey($segunda->id)->update(['orden' => 9_999_999]);
+
+        $this->componer($expediente, [$this->sgr, $agua], $this->sgr);
+
+        $seccionC = 4 * 100_000;
+        $this->assertSame($seccionC + 99_999, $this->fila($expediente, $primera)->orden);
+        $this->assertSame($seccionC + 99_999, $this->fila($expediente, $segunda)->orden);
+        $this->assertSame($seccionC + $tercera->orden, $this->fila($expediente, $tercera)->orden);
+        $this->assertLessThan(5 * 100_000, $this->fila($expediente, $segunda)->orden);
+        $this->assertLessThan($this->fila($expediente, $this->requisito($agua, 'Planos'))->orden, $this->fila($expediente, $segunda)->orden);
+        $this->assertSame(10_000_000 + 1, $this->fila($expediente, $this->requisito($agua, 'Planos'))->orden);
+    }
+
     // --------------------------------------------------------------- propios
 
     public function test_sincronizar_no_toca_los_requisitos_propios(): void

@@ -202,7 +202,8 @@ class CatalogoRequisitosController extends Controller
             'requiere_aprobacion_no_aplica' => ['sometimes', 'boolean'],
             'codigo_comun' => ['nullable', 'string', 'max:40', 'regex:/^[A-Za-z0-9_.-]+$/'],
             'nota' => ['nullable', 'string'],
-            'orden' => ['sometimes', 'integer', 'min:0', 'max:9999999'],
+            // Tope: el orden de una fila SGR no debe salir de su sección (ExpedienteService).
+            'orden' => ['sometimes', 'integer', 'min:0', 'max:99999'],
             'activo' => ['sometimes', 'boolean'],
         ];
 
