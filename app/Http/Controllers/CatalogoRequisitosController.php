@@ -76,7 +76,10 @@ class CatalogoRequisitosController extends Controller
     public function requisitos(CatalogoVersion $version): JsonResponse
     {
         return response()->json(
-            $version->requisitos()->with(['sector:id,clave,nombre', 'tipo:id,clave,nombre'])->orderBy('orden')->get()
+            $version->requisitos()->with([
+                'sector:id,clave,nombre', 'tipo:id,clave,nombre',
+                'responsableCumplimiento:id,nombre,cargo,activo', 'responsableRevision:id,nombre,cargo,activo',
+            ])->orderBy('orden')->get()
         );
     }
 
@@ -161,6 +164,7 @@ class CatalogoRequisitosController extends Controller
         'clave' => 'la clave', 'texto' => 'el nombre del requisito', 'descripcion' => 'la descripción',
         'categoria' => 'la categoría', 'tipo_requisito' => 'el tipo de requisito', 'caracter' => 'el carácter',
         'cargo_cumplimiento' => 'el cargo de cumplimiento', 'cargo_revision' => 'el cargo de revisión',
+        'responsable_cumplimiento_id' => 'el responsable de cumplimiento', 'responsable_revision_id' => 'el responsable de revisión',
         'soporte_requerido' => 'el soporte requerido', 'referencia_normativa' => 'la referencia normativa',
         'condicion_descripcion' => 'la descripción de la condición',
         'requiere_aprobacion_no_aplica' => 'la aprobación del "no aplica"', 'codigo_comun' => 'el código común',
@@ -186,17 +190,27 @@ class CatalogoRequisitosController extends Controller
         'caracter.in' => 'El carácter debe ser obligatorio, opcional o condicionado.',
         'categoria.in' => 'Elige una categoría de la lista.',
         'tipo_requisito.in' => 'Elige un tipo de requisito de la lista.',
+        'responsable_cumplimiento_id.exists' => 'El responsable de cumplimiento no existe.',
+        'responsable_revision_id.exists' => 'El responsable de revisión no existe.',
     ];
 
     /** Las reglas dependen del motor de la plantilla de la versión. */
     private function reglasRequisito(CatalogoVersion $version): array
     {
+        // Enteros de verdad: `integer` admitiría true como 1 o "1".
+        $entero = fn (string $atributo, mixed $valor, \Closure $falla) => is_int($valor)
+            || $falla('Revisa :attribute: debe ser un número entero.');
+        // Si la persona está inactiva lo decide el servicio: se acepta si ya era la del requisito.
+        $persona = ['nullable', 'bail', 'integer', $entero, 'exists:responsable,id'];
+
         $seguimiento = [
             'descripcion' => ['nullable', 'string'],
             'categoria' => ['nullable', Rule::in(RequisitoCatalogo::CATEGORIAS)],
             'tipo_requisito' => ['nullable', Rule::in(RequisitoCatalogo::TIPOS)],
             'cargo_cumplimiento' => ['nullable', 'string', 'max:150'],
             'cargo_revision' => ['nullable', 'string', 'max:150'],
+            'responsable_cumplimiento_id' => $persona,
+            'responsable_revision_id' => $persona,
             'soporte_requerido' => ['nullable', 'string', 'max:255'],
             'referencia_normativa' => ['nullable', 'string', 'max:255'],
             'requiere_aprobacion_no_aplica' => ['sometimes', 'boolean'],

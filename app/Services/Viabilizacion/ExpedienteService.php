@@ -68,8 +68,10 @@ final class ExpedienteService
     private const RELACIONES_FILA = [
         'requisito.sector:id,clave,nombre,fuente', 'requisito.tipo:id,clave,nombre',
         'requisito.version:id,plantilla_id', 'requisito.version.plantilla:id,nombre,motor',
+        'requisito.responsableCumplimiento:id,nombre,cargo', 'requisito.responsableRevision:id,nombre,cargo',
         'origenes.sector:id,clave,nombre,fuente', 'origenes.tipo:id,clave,nombre',
         'origenes.version:id,plantilla_id', 'origenes.version.plantilla:id,nombre,motor',
+        'origenes.responsableCumplimiento:id,nombre,cargo', 'origenes.responsableRevision:id,nombre,cargo',
         'usuarioCumplido:id,name', 'usuarioNoAplica:id,name', 'usuarioAprobo:id,name', 'responsable:id,nombre,cargo',
     ];
 
@@ -487,6 +489,15 @@ final class ExpedienteService
             array_push($sinLlave, ...$ordenadas->slice(1)->all());
         }
 
+        // Una fila nueva nace con la persona de cumplimiento que su ancla trae de la plantilla,
+        // si sigue activa. Una sola consulta para todas las filas nuevas.
+        $personas = collect($llaves)->diffKeys($existentes)
+            ->map(fn (array $datos) => $datos['origenes'][0]->responsable_cumplimiento_id)
+            ->filter()->unique()->values();
+        $activas = $personas->isEmpty()
+            ? collect()
+            : Responsable::query()->whereIn('id', $personas)->where('activo', true)->pluck('id')->flip();
+
         $deseados = [];
         foreach ($llaves as $llave => $datos) {
             $cambios = ['aplica' => true, 'caracter' => $datos['caracter'], 'orden' => $datos['orden']];
@@ -500,9 +511,11 @@ final class ExpedienteService
                 }
             } else {
                 $ancla = $datos['origenes'][0];
+                $persona = $ancla->responsable_cumplimiento_id;
                 $fila = $expediente->requisitos()->create([
                     ...$cambios,
                     'requisito_catalogo_id' => $ancla->id,
+                    'responsable_id' => $persona !== null && $activas->has($persona) ? $persona : null,
                     'estado_aplicabilidad' => $datos['caracter'] === RequisitoCatalogo::CONDICIONADO
                         ? ProyectoRequisito::POR_DEFINIR
                         : ProyectoRequisito::APLICA,
@@ -878,6 +891,9 @@ final class ExpedienteService
                 'soporte_requerido' => $r->soporte_requerido,
                 'cargo_cumplimiento' => $r->cargo_cumplimiento,
                 'cargo_revision' => $r->cargo_revision,
+                // Las personas que la plantilla indica; su cargo al elegirlas está en los cargo_*.
+                'responsable_cumplimiento' => $this->persona($r->responsableCumplimiento),
+                'responsable_revision' => $this->persona($r->responsableRevision),
                 'requiere_aprobacion_no_aplica' => $r->requiere_aprobacion_no_aplica,
             ] : null,
             'plantilla' => $plantilla ? ['id' => $plantilla->id, 'nombre' => $plantilla->nombre, 'motor' => $plantilla->motor] : null,
@@ -1266,6 +1282,11 @@ final class ExpedienteService
                 $usuario
             );
         }
+    }
+
+    private function persona(?Responsable $responsable): ?array
+    {
+        return $responsable ? ['id' => $responsable->id, 'nombre' => $responsable->nombre, 'cargo' => $responsable->cargo] : null;
     }
 
     /** Acepta un responsable inactivo solo si la fila ya lo tenía. */

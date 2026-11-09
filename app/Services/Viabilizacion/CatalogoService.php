@@ -10,6 +10,7 @@ use App\Models\RequisitoComponente;
 use App\Models\RequisitoSector;
 use App\Models\RequisitoTipo;
 use App\Models\RequisitoTipologia;
+use App\Models\Responsable;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -36,6 +37,12 @@ final class CatalogoService
         'tipos' => RequisitoTipo::class,
         'componentes' => RequisitoComponente::class,
         'tipologias' => RequisitoTipologia::class,
+    ];
+
+    /** Persona del requisito => [columna de su cargo, papel en los mensajes]. */
+    private const PERSONAS = [
+        'responsable_cumplimiento_id' => ['cargo_cumplimiento', 'cumplimiento'],
+        'responsable_revision_id' => ['cargo_revision', 'revisión'],
     ];
 
     public function __construct(private readonly EvaluadorRequisitos $evaluador)
@@ -93,7 +100,7 @@ final class CatalogoService
                 'clave', 'seccion', 'fuente', 'sector_id', 'tipo_id', 'subtitulo', 'codigo', 'texto', 'nota', 'condicion', 'orden', 'activo',
                 'descripcion', 'categoria', 'tipo_requisito', 'caracter', 'cargo_cumplimiento', 'cargo_revision',
                 'soporte_requerido', 'referencia_normativa', 'condicion_descripcion',
-                'requiere_aprobacion_no_aplica', 'codigo_comun',
+                'requiere_aprobacion_no_aplica', 'codigo_comun', 'responsable_cumplimiento_id', 'responsable_revision_id',
             ];
             $vigente?->requisitos()->orderBy('id')->select($columnas)->get()
                 ->map(fn ($r) => ['catalogo_version_id' => $borrador->id, ...$r->only($columnas)])
@@ -364,12 +371,40 @@ final class CatalogoService
             'referencia_normativa' => $texto('referencia_normativa'),
             'condicion_descripcion' => $texto('condicion_descripcion'),
         ];
+        foreach (self::PERSONAS as $campoPersona => [$campoCargo, $papel]) {
+            $campos = [...$campos, ...$this->persona($datos, $requisito, $campoPersona, $campoCargo, $papel, $campos[$campoCargo])];
+        }
         // En el motor sgr el carácter es siempre obligatorio: qué aplica lo decide el evaluador.
         if (! $sinCaracter) {
             $campos['caracter'] = $datos['caracter'] ?? ($requisito?->caracter ?? RequisitoCatalogo::OBLIGATORIO);
         }
 
         return $campos;
+    }
+
+    /**
+     * La persona de un papel (cumplimiento o revisión) y su cargo. Al elegir una persona se
+     * guarda su id y una copia de su cargo actual: lo que ya muestra el cargo sigue igual y, si
+     * la persona se elimina, el requisito conserva el cargo. Sin persona, el cargo queda como
+     * llega (puede ser un cargo anterior sin persona). Una persona inactiva solo se acepta si ya
+     * era la de ese papel en el requisito. Sin el campo en el pedido, la persona no cambia.
+     */
+    private function persona(array $datos, ?RequisitoCatalogo $requisito, string $campo, string $campoCargo, string $papel, ?string $cargo): array
+    {
+        if (! array_key_exists($campo, $datos)) {
+            return [$campo => $requisito?->{$campo}, $campoCargo => $cargo];
+        }
+        if ($datos[$campo] === null) {
+            return [$campo => null, $campoCargo => $cargo];
+        }
+
+        $persona = Responsable::find((int) $datos[$campo])
+            ?? throw new ReglaNegocioException("El responsable de {$papel} no existe.");
+        if (! $persona->activo && $persona->id !== $requisito?->{$campo}) {
+            throw new ReglaNegocioException('El requisito no es válido.', ["El responsable de {$papel} \"{$persona->nombre}\" está inactivo."]);
+        }
+
+        return [$campo => $persona->id, $campoCargo => trim((string) $persona->cargo) ?: null];
     }
 
     /** La siguiente rN libre en toda la plantilla: la clave reconoce un requisito de una versión a otra. */

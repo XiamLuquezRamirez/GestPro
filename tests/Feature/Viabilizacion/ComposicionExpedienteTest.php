@@ -596,4 +596,103 @@ class ComposicionExpedienteTest extends TestCase
 
         $this->assertSame([], $escrituras);
     }
+
+    // ------------------------------------------------------------- responsables
+
+    private function persona(string $nombre, ?string $cargo = null, bool $activo = true): int
+    {
+        return DB::table('responsable')->insertGetId(['nombre' => $nombre, 'cargo' => $cargo, 'activo' => $activo]);
+    }
+
+    /** Asigna en la plantilla la persona de cumplimiento y la de revisión de un requisito. */
+    private function asignar(RequisitoCatalogo $requisito, ?int $cumplimiento, ?int $revision = null): void
+    {
+        DB::table('requisitos_catalogo')->where('id', $requisito->id)
+            ->update(['responsable_cumplimiento_id' => $cumplimiento, 'responsable_revision_id' => $revision]);
+    }
+
+    public function test_una_fila_nueva_toma_el_responsable_de_cumplimiento_activo_de_su_ancla(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos' => [null, 'obligatorio'], 'Presupuesto' => [null, 'obligatorio'], 'Licencia' => [null, 'obligatorio']]);
+        $ana = $this->persona('Ana', 'Interventora');
+        $ines = $this->persona('Inés', 'Revisora', activo: false);
+        $this->asignar($this->requisito($agua, 'Planos'), $ana, $ines);
+        $this->asignar($this->requisito($agua, 'Presupuesto'), $ines, $ana); // la de revisión no cuenta
+        $expediente = $this->expediente();
+
+        $this->componer($expediente, [$this->sgr, $agua]);
+
+        $this->assertSame($ana, $this->fila($expediente, $this->requisito($agua, 'Planos'))->responsable_id);
+        $this->assertNull($this->fila($expediente, $this->requisito($agua, 'Presupuesto'))->responsable_id); // inactiva
+        $this->assertNull($this->fila($expediente, $this->requisito($agua, 'Licencia'))->responsable_id);
+        // Los requisitos SGR sin persona nacen sin responsable.
+        $this->assertSame(0, $expediente->requisitos()->whereNotNull('responsable_id')
+            ->whereNotIn('requisito_catalogo_id', [$this->requisito($agua, 'Planos')->id])->count());
+    }
+
+    public function test_recalcular_no_pisa_el_responsable_de_una_fila_existente(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos' => [null, 'obligatorio'], 'Presupuesto' => [null, 'obligatorio']]);
+        $ana = $this->persona('Ana');
+        $beto = $this->persona('Beto');
+        $expediente = $this->expediente();
+        $this->componer($expediente, [$this->sgr, $agua]);
+        $planos = $this->fila($expediente, $this->requisito($agua, 'Planos'));
+        $presupuesto = $this->fila($expediente, $this->requisito($agua, 'Presupuesto'));
+        $this->servicio->marcar($expediente, $planos, ['responsable_id' => $beto], null);
+
+        // La plantilla pasa a tener persona: las filas que ya existen no cambian.
+        $this->asignar($this->requisito($agua, 'Planos'), $ana);
+        $this->asignar($this->requisito($agua, 'Presupuesto'), $ana);
+        $this->componer($expediente, [$this->sgr, $agua]);
+
+        $this->assertSame($beto, $planos->refresh()->responsable_id);
+        $this->assertNull($presupuesto->refresh()->responsable_id);
+
+        // Tampoco al retirarla y recuperarla: es la misma fila.
+        $this->componer($expediente, [$this->sgr]);
+        $this->componer($expediente, [$this->sgr, $agua]);
+        $this->assertNull($presupuesto->refresh()->responsable_id);
+    }
+
+    public function test_el_checklist_presenta_las_personas_de_la_plantilla_sin_una_consulta_por_fila(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos' => [null, 'obligatorio'], 'Presupuesto' => [null, 'obligatorio'], 'Licencia' => [null, 'obligatorio']]);
+        $ana = $this->persona('Ana', 'Interventora');
+        $beto = $this->persona('Beto', 'Supervisor');
+        $carla = $this->persona('Carla');
+        $this->asignar($this->requisito($agua, 'Planos'), $ana, $beto);
+        $this->asignar($this->requisito($agua, 'Presupuesto'), $beto, $carla);
+        $this->asignar($this->requisito($agua, 'Licencia'), $carla, $ana);
+        $expediente = $this->expediente();
+        $this->componer($expediente, [$agua]);
+
+        $consultas = 0;
+        DB::listen(function ($q) use (&$consultas) {
+            if (preg_match('/from\s+"?responsable"?\s/i', $q->sql)) {
+                $consultas++;
+            }
+        });
+        $filas = collect($this->servicio->presentar($expediente->refresh())['requisitos'])->keyBy(fn ($f) => $f['requisito']['texto']);
+
+        $this->assertSame(['id' => $ana, 'nombre' => 'Ana', 'cargo' => 'Interventora'], $filas['Planos']['requisito']['responsable_cumplimiento']);
+        $this->assertSame(['id' => $beto, 'nombre' => 'Beto', 'cargo' => 'Supervisor'], $filas['Planos']['requisito']['responsable_revision']);
+        $this->assertSame(['id' => $carla, 'nombre' => 'Carla', 'cargo' => null], $filas['Presupuesto']['requisito']['responsable_revision']);
+        // El responsable de la fila, el de cumplimiento y el de revisión del requisito y de los orígenes.
+        $this->assertLessThanOrEqual(5, $consultas);
+    }
+
+    public function test_sin_persona_el_checklist_presenta_null_y_el_cargo(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos' => [null, 'obligatorio']]);
+        DB::table('requisitos_catalogo')->where('id', $this->requisito($agua, 'Planos')->id)->update(['cargo_cumplimiento' => 'Interventor']);
+        $expediente = $this->expediente();
+        $this->componer($expediente, [$agua]);
+
+        $fila = $this->servicio->presentar($expediente->refresh())['requisitos'][0];
+
+        $this->assertNull($fila['requisito']['responsable_cumplimiento']);
+        $this->assertNull($fila['requisito']['responsable_revision']);
+        $this->assertSame('Interventor', $fila['requisito']['cargo_cumplimiento']);
+    }
 }

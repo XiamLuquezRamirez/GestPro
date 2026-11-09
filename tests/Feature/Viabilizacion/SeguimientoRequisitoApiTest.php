@@ -200,6 +200,21 @@ class SeguimientoRequisitoApiTest extends TestCase
             ->assertJsonPath('progreso.cumplidos', 1);
     }
 
+    public function test_la_api_del_expediente_trae_las_personas_de_la_plantilla(): void
+    {
+        $ana = DB::table('responsable')->insertGetId(['nombre' => 'Ana', 'cargo' => 'Interventora', 'activo' => true]);
+        $fila = $this->filas()[0];
+        DB::table('requisitos_catalogo')->where('id', $fila->requisito_catalogo_id)
+            ->update(['responsable_revision_id' => $ana, 'cargo_revision' => 'Interventora']);
+
+        $requisito = collect($this->como(Rol::Consulta)->getJson("/GestPro/expedientes/{$this->expediente->id}")->assertOk()->json('requisitos'))
+            ->firstWhere('id', $fila->id)['requisito'];
+
+        $this->assertSame(['id' => $ana, 'nombre' => 'Ana', 'cargo' => 'Interventora'], $requisito['responsable_revision']);
+        $this->assertNull($requisito['responsable_cumplimiento']);
+        $this->assertSame('Interventora', $requisito['cargo_revision']);
+    }
+
     public function test_una_fila_retirada_con_responsable_cuenta_como_retenida(): void
     {
         $responsable = DB::table('responsable')->insertGetId(['nombre' => 'Ana', 'activo' => true]);

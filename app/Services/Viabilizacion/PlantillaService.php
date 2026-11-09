@@ -189,7 +189,7 @@ final class PlantillaService
                         'clave', 'seccion', 'fuente', 'sector_id', 'tipo_id', 'subtitulo', 'codigo', 'texto', 'nota', 'condicion',
                         'descripcion', 'categoria', 'tipo_requisito', 'caracter', 'cargo_cumplimiento', 'cargo_revision',
                         'soporte_requerido', 'referencia_normativa', 'condicion_descripcion',
-                        'requiere_aprobacion_no_aplica', 'codigo_comun',
+                        'requiere_aprobacion_no_aplica', 'codigo_comun', 'responsable_cumplimiento_id', 'responsable_revision_id',
                     ]),
                     'catalogo_version_id' => $borrador->id,
                     'orden' => $posicion + 1,

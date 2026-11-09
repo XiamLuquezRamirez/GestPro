@@ -24,13 +24,15 @@ class RequisitoCatalogo extends Model
         'subtitulo', 'codigo', 'texto', 'nota', 'condicion', 'orden', 'activo',
         'descripcion', 'categoria', 'tipo_requisito', 'caracter', 'cargo_cumplimiento', 'cargo_revision',
         'soporte_requerido', 'referencia_normativa', 'condicion_descripcion',
-        'requiere_aprobacion_no_aplica', 'codigo_comun',
+        'requiere_aprobacion_no_aplica', 'codigo_comun', 'responsable_cumplimiento_id', 'responsable_revision_id',
     ];
     protected $casts = [
         'catalogo_version_id' => 'integer',
         'sector_id' => 'integer',
         'tipo_id' => 'integer',
         'orden' => 'integer',
+        'responsable_cumplimiento_id' => 'integer',
+        'responsable_revision_id' => 'integer',
         'activo' => 'boolean',
         'requiere_aprobacion_no_aplica' => 'boolean',
     ];
@@ -48,5 +50,17 @@ class RequisitoCatalogo extends Model
     public function tipo(): BelongsTo
     {
         return $this->belongsTo(RequisitoTipo::class, 'tipo_id');
+    }
+
+    /** La persona que debe cumplir el requisito. Su cargo al elegirla queda en cargo_cumplimiento. */
+    public function responsableCumplimiento(): BelongsTo
+    {
+        return $this->belongsTo(Responsable::class, 'responsable_cumplimiento_id');
+    }
+
+    /** La persona que debe revisarlo. Su cargo al elegirla queda en cargo_revision. */
+    public function responsableRevision(): BelongsTo
+    {
+        return $this->belongsTo(Responsable::class, 'responsable_revision_id');
     }
 }
