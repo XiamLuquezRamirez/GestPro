@@ -7,7 +7,7 @@ import { ORDEN_SECCIONES, SECCIONES } from '../utils/expedienteChecklist';
 import { avisarError } from '../utils/avisosPlantillas';
 import {
     CARACTERES, CATEGORIAS, CONDICIONADO, FUENTES_NORMATIVAS, TIPOS_REQUISITO, datosRequisito, etiquetaCaracter, etiquetaCategoria, formularioRequisito,
-    mensajeApi, mover, porRedactar, requisitoVacio,
+    mensajeApi, mover, opcionesCargo, porRedactar, requisitoVacio,
 } from '../utils/plantillasChecklist';
 import useOcupado from './useOcupado';
 
@@ -18,12 +18,23 @@ const Campo = ({ etiqueta, children, ancho }) => (
     </label>
 );
 
-/** Formulario de un requisito. En el motor sgr agrega sección, sector, tipo y condición. */
-const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, guardando, onGuardar, onCancelar }) => {
+/**
+ * Formulario de un requisito. En el motor sgr agrega sección, sector, tipo y condición.
+ * `responsables` es el catálogo de Responsables (para elegir cargos), o null si no se pudo cargar.
+ */
+const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, responsables, guardando, onGuardar, onCancelar }) => {
     const [f, setF] = useState(inicial);
     const [revisionCondicion, setRevisionCondicion] = useState(null);
     const cambiar = (campo, valor) => setF((actual) => ({ ...actual, [campo]: valor }));
     const texto = (campo, props = {}) => <input value={f[campo]} onChange={(e) => cambiar(campo, e.target.value)} {...props} />;
+    // Los cargos salen de los responsables activos. Sin el catálogo se escriben a mano, como antes.
+    const cargo = (campo) => (responsables === null ? texto(campo, { maxLength: 150 }) : (
+        <select value={f[campo]} onChange={(e) => cambiar(campo, e.target.value)}>
+            <option value="">Sin cargo</option>
+            {opcionesCargo(responsables, f[campo]).map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+        </select>
+    ));
+    const sinCargos = responsables !== null && opcionesCargo(responsables, '').length === 0;
 
     const sector = catalogoSgr?.sectores.find((s) => s.id === Number(f.sector_id));
 
@@ -124,8 +135,11 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, guardando, on
                 </>
             )}
 
-            <Campo etiqueta="Responsable de cumplimiento (cargo)">{texto('cargo_cumplimiento', { maxLength: 150 })}</Campo>
-            <Campo etiqueta="Responsable de revisión (cargo)">{texto('cargo_revision', { maxLength: 150 })}</Campo>
+            <Campo etiqueta="Responsable de cumplimiento (cargo)">{cargo('cargo_cumplimiento')}</Campo>
+            <Campo etiqueta="Responsable de revisión (cargo)">{cargo('cargo_revision')}</Campo>
+            {sinCargos && (
+                <p className="pl-ayuda pl-campo-ancho">Ningún responsable activo tiene cargo. Regístralos en Parámetros → Responsables.</p>
+            )}
             <Campo etiqueta="Documento o soporte requerido">{texto('soporte_requerido', { maxLength: 255 })}</Campo>
             <Campo etiqueta="Referencia normativa">{texto('referencia_normativa', { maxLength: 255 })}</Campo>
             {!esSgr && <Campo etiqueta="Código común (para no repetir entre plantillas)">{texto('codigo_comun', { maxLength: 40 })}</Campo>}
@@ -156,6 +170,8 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, guardando, on
 const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
     const [editando, setEditando] = useState(null); // null, 'nuevo' o el requisito
     const [catalogoSgr, setCatalogoSgr] = useState(null);
+    // Responsables, para elegir los cargos del requisito. null mientras carga o si falla.
+    const [responsables, setResponsables] = useState(null);
     const [ocupado, ejecutar] = useOcupado();
     const contenedor = useRef(null);
     const retorno = useRef(null); // data-foco del botón que abrió el formulario
@@ -171,6 +187,15 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
             .catch((e) => { if (vigente) avisarError('No se pudo cargar el catálogo SGR (sectores y tipos)', e); });
         return () => { vigente = false; };
     }, [plantilla.motor]);
+
+    // Si falla, el formulario deja escribir los cargos a mano: no hace falta avisar.
+    useEffect(() => {
+        let vigente = true;
+        axios.get('/responsables')
+            .then(({ data }) => { if (vigente) setResponsables(Array.isArray(data) ? data : null); })
+            .catch(() => { if (vigente) setResponsables(null); });
+        return () => { vigente = false; };
+    }, []);
 
     // Al cerrar el formulario, el foco vuelve al botón que lo abrió.
     useEffect(() => {
@@ -254,6 +279,7 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
                 motor={plantilla.motor}
                 esSgr={esSgr}
                 catalogoSgr={catalogoSgr}
+                responsables={responsables}
                 guardando={ocupado}
                 inicial={editando === 'nuevo' ? requisitoVacio(plantilla.motor) : formularioRequisito(editando, plantilla.motor)}
                 onGuardar={guardar}

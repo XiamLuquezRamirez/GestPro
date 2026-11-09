@@ -9,6 +9,7 @@ import {
     TIPOS_REQUISITO,
     agruparVistaPrevia,
     escaparHtml,
+    opcionesCargo,
     htmlErrores,
     mensajeApi,
     porRedactar,
@@ -388,5 +389,35 @@ describe('errorConLista y textoRequisitosVersion', () => {
         expect(textoRequisitosVersion({ requisitos: 207, requisitos_activos: 206 })).toBe('206 · 1 inactivo');
         expect(textoRequisitosVersion({ requisitos: 10, requisitos_activos: 7 })).toBe('7 · 3 inactivos');
         expect(textoRequisitosVersion({ requisitos: 4 })).toBe('4');
+    });
+});
+
+describe('opcionesCargo', () => {
+    const responsables = [
+        { id: 1, nombre: 'Ana', cargo: 'Supervisora de obra', activo: true },
+        { id: 2, nombre: 'Carlos', cargo: 'Interventor', activo: true },
+        { id: 3, nombre: 'Laura', cargo: ' Interventor ', activo: true },
+        { id: 4, nombre: 'Pedro', cargo: 'Jefe de planeación', activo: false },
+        { id: 5, nombre: 'Sin cargo', cargo: null, activo: true },
+        { id: 6, nombre: 'Vacío', cargo: '  ', activo: true },
+    ];
+
+    it('ofrece los cargos de los responsables activos, sin repetir y en orden alfabético', () => {
+        expect(opcionesCargo(responsables, '')).toEqual([
+            { valor: 'Interventor', etiqueta: 'Interventor' },
+            { valor: 'Supervisora de obra', etiqueta: 'Supervisora de obra' },
+        ]);
+    });
+
+    it('conserva el cargo que ya tiene el requisito aunque no esté entre los activos', () => {
+        expect(opcionesCargo(responsables, 'Jefe de planeación')).toContainEqual(
+            { valor: 'Jefe de planeación', etiqueta: 'Jefe de planeación (no está en los responsables activos)' },
+        );
+        expect(opcionesCargo(responsables, 'Interventor')).toHaveLength(2);
+    });
+
+    it('sin responsables no ofrece cargos', () => {
+        expect(opcionesCargo(null, '')).toEqual([]);
+        expect(opcionesCargo([], '')).toEqual([]);
     });
 });

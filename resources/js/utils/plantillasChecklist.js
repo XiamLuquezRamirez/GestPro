@@ -272,6 +272,25 @@ export const escaparHtml = (texto) => String(texto ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
+/**
+ * Cargos que se ofrecen como responsable de cumplimiento o de revisión: los del catálogo de
+ * Responsables activos (GET /responsables), sin repetir y en orden alfabético. El requisito guarda
+ * el texto del cargo; si ya tiene uno que no está entre los activos, se conserva como opción.
+ */
+export const opcionesCargo = (responsables, actual) => {
+    const activos = [...new Set((responsables ?? [])
+        .filter((r) => r.activo)
+        .map((r) => (r.cargo ?? '').trim())
+        .filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'es'));
+    const opciones = activos.map((c) => ({ valor: c, etiqueta: c }));
+    const propio = (actual ?? '').trim();
+    if (propio && !activos.includes(propio)) {
+        opciones.push({ valor: propio, etiqueta: `${propio} (no está en los responsables activos)` });
+    }
+    return opciones;
+};
+
 /** HTML para Swal: el mensaje y, si hay, la lista de errores (escapada y limitada a `maximo`). */
 export const htmlErrores = (mensaje, errores = [], maximo = 20) => {
     const visibles = errores.slice(0, maximo).map((e) => `<li>${escaparHtml(e)}</li>`);
