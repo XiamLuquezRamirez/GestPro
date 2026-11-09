@@ -19,7 +19,8 @@ use Illuminate\Support\Facades\DB;
  * - Se ofrecen las plantillas activas con versión vigente de alguna fuente del proyecto
  *   (o de todas) y de su sector (o de todos). Sin sector, solo las de todos los sectores.
  * - Una plantilla nueva en el expediente entra con su versión vigente; la que ya tenía
- *   conserva su versión aunque haya dejado de ofrecerse (sin cambios retroactivos).
+ *   conserva su versión aunque haya dejado de ofrecerse (sin cambios retroactivos), hasta
+ *   que se le aplique otra de forma explícita (VersionesExpediente).
  * - Como máximo una plantilla con motor sgr y 20 en total; si hay plantillas, una es la principal.
  * - expediente_plantillas guarda la versión de cada plantilla del expediente, también la sgr.
  */
@@ -156,6 +157,38 @@ final class PlantillasExpediente
                 fn (CatalogoVersion $a, CatalogoVersion $b) => $a->plantilla_id <=> $b->plantilla_id,
             ])
             ->values();
+    }
+
+    /**
+     * Versión que se puede aplicar a cada una de las versiones dadas: la vigente de su
+     * plantilla, si es otra y la plantilla está activa. Una sola consulta, aunque las versiones
+     * vengan de varios expedientes: la respuesta depende solo de la versión.
+     *
+     * @param Collection<int, CatalogoVersion> $versiones con su plantilla cargada
+     * @return array<int, CatalogoVersion> catalogo_version_id => vigente de su plantilla; sin
+     *         entrada si no hay versión nueva
+     */
+    public function versionesNuevas(Collection $versiones): array
+    {
+        $activas = $versiones->filter(fn (CatalogoVersion $v) => $v->plantilla->activo);
+        if ($activas->isEmpty()) {
+            return [];
+        }
+
+        $vigentes = CatalogoVersion::query()->vigente()
+            ->whereIn('plantilla_id', $activas->pluck('plantilla_id')->unique()->values())
+            ->get()
+            ->keyBy('plantilla_id');
+
+        $nuevas = [];
+        foreach ($activas as $version) {
+            $vigente = $vigentes->get($version->plantilla_id);
+            if ($vigente && $vigente->id !== $version->id) {
+                $nuevas[$version->id] = $vigente;
+            }
+        }
+
+        return $nuevas;
     }
 
     /**

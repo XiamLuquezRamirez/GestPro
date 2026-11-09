@@ -45,6 +45,12 @@ Route::middleware('can:editar-datos')->group(function () {
     Route::delete('/expedientes/{expediente}', [ExpedienteController::class, 'destroy'])
         ->name('expedientes.destroy');
 
+    // Versión nueva de una plantilla del expediente: vista previa (no cambia nada) y aplicar.
+    Route::get('/expedientes/{expediente}/plantillas/{plantilla}/version-nueva', [PlantillasExpedienteController::class, 'vistaPreviaVersion'])
+        ->name('expedientes.plantillas.version-nueva');
+    Route::post('/expedientes/{expediente}/plantillas/{plantilla}/version-nueva', [PlantillasExpedienteController::class, 'aplicarVersion'])
+        ->name('expedientes.plantillas.version-nueva.aplicar');
+
     Route::post('/expedientes/{expediente}/requisitos-propios', [RequisitoPropioController::class, 'store'])
         ->name('expedientes.requisitos-propios.store');
 

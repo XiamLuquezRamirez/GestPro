@@ -477,7 +477,7 @@ class ComposicionExpedienteTest extends TestCase
         $this->assertSame([], $this->origenes($sinAncla));
     }
 
-    public function test_sin_ancla_en_los_origenes_gana_la_fila_que_aplica_y_luego_la_de_id_menor(): void
+    public function test_sin_ancla_en_los_origenes_gana_la_fila_que_aplica_luego_la_que_tiene_trabajo_y_luego_la_de_id_menor(): void
     {
         $expediente = $this->expediente();
         $a1 = $this->sgrA1();
@@ -491,8 +491,17 @@ class ComposicionExpedienteTest extends TestCase
         $this->assertSame([$a1->id], $this->origenes($activa));
         $this->assertFalse($retirada->refresh()->aplica);
 
-        // Empatadas en todo, la de id menor.
+        // Las dos retiradas: la que tiene trabajo, aunque su id sea mayor.
         $activa->update(['aplica' => false]);
+        $activa->origenes()->detach();
+        $this->servicio->sincronizar($expediente->refresh());
+
+        $this->assertTrue($activa->refresh()->aplica);
+        $this->assertTrue($activa->cumplido);
+        $this->assertFalse($retirada->refresh()->aplica);
+
+        // Empatadas en todo, la de id menor.
+        $activa->update(['aplica' => false, 'cumplido' => false]);
         $activa->origenes()->detach();
         $this->servicio->sincronizar($expediente->refresh());
 

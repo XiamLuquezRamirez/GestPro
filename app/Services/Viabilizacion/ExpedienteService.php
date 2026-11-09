@@ -28,8 +28,8 @@ use Illuminate\Validation\ValidationException;
  *
  * Reglas:
  * - Lleva una o varias plantillas, cada una con la versión con que entró (la vigente
- *   de ese momento). Sin plantillas en el pedido, nace con la plantilla SGR si el
- *   proyecto la admite, o sin plantillas.
+ *   de ese momento) o la que se le aplicó después (VersionesExpediente). Sin plantillas
+ *   en el pedido, nace con la plantilla SGR si el proyecto la admite, o sin plantillas.
  * - La fase SGR solo se exige si el expediente tiene una plantilla con motor sgr.
  * - Cada proyecto tiene como máximo un expediente en borrador.
  * - Nace sin configurar: solo se chequea o radica tras confirmar la configuración,
@@ -442,14 +442,22 @@ final class ExpedienteService
         $sinLlave = [];
         $filas = $expediente->requisitos()->whereNotNull('requisito_catalogo_id')
             ->with('requisito:id,codigo_comun')->orderBy('id')->get();
-        foreach ($filas->groupBy(fn (ProyectoRequisito $f) => $this->llave($f->requisito)) as $llave => $grupo) {
-            // Dos filas con la misma llave solo pueden venir de datos anteriores a esta regla.
-            // Conserva la llave la anclada en un origen calculado; si no, la que aplica; si no,
-            // la de id menor. Las demás quedan sin orígenes.
+        $grupos = $filas->groupBy(fn (ProyectoRequisito $f) => $this->llave($f->requisito));
+        // Solo si hay empates: una consulta para todo el expediente, con el criterio de conTrabajo.
+        $conTrabajo = $grupos->contains(fn (Collection $grupo) => $grupo->count() > 1)
+            ? $expediente->requisitos()->whereNotNull('requisito_catalogo_id')->conTrabajo()->pluck('id')->flip()
+            : collect();
+        foreach ($grupos as $llave => $grupo) {
+            // Dos filas con la misma llave vienen de datos anteriores a esta regla o de una
+            // versión nueva que da a un requisito el código común que ya usa otra fila
+            // (VersionesExpediente). Conserva la llave la anclada en un origen calculado; luego
+            // la que aplica; luego la que tiene trabajo, para no retirarlo en favor de una fila
+            // vacía; luego la de id menor. Las demás quedan sin orígenes.
             $origenes = array_flip(array_map(fn (RequisitoCatalogo $r) => $r->id, $llaves[$llave]['origenes'] ?? []));
             $ordenadas = $grupo->sortBy(fn (ProyectoRequisito $f) => [
                 isset($origenes[$f->requisito_catalogo_id]) ? 0 : 1,
                 $f->aplica ? 0 : 1,
+                $conTrabajo->has($f->id) ? 0 : 1,
                 $f->id,
             ])->values();
             $existentes[$llave] = $ordenadas->first();
@@ -653,10 +661,7 @@ final class ExpedienteService
             'avisos_duplicados' => $avisos['avisos'],
             'avisos_duplicados_total' => $avisos['total'],
             // Filas que dejaron de aplicar pero guardan trabajo hecho.
-            'retenidos' => $expediente->requisitos()->where('aplica', false)
-                ->where(fn ($q) => $q->where('cumplido', true)->orWhereNotNull('observacion')->orWhereNotNull('soporte_archivo')
-                    ->orWhereNotIn('estado_aplicabilidad', [ProyectoRequisito::APLICA, ProyectoRequisito::POR_DEFINIR])->orWhereNotNull('responsable_id'))
-                ->count(),
+            'retenidos' => $expediente->requisitos()->where('aplica', false)->conTrabajo()->count(),
         ];
     }
 
@@ -721,12 +726,12 @@ final class ExpedienteService
             ])
             ->orderByDesc('id')
             ->get();
-        $compatibles = $expedientes->contains(fn (ProyectoExpediente $e) => $e->versionesPlantilla->isNotEmpty())
-            ? $this->plantillas->idsCompatibles($proyecto)
-            : [];
+        $versiones = $expedientes->flatMap(fn (ProyectoExpediente $e) => $e->versionesPlantilla);
+        $compatibles = $versiones->isNotEmpty() ? $this->plantillas->idsCompatibles($proyecto) : [];
+        $nuevas = $this->plantillas->versionesNuevas($versiones);
 
         return $expedientes->map(fn (ProyectoExpediente $e) => [
-            ...$this->presentarCabecera($e->setRelation('proyecto', $proyecto), $this->plantillas->ordenar($e->versionesPlantilla), $compatibles),
+            ...$this->presentarCabecera($e->setRelation('proyecto', $proyecto), $this->plantillas->ordenar($e->versionesPlantilla), $compatibles, $nuevas),
             'progreso' => $this->progreso((int) $e->requisitos_aplican, (int) $e->requisitos_cumplidos),
         ])->values()->all();
     }
@@ -734,12 +739,14 @@ final class ExpedienteService
     /**
      * @param ?Collection<int, CatalogoVersion> $versiones las de versionesDe(), si ya se leyeron
      * @param ?list<int> $compatibles las de idsCompatibles() del proyecto, si ya se calcularon
+     * @param ?array<int, CatalogoVersion> $nuevas las de PlantillasExpediente::versionesNuevas(), si ya se calcularon
      */
-    public function presentarCabecera(ProyectoExpediente $expediente, ?Collection $versiones = null, ?array $compatibles = null): array
+    public function presentarCabecera(ProyectoExpediente $expediente, ?Collection $versiones = null, ?array $compatibles = null, ?array $nuevas = null): array
     {
         $expediente->loadMissing(['proyecto:id,nombre,sector', 'usuarioRadico:id,name', 'usuarioCreo:id,name']);
         $versiones ??= $this->plantillas->versionesDe($expediente);
         $compatibles ??= $versiones->isEmpty() ? [] : $this->plantillas->idsCompatibles($expediente->proyecto);
+        $nuevas ??= $this->plantillas->versionesNuevas($versiones);
 
         return [
             'id' => $expediente->id,
@@ -752,6 +759,8 @@ final class ExpedienteService
                 // Cambiar las fuentes o el sector del proyecto no altera el expediente: solo se avisa.
                 'compatible' => in_array($v->plantilla_id, $compatibles, true),
                 'version' => ['id' => $v->id, 'numero' => $v->numero],
+                // Solo se ofrece: el expediente la aplica de forma explícita (VersionesExpediente).
+                'version_nueva' => isset($nuevas[$v->id]) ? ['id' => $nuevas[$v->id]->id, 'numero' => $nuevas[$v->id]->numero] : null,
             ])->values()->all(),
             'tiene_sgr' => $this->plantillas->tieneSgr($versiones),
             'fase_sgr' => $expediente->fase_sgr,
@@ -843,10 +852,24 @@ final class ExpedienteService
         ];
     }
 
-    /** @return array<int, int> plantilla_id => posición (0 es la principal) */
-    private function posiciones(Collection $versiones): array
+    /**
+     * @param Collection<int, CatalogoVersion> $versiones las de versionesDe()
+     * @return array<int, int> plantilla_id => posición (0 es la principal)
+     */
+    public function posiciones(Collection $versiones): array
     {
         return $versiones->values()->pluck('plantilla_id')->flip()->map(fn ($posicion) => (int) $posicion)->all();
+    }
+
+    /**
+     * Requisito que muestra la fila, el mismo de presentarFila(): el del primer origen y, sin
+     * orígenes, el ancla. Null en un propio. Espera cargados `requisito` y `origenes.version`.
+     *
+     * @param array<int, int> $posiciones las de posiciones()
+     */
+    public function requisitoMostrado(ProyectoRequisito $fila, array $posiciones): ?RequisitoCatalogo
+    {
+        return $this->origenesOrdenados($fila, $posiciones)->first() ?? $fila->requisito;
     }
 
     /** Orígenes de la fila en el orden de las plantillas del expediente, la principal primero. */
@@ -1071,7 +1094,7 @@ final class ExpedienteService
         $this->exigirChecklistEditable($expediente);
     }
 
-    private function exigirBorrador(ProyectoExpediente $expediente): void
+    public function exigirBorrador(ProyectoExpediente $expediente): void
     {
         if (! $expediente->esBorrador()) {
             throw new ReglaNegocioException('El expediente está radicado: su checklist está congelado y no admite cambios.');

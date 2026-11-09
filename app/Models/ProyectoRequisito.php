@@ -59,6 +59,21 @@ class ProyectoRequisito extends Model
         return $query->cuenta()->where('estado_aplicabilidad', self::APLICA)->where('cumplido', true);
     }
 
+    /**
+     * Filas con trabajo hecho: cumplidas, con observación, soporte o responsable, o con un
+     * "no aplica" marcado. Es lo que conserva una fila retirada y la única definición: la
+     * usan los retenidos del expediente, la vista previa de una versión nueva y el desempate
+     * de filas con la misma llave al sincronizar.
+     */
+    public function scopeConTrabajo(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $q) => $q->where('cumplido', true)
+            ->orWhereNotNull('observacion')
+            ->orWhereNotNull('soporte_archivo')
+            ->orWhereNotIn('estado_aplicabilidad', [self::APLICA, self::POR_DEFINIR])
+            ->orWhereNotNull('responsable_id'));
+    }
+
     public function cuenta(): bool
     {
         return $this->aplica

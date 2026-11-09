@@ -95,7 +95,7 @@ class ExpedientePlantillasApiTest extends TestCase
         $version = $this->sgr->versionVigente();
         $r->assertJsonPath('plantillas', [[
             'plantilla_id' => $this->sgr->id, 'nombre' => 'SGR', 'motor' => 'sgr', 'es_principal' => true,
-            'compatible' => true, 'version' => ['id' => $version->id, 'numero' => 1],
+            'compatible' => true, 'version' => ['id' => $version->id, 'numero' => 1], 'version_nueva' => null,
         ]])
             ->assertJsonPath('tiene_sgr', true)
             ->assertJsonPath('progreso.total', 8)
