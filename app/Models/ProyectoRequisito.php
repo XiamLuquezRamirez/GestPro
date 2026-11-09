@@ -60,6 +60,16 @@ class ProyectoRequisito extends Model
     }
 
     /**
+     * Entre las que cuentan, las que faltan: el complemento de cumplidaQueCuenta, así que el
+     * total menos los cumplidos son estas. Un "no aplica" por aprobar o un "por definir" faltan.
+     */
+    public function scopePendienteQueCuenta(Builder $query): Builder
+    {
+        return $query->cuenta()->where(fn (Builder $q) => $q->where('estado_aplicabilidad', '!=', self::APLICA)
+            ->orWhere('cumplido', false));
+    }
+
+    /**
      * Filas con trabajo hecho: cumplidas, con observación, soporte o responsable, o con un
      * "no aplica" marcado. Es lo que conserva una fila retirada y la única definición: la
      * usan los retenidos del expediente, la vista previa de una versión nueva y el desempate

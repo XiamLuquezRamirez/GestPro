@@ -667,9 +667,10 @@ final class ExpedienteService
     }
 
     /**
-     * Expediente más reciente de cada proyecto que tiene alguno, con su avance y sus
-     * plantillas. Son tres consultas sin importar cuántos proyectos haya: cantidades,
-     * expedientes con su avance y plantillas.
+     * Expediente más reciente de cada proyecto que tiene alguno, con su avance, sus
+     * plantillas y los responsables con requisitos pendientes. Son cuatro consultas sin
+     * importar cuántos proyectos haya: cantidades, plantillas, responsables y expedientes
+     * con su avance.
      */
     public function resumenPorProyecto(): array
     {
@@ -686,6 +687,19 @@ final class ExpedienteService
             ->orderByDesc('expediente_plantillas.es_principal')
             ->orderBy('plantillas_checklist.id')
             ->get(['expediente_plantillas.expediente_id', 'plantillas_checklist.nombre', 'plantillas_checklist.motor'])
+            ->groupBy('expediente_id');
+
+        // Lo que falta a cada responsable, con la misma definición del avance: suma lo que el
+        // expediente tiene pendiente con responsable asignado.
+        $responsables = ProyectoRequisito::query()
+            ->pendienteQueCuenta()
+            ->join('responsable', 'responsable.id', '=', 'proyectos_requisitos.responsable_id')
+            ->whereIn('proyectos_requisitos.expediente_id', $cantidades->keys())
+            ->groupBy('proyectos_requisitos.expediente_id', 'responsable.id', 'responsable.nombre')
+            ->orderBy('responsable.nombre')
+            ->orderBy('responsable.id')
+            ->toBase()
+            ->get(['proyectos_requisitos.expediente_id', 'responsable.id', 'responsable.nombre', DB::raw('COUNT(*) AS pendientes')])
             ->groupBy('expediente_id');
 
         return ProyectoExpediente::query()
@@ -708,6 +722,11 @@ final class ExpedienteService
                 'fecha_radicado' => $e->fecha_radicado?->toIso8601String(),
                 'actualizado' => $e->updated_at?->toIso8601String(),
                 'progreso' => $this->progreso((int) $e->requisitos_aplican, (int) $e->requisitos_cumplidos),
+                'responsables' => $responsables->get($e->id, collect())->map(fn (object $r) => [
+                    'id' => (int) $r->id,
+                    'nombre' => (string) $r->nombre,
+                    'pendientes' => (int) $r->pendientes,
+                ])->values()->all(),
             ])
             ->all();
     }

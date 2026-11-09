@@ -26,11 +26,14 @@
 .exs-tarjeta-valor { font-family: var(--gp-fuente-datos); font-size: 1.7rem; font-weight: 700; line-height: 1.15; letter-spacing: -.03em; }
 
 .exs-sin-resultados { margin: 1rem 0; font-size: .85rem; text-align: center; color: var(--gp-texto-3); }
+div.exs-sin-resultados { display: grid; justify-items: center; gap: .6rem; }
 .exs-tabla-marco { min-width: 0; padding: 1rem 1.1rem; background: var(--gp-superficie); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
 .exs-tabla-encabezado { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem; margin-bottom: .6rem; }
 .exs-tabla-encabezado h3 { font-size: 1.02rem; }
 .exs-buscar { width: min(16rem, 100%); padding: .42rem .65rem; font-size: .86rem; background: var(--gp-fondo-2); border: 1px solid var(--gp-linea-fuerte); border-radius: 4px; }
 .exs-buscar::placeholder { color: var(--gp-texto-3); }
+.exs-filtros { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; }
+.exs-filtro { max-width: 14rem; padding: .42rem .5rem; font-size: .86rem; background: var(--gp-fondo-2); border: 1px solid var(--gp-linea-fuerte); border-radius: 4px; }
 
 .exs-proyecto { font-weight: 600; line-height: 1.3; }
 .exs-col-avance { width: 12rem; }
@@ -61,6 +64,7 @@
 }
 
 @media (max-width: 720px) {
+    .exs-filtros, .exs-filtro, .exs-buscar { width: 100%; max-width: none; }
     .exs-resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
     .exs-resumen .exs-tarjeta:first-child { grid-column: 1 / -1; }
     .exs-col-avance { width: auto; }

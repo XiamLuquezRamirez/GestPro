@@ -1,11 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
     ESTADO,
+    FUENTE_POR_DEFINIR,
+    TODAS_LAS_FUENTES,
+    TODOS_LOS_RESPONSABLES,
     avanceRequisitos,
     construirFilas,
     contarPorEstado,
     esFormulacion,
     filtrarFilas,
+    opcionesFuentes,
+    opcionesResponsables,
+    pendientesDe,
     rutaExpediente,
     textoExpediente,
     textoAvanceProyecto,
@@ -258,5 +264,123 @@ describe('plantillas y fase SGR en el seguimiento', () => {
         delete viejo.tiene_sgr;
         const [fila] = construirFilas([proyecto(1, 'Acueducto')], [viejo]);
         expect(fila).toMatchObject({ plantillas: [], tieneSgr: false });
+    });
+});
+
+describe('filtros por fuente y responsable', () => {
+    const ana = { id: 7, nombre: 'Ana', pendientes: 2 };
+    const beto = { id: 3, nombre: 'Beto', pendientes: 1 };
+    const conFuentes = (p, fuenteIds, porDefinir = false) => ({ ...p, fuente_ids: fuenteIds, financiacion_por_definir: porDefinir });
+    const filas = construirFilas(
+        [
+            conFuentes(proyecto(1, 'Acueducto'), [1]),
+            conFuentes(proyecto(2, 'Vía'), [1, 2]),
+            conFuentes(proyecto(3, 'Escuela'), [], true),
+            conFuentes(proyecto(4, 'Parque'), [4]),
+        ],
+        [
+            resumen(1, 'borrador', 8, 3, { responsables: [ana, beto] }),
+            resumen(2, 'borrador', 4, 1, { responsables: [{ ...ana, pendientes: 3 }] }),
+            resumen(3, 'radicado', 8, 8),
+        ],
+    );
+    const ids = (lista) => lista.map((f) => f.proyectoId).sort();
+    const catalogo = [
+        { id: 2, nombre: 'Propios', activo: true },
+        { id: 1, nombre: 'SGR', activo: true },
+        { id: 4, nombre: 'Crédito', activo: false },
+        { id: 5, nombre: 'Sin usar', activo: true },
+    ];
+
+    it('la fila lleva sus fuentes, si están por definir y los responsables del servicio', () => {
+        const porId = new Map(filas.map((f) => [f.proyectoId, f]));
+
+        expect(porId.get(2)).toMatchObject({ fuenteIds: [1, 2], financiacionPorDefinir: false, responsables: [{ ...ana, pendientes: 3 }] });
+        expect(porId.get(3)).toMatchObject({ fuenteIds: [], financiacionPorDefinir: true, responsables: [] });
+        expect(porId.get(4)).toMatchObject({ fuenteIds: [4], responsables: [] });
+    });
+
+    it('un proyecto o un resumen sin esos datos no rompe la fila', () => {
+        const [fila] = construirFilas([proyecto(1, 'A')], [resumen(1, 'borrador', 8, 3)]);
+
+        expect(fila).toMatchObject({ fuenteIds: [], financiacionPorDefinir: false, responsables: [] });
+    });
+
+    it('sin configurar no muestra responsables, como tampoco muestra avance', () => {
+        const [fila] = construirFilas([proyecto(1, 'A')], [resumen(1, 'borrador', 8, 0, { configurado: false, responsables: [ana] })]);
+
+        expect(fila.responsables).toEqual([]);
+    });
+
+    it('filtra por fuente, por "por definir" o deja todas', () => {
+        expect(ids(filtrarFilas(filas, { fuente: TODAS_LAS_FUENTES }))).toEqual([1, 2, 3, 4]);
+        expect(ids(filtrarFilas(filas, { fuente: '1' }))).toEqual([1, 2]);
+        expect(ids(filtrarFilas(filas, { fuente: 2 }))).toEqual([2]);
+        expect(ids(filtrarFilas(filas, { fuente: FUENTE_POR_DEFINIR }))).toEqual([3]);
+    });
+
+    it('filtra por responsable: solo los proyectos donde tiene algo pendiente', () => {
+        expect(ids(filtrarFilas(filas, { responsable: TODOS_LOS_RESPONSABLES }))).toEqual([1, 2, 3, 4]);
+        expect(ids(filtrarFilas(filas, { responsable: '7' }))).toEqual([1, 2]);
+        expect(ids(filtrarFilas(filas, { responsable: '3' }))).toEqual([1]);
+        expect(filtrarFilas(filas, { responsable: '99' })).toEqual([]);
+    });
+
+    it('combina fuente, responsable, estado y texto', () => {
+        expect(ids(filtrarFilas(filas, { fuente: '2', responsable: '7' }))).toEqual([2]);
+        expect(filtrarFilas(filas, { fuente: '2', responsable: '3' })).toEqual([]);
+        expect(ids(filtrarFilas(filas, { estado: ESTADO.BORRADOR, fuente: '1', texto: 'via' }))).toEqual([2]);
+    });
+
+    it('con un responsable elegido, los pendientes son los suyos', () => {
+        const [acueducto] = filas.filter((f) => f.proyectoId === 1);
+
+        expect(pendientesDe(acueducto)).toBe(5);
+        expect(pendientesDe(acueducto, TODOS_LOS_RESPONSABLES)).toBe(5);
+        expect(pendientesDe(acueducto, '7')).toBe(2);
+        expect(pendientesDe(acueducto, 3)).toBe(1);
+        expect(pendientesDe(acueducto, '99')).toBe(0);
+    });
+
+    it('las tarjetas cuentan las filas filtradas y los pendientes del responsable', () => {
+        const deAna = filtrarFilas(filas, { responsable: '7' });
+
+        expect(contarPorEstado(deAna, '7')).toMatchObject({ todos: 2, [ESTADO.BORRADOR]: 2, [ESTADO.RADICADO]: 0, pendientesEnBorrador: 5 });
+        expect(contarPorEstado(deAna)).toMatchObject({ pendientesEnBorrador: 8 });
+    });
+
+    it('ofrece las fuentes del catálogo que tiene algún proyecto, en su orden, y "Por definir"', () => {
+        expect(opcionesFuentes(catalogo, filas)).toEqual([
+            { valor: '2', etiqueta: 'Propios' },
+            { valor: '1', etiqueta: 'SGR' },
+            { valor: '4', etiqueta: 'Crédito' },
+            { valor: FUENTE_POR_DEFINIR, etiqueta: 'Por definir' },
+        ]);
+    });
+
+    it('sin proyectos por definir no ofrece "Por definir"; sin catálogo no hay opciones', () => {
+        const sinPorDefinir = filas.filter((f) => !f.financiacionPorDefinir);
+
+        expect(opcionesFuentes(catalogo, sinPorDefinir).map((o) => o.valor)).toEqual(['2', '1', '4']);
+        expect(opcionesFuentes(null, filas)).toEqual([]);
+        expect(opcionesFuentes([], filas)).toEqual([]);
+        expect(opcionesFuentes(catalogo, [])).toEqual([]);
+    });
+
+    it('ofrece los responsables de los resúmenes sin repetir y por nombre', () => {
+        const otras = construirFilas(
+            [proyecto(1, 'A'), proyecto(2, 'B')],
+            [
+                resumen(1, 'borrador', 8, 3, { responsables: [beto, { id: 9, nombre: 'Álvaro', pendientes: 1 }] }),
+                resumen(2, 'borrador', 8, 3, { responsables: [beto, ana] }),
+            ],
+        );
+
+        expect(opcionesResponsables(otras)).toEqual([
+            { valor: '9', etiqueta: 'Álvaro' },
+            { valor: '7', etiqueta: 'Ana' },
+            { valor: '3', etiqueta: 'Beto' },
+        ]);
+        expect(opcionesResponsables([])).toEqual([]);
     });
 });

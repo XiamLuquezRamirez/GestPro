@@ -653,7 +653,7 @@ class ExpedientePlantillasApiTest extends TestCase
         $this->assertSame(['Vías', 'SGR', 'Obras de agua'], $resumen[$proyecto->id]['plantillas']);
     }
 
-    public function test_el_resumen_hace_tres_consultas_sin_importar_cuantos_proyectos_haya(): void
+    public function test_el_resumen_hace_cuatro_consultas_sin_importar_cuantos_proyectos_haya(): void
     {
         $agua = $this->plantilla('Obras de agua', ['Planos firmados' => [null]]);
         $servicio = app(ExpedienteService::class);
@@ -667,11 +667,12 @@ class ExpedientePlantillasApiTest extends TestCase
         };
 
         $this->crear($this->proyecto(), ['fase_sgr' => 3, 'plantilla_ids' => [$this->sgr->id, $agua->id], 'principal_id' => $this->sgr->id])->assertCreated();
-        $this->assertSame(3, $contar());
+        // Cantidades, plantillas, responsables y expedientes con su avance.
+        $this->assertSame(4, $contar());
 
         foreach (range(1, 3) as $_) {
             $this->crear($this->proyecto(), ['fase_sgr' => 3])->assertCreated();
         }
-        $this->assertSame(3, $contar());
+        $this->assertSame(4, $contar());
     }
 }

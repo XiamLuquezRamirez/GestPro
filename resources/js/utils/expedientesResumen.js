@@ -2,6 +2,12 @@
 // resumen de GET /expedientes, que solo trae los proyectos que tienen expediente.
 
 import { faseLegible } from './expedienteChecklist';
+import { datosFinanciacionDe } from './fuentesProyecto';
+
+/** Valores de los selectores que no son un id. */
+export const TODAS_LAS_FUENTES = 'todas';
+export const FUENTE_POR_DEFINIR = 'por_definir';
+export const TODOS_LOS_RESPONSABLES = 'todos';
 
 export const ESTADO = {
     SIN_CONFIGURAR: 'sin_configurar',
@@ -37,6 +43,7 @@ const construirFila = (proyecto, resumen) => {
     // Sin configurar no hay avance que medir: la lista de requisitos aún no es la real.
     const progreso = estado === ESTADO.SIN_CONFIGURAR ? { porcentaje: null } : resumen?.progreso ?? {};
     const { total = 0, cumplidos = 0, porcentaje = 0 } = progreso;
+    const { fuenteIds, financiacionPorDefinir } = datosFinanciacionDe(proyecto);
 
     return {
         proyectoId: proyecto.id,
@@ -56,6 +63,10 @@ const construirFila = (proyecto, resumen) => {
         cumplidos,
         pendientes: total - cumplidos,
         porcentaje,
+        fuenteIds,
+        financiacionPorDefinir,
+        // Los cuenta el servicio; sin configurar, como el avance, no se muestran.
+        responsables: estado === ESTADO.SIN_CONFIGURAR ? [] : resumen?.responsables ?? [],
     };
 };
 
@@ -70,7 +81,19 @@ export const construirFilas = (proyectos, resumenes) => {
     return proyectos.map((p) => construirFila(p, porProyecto.get(p.id))).sort(compararFilas);
 };
 
-export const contarPorEstado = (filas) => {
+const mismoId = (a, b) => String(a) === String(b);
+
+/**
+ * Pendientes que muestra la fila: los del expediente o, con un responsable elegido, los
+ * suyos, tal como los contó el servicio.
+ */
+export const pendientesDe = (fila, responsable = TODOS_LOS_RESPONSABLES) =>
+    responsable === TODOS_LOS_RESPONSABLES
+        ? fila.pendientes
+        : fila.responsables.find((r) => mismoId(r.id, responsable))?.pendientes ?? 0;
+
+/** Recibe las filas ya filtradas por fuente, responsable y texto, para contar lo que se ve. */
+export const contarPorEstado = (filas, responsable = TODOS_LOS_RESPONSABLES) => {
     const cuantos = (estado) => filas.filter((f) => f.estado === estado).length;
 
     return {
@@ -81,18 +104,59 @@ export const contarPorEstado = (filas) => {
         [ESTADO.RADICADO]: cuantos(ESTADO.RADICADO),
         pendientesEnBorrador: filas
             .filter((f) => f.estado === ESTADO.BORRADOR)
-            .reduce((suma, f) => suma + f.pendientes, 0),
+            .reduce((suma, f) => suma + pendientesDe(f, responsable), 0),
     };
 };
 
-export const filtrarFilas = (filas, { estado, texto }) => {
+const tieneFuente = (fila, fuente) =>
+    fuente === TODAS_LAS_FUENTES ||
+    (fuente === FUENTE_POR_DEFINIR ? fila.financiacionPorDefinir : fila.fuenteIds.some((id) => mismoId(id, fuente)));
+
+// Solo quedan los proyectos en los que esa persona tiene algo pendiente.
+const tieneResponsable = (fila, responsable) =>
+    responsable === TODOS_LOS_RESPONSABLES || fila.responsables.some((r) => mismoId(r.id, responsable));
+
+export const filtrarFilas = (
+    filas,
+    { estado = 'todos', texto = '', fuente = TODAS_LAS_FUENTES, responsable = TODOS_LOS_RESPONSABLES },
+) => {
     const buscado = normalizar(texto);
 
     return filas.filter(
         (f) =>
             (estado === 'todos' || f.estado === estado) &&
+            tieneFuente(f, fuente) &&
+            tieneResponsable(f, responsable) &&
             (buscado === '' || normalizar(`${f.nombre} ${f.municipio}`).includes(buscado)),
     );
+};
+
+/**
+ * Opciones del filtro por fuente: las del catálogo (en su orden) que tiene algún proyecto de
+ * la lista, también las inactivas, y "Por definir" si algún proyecto lo está. Sin catálogo
+ * no hay filtro.
+ */
+export const opcionesFuentes = (fuentes, filas) => {
+    if (!fuentes?.length) return [];
+
+    const usadas = new Set(filas.flatMap((f) => f.fuenteIds.map(String)));
+    const opciones = fuentes
+        .filter((fuente) => usadas.has(String(fuente.id)))
+        .map((fuente) => ({ valor: String(fuente.id), etiqueta: fuente.nombre }));
+
+    return filas.some((f) => f.financiacionPorDefinir)
+        ? [...opciones, { valor: FUENTE_POR_DEFINIR, etiqueta: 'Por definir' }]
+        : opciones;
+};
+
+/** Opciones del filtro por responsable: quienes tienen algo pendiente, sin repetir y por nombre. */
+export const opcionesResponsables = (filas) => {
+    const porId = new Map();
+    filas.forEach((f) => f.responsables.forEach((r) => porId.set(String(r.id), r.nombre)));
+
+    return [...porId]
+        .map(([valor, etiqueta]) => ({ valor, etiqueta }))
+        .sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, 'es'));
 };
 
 /**

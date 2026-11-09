@@ -2,7 +2,19 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import '../../css/ExpedientesSgrPanel.css';
 import { textoPlantillas } from '../utils/expedienteChecklist';
-import { ESTADO, construirFilas, contarPorEstado, filtrarFilas, rutaExpediente, textoExpediente } from '../utils/expedientesResumen';
+import {
+    ESTADO,
+    TODAS_LAS_FUENTES,
+    TODOS_LOS_RESPONSABLES,
+    construirFilas,
+    contarPorEstado,
+    filtrarFilas,
+    opcionesFuentes,
+    opcionesResponsables,
+    pendientesDe,
+    rutaExpediente,
+    textoExpediente,
+} from '../utils/expedientesResumen';
 import { filasEnSala } from '../utils/tablero';
 
 const ETIQUETA_ESTADO = {
@@ -14,7 +26,7 @@ const ETIQUETA_ESTADO = {
 
 const fecha = (iso) => (iso ? new Date(iso).toLocaleDateString('es-CO') : '—');
 
-const FilaExpediente = ({ fila }) => {
+const FilaExpediente = ({ fila, pendientes, etiquetaPendientes }) => {
     const tieneExpediente = fila.expedienteId !== null;
     const medible = fila.estado === ESTADO.BORRADOR || fila.estado === ESTADO.RADICADO;
 
@@ -59,7 +71,7 @@ const FilaExpediente = ({ fila }) => {
                     </>
                 ) : '—'}
             </td>
-            <td data-etiqueta="Pendientes" className="numero">{medible ? fila.pendientes : '—'}</td>
+            <td data-etiqueta={etiquetaPendientes} className="numero">{medible ? pendientes : '—'}</td>
             <td data-etiqueta="Actualizado">{fila.estado === ESTADO.RADICADO ? fecha(fila.fechaRadicado) : fecha(fila.actualizado)}</td>
             <td className="exs-col-accion">
                 <Link className="exs-abrir" to={rutaExpediente(fila)}>Abrir</Link>
@@ -68,13 +80,29 @@ const FilaExpediente = ({ fila }) => {
     );
 };
 
-const ExpedientesSgrPanel = ({ proyectos, resumenes, error, onReintentar, compacto = false }) => {
+/** `fuentes` es el catálogo de fuentes de financiación; sin él (null) no se filtra por fuente. */
+const ExpedientesSgrPanel = ({ proyectos, resumenes, fuentes = null, error, onReintentar, compacto = false }) => {
     const [estado, setEstado] = useState('todos');
     const [texto, setTexto] = useState('');
+    const [fuente, setFuente] = useState(TODAS_LAS_FUENTES);
+    const [responsable, setResponsable] = useState(TODOS_LOS_RESPONSABLES);
 
     const filas = useMemo(() => construirFilas(proyectos, resumenes ?? []), [proyectos, resumenes]);
-    const conteos = useMemo(() => contarPorEstado(filas), [filas]);
-    const visibles = useMemo(() => filtrarFilas(filas, { estado, texto }), [filas, estado, texto]);
+    // La sala no tiene filtros.
+    const opcionesFuente = useMemo(() => (compacto ? [] : opcionesFuentes(fuentes, filas)), [compacto, fuentes, filas]);
+    const opcionesResponsable = useMemo(() => (compacto ? [] : opcionesResponsables(filas)), [compacto, filas]);
+    // Si la opción elegida desaparece al recargar, deja de filtrar: no queda un filtro oculto.
+    const fuenteActiva = opcionesFuente.some((o) => o.valor === fuente) ? fuente : TODAS_LAS_FUENTES;
+    const elegido = opcionesResponsable.find((o) => o.valor === responsable);
+    const responsableActivo = elegido ? responsable : TODOS_LOS_RESPONSABLES;
+
+    // Las tarjetas cuentan lo que dejan los demás filtros, para que coincidan con la tabla.
+    const filtradas = useMemo(
+        () => filtrarFilas(filas, { texto, fuente: fuenteActiva, responsable: responsableActivo }),
+        [filas, texto, fuenteActiva, responsableActivo],
+    );
+    const conteos = useMemo(() => contarPorEstado(filtradas, responsableActivo), [filtradas, responsableActivo]);
+    const visibles = useMemo(() => filtrarFilas(filtradas, { estado }), [filtradas, estado]);
 
     if (error) {
         return (
@@ -98,6 +126,15 @@ const ExpedientesSgrPanel = ({ proyectos, resumenes, error, onReintentar, compac
     // Se muestran las filas que caben, y el título dice cuántas quedan fuera.
     const filasTabla = compacto ? enSeguimiento.slice(0, filasEnSala(window.innerHeight, window.innerWidth)) : visibles;
     const filasOcultas = enSeguimiento.length - filasTabla.length;
+    // Al filtrar por una persona importa lo que le falta a ella, no al expediente.
+    const etiquetaPendientes = elegido ? `Pendientes de ${elegido.etiqueta}` : 'Pendientes';
+
+    const quitarFiltros = () => {
+        setEstado('todos');
+        setTexto('');
+        setFuente(TODAS_LAS_FUENTES);
+        setResponsable(TODOS_LOS_RESPONSABLES);
+    };
 
     const opciones = [
         { valor: 'todos', etiqueta: 'Proyectos', cantidad: conteos.todos },
@@ -137,20 +174,51 @@ const ExpedientesSgrPanel = ({ proyectos, resumenes, error, onReintentar, compac
                         Seguimiento por proyecto
                         {filasOcultas > 0 && <span className="exs-secundario"> · mostrando {filasTabla.length} de {enSeguimiento.length}</span>}
                     </h3>
-                    {!compacto && <input
-                        type="search"
-                        className="exs-buscar"
-                        placeholder="Buscar proyecto o municipio"
-                        aria-label="Buscar proyecto o municipio"
-                        value={texto}
-                        onChange={(e) => setTexto(e.target.value)}
-                    />}
+                    {!compacto && (
+                        <div className="exs-filtros">
+                            {opcionesFuente.length > 0 && (
+                                <select
+                                    className="exs-filtro"
+                                    aria-label="Filtrar por fuente de financiación"
+                                    value={fuenteActiva}
+                                    onChange={(e) => setFuente(e.target.value)}
+                                >
+                                    <option value={TODAS_LAS_FUENTES}>Todas las fuentes</option>
+                                    {opcionesFuente.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+                                </select>
+                            )}
+                            {opcionesResponsable.length > 0 && (
+                                <select
+                                    className="exs-filtro"
+                                    aria-label="Filtrar por responsable con requisitos pendientes"
+                                    value={responsableActivo}
+                                    onChange={(e) => setResponsable(e.target.value)}
+                                >
+                                    <option value={TODOS_LOS_RESPONSABLES}>Todos los responsables</option>
+                                    {opcionesResponsable.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+                                </select>
+                            )}
+                            <input
+                                type="search"
+                                className="exs-buscar"
+                                placeholder="Buscar proyecto o municipio"
+                                aria-label="Buscar proyecto o municipio"
+                                value={texto}
+                                onChange={(e) => setTexto(e.target.value)}
+                            />
+                        </div>
+                    )}
                 </div>
 
                 {filasTabla.length === 0 ? (
-                    <p className="exs-sin-resultados">
-                        {compacto ? 'Aún no hay proyectos con expediente en seguimiento.' : 'Ningún proyecto coincide con el filtro.'}
-                    </p>
+                    compacto ? (
+                        <p className="exs-sin-resultados">Aún no hay proyectos con expediente en seguimiento.</p>
+                    ) : (
+                        <div className="exs-sin-resultados">
+                            <p>Ningún proyecto coincide con los filtros elegidos.</p>
+                            <button type="button" className="gp-boton" onClick={quitarFiltros}>Quitar filtros</button>
+                        </div>
+                    )
                 ) : (
                     <>
                         <table className="tb-tabla tb-tabla-cartas exs-tabla">
@@ -160,13 +228,20 @@ const ExpedientesSgrPanel = ({ proyectos, resumenes, error, onReintentar, compac
                                     <th>Estado</th>
                                     <th>Expediente</th>
                                     <th>Requisitos cumplidos</th>
-                                    <th className="numero">Pendientes</th>
+                                    <th className="numero">{etiquetaPendientes}</th>
                                     <th>Actualizado</th>
                                     <th aria-label="Acciones" />
                                 </tr>
                             </thead>
                             <tbody>
-                                {filasTabla.map((fila) => <FilaExpediente key={fila.proyectoId} fila={fila} />)}
+                                {filasTabla.map((fila) => (
+                                    <FilaExpediente
+                                        key={fila.proyectoId}
+                                        fila={fila}
+                                        pendientes={pendientesDe(fila, responsableActivo)}
+                                        etiquetaPendientes={etiquetaPendientes}
+                                    />
+                                ))}
                             </tbody>
                         </table>
                     </>

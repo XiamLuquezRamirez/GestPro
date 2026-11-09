@@ -209,4 +209,94 @@ class SeguimientoRequisitoApiTest extends TestCase
         $this->como(Rol::Consulta)->getJson("/GestPro/expedientes/{$this->expediente->id}")
             ->assertOk()->assertJsonPath('retenidos', 1);
     }
+
+    // ------------------------------------------------- responsables en el tablero
+
+    private function responsable(string $nombre): int
+    {
+        return DB::table('responsable')->insertGetId(['nombre' => $nombre, 'activo' => true]);
+    }
+
+    private function resumenDe(ProyectoExpediente $expediente): array
+    {
+        return collect($this->como(Rol::Consulta)->getJson('/GestPro/expedientes')->assertOk()->json())
+            ->firstWhere('expediente_id', $expediente->id);
+    }
+
+    public function test_el_tablero_cuenta_lo_que_falta_a_cada_responsable(): void
+    {
+        $beto = $this->responsable('Beto');
+        $ana = $this->responsable('Ana');
+        $carla = $this->responsable('Carla');
+        [$a, $b, $c, $d, $e, $f, $g, $h] = $this->filas();
+        $a->update(['responsable_id' => $ana]);
+        $b->update(['responsable_id' => $carla, 'cumplido' => true]);
+        $c->update(['responsable_id' => $ana, 'estado_aplicabilidad' => ProyectoRequisito::NO_APLICA]);
+        $d->update(['responsable_id' => $ana, 'aplica' => false]);
+        $e->update(['responsable_id' => $ana, 'caracter' => 'opcional']);
+        $f->update(['responsable_id' => $ana, 'estado_aplicabilidad' => ProyectoRequisito::NO_APLICA_PENDIENTE, 'cumplido' => true]);
+        $g->update(['responsable_id' => $ana, 'estado_aplicabilidad' => ProyectoRequisito::POR_DEFINIR]);
+        $h->update(['responsable_id' => $beto]);
+
+        $resumen = $this->resumenDe($this->expediente);
+
+        // Ana: la pendiente, el "no aplica" por aprobar y el "por definir". Carla solo tiene cumplidas.
+        $this->assertSame([
+            ['id' => $ana, 'nombre' => 'Ana', 'pendientes' => 3],
+            ['id' => $beto, 'nombre' => 'Beto', 'pendientes' => 1],
+        ], $resumen['responsables']);
+        // Con todas las que cuentan asignadas, lo de los responsables es lo que falta en el avance.
+        $this->assertSame(
+            $resumen['progreso']['total'] - $resumen['progreso']['cumplidos'],
+            array_sum(array_column($resumen['responsables'], 'pendientes'))
+        );
+    }
+
+    public function test_sin_responsables_la_lista_del_tablero_esta_vacia(): void
+    {
+        $this->assertSame([], $this->resumenDe($this->expediente)['responsables']);
+    }
+
+    public function test_cada_expediente_del_tablero_trae_solo_sus_responsables(): void
+    {
+        $ana = $this->responsable('Ana');
+        $servicio = app(ExpedienteService::class);
+        $otro = $servicio->crear($this->proyectoSgr(['nombre' => 'Vía']), ['fase_sgr' => 3], null);
+        $servicio->confirmarConfiguracion($otro, ['fase_sgr' => 3]);
+        $this->filas()[0]->update(['responsable_id' => $ana]);
+
+        $this->assertSame([['id' => $ana, 'nombre' => 'Ana', 'pendientes' => 1]], $this->resumenDe($this->expediente)['responsables']);
+        $this->assertSame([], $this->resumenDe($otro)['responsables']);
+    }
+
+    public function test_los_responsables_no_suman_consultas_al_tablero(): void
+    {
+        $servicio = app(ExpedienteService::class);
+        $asignar = function (ProyectoExpediente $expediente): void {
+            $responsable = $this->responsable("Responsable {$expediente->id}");
+            $expediente->requisitos()->where('aplica', true)->limit(2)->get()
+                ->each(fn (ProyectoRequisito $fila) => $fila->update(['responsable_id' => $responsable]));
+        };
+        $medir = function (): int {
+            $peticion = $this->como(Rol::Consulta);
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $peticion->getJson('/GestPro/expedientes')->assertOk();
+            DB::disableQueryLog();
+
+            return count(DB::getQueryLog());
+        };
+        $asignar($this->expediente);
+        $conUno = $medir();
+
+        foreach (['Dos', 'Tres', 'Cuatro'] as $nombre) {
+            $expediente = $servicio->crear($this->proyectoSgr(['nombre' => $nombre]), ['fase_sgr' => 3], null);
+            $servicio->confirmarConfiguracion($expediente, ['fase_sgr' => 3]);
+            $asignar($expediente);
+        }
+
+        $this->assertSame($conUno, $medir());
+        $this->assertCount(4, collect($this->como(Rol::Consulta)->getJson('/GestPro/expedientes')->json())
+            ->filter(fn (array $r) => count($r['responsables']) === 1 && $r['responsables'][0]['pendientes'] === 2));
+    }
 }

@@ -32,6 +32,7 @@ const Dashboard = ({ sala = false }) => {
     const [proyectos, setProyectos] = useState([]);
     const [resumenExpedientes, setResumenExpedientes] = useState(null);
     const [errorExpedientes, setErrorExpedientes] = useState(null);
+    const [fuentes, setFuentes] = useState(null);
     const [errorCarga, setErrorCarga] = useState(null);
     const [cargando, setCargando] = useState(true);
     const [ultimaCarga, setUltimaCarga] = useState(null);
@@ -49,8 +50,18 @@ const Dashboard = ({ sala = false }) => {
         }
     }, []);
 
+    const listFuentes = useCallback(async () => {
+        try {
+            const { data } = await axios.get('/fuentesFinanciacion');
+            setFuentes(data);
+        } catch {
+            // Solo sirve para filtrar el seguimiento: se conserva el anterior o, sin él, no hay filtro por fuente.
+        }
+    }, []);
+
     const cargar = useCallback(async () => {
         setErrorCarga(null);
+        const fuentesCargadas = listFuentes();
         try {
             const [respuestaFases, respuestaProyectos] = await Promise.all([axios.get('/fases'), axios.get('/proyectos')]);
             setFases(respuestaFases.data);
@@ -62,8 +73,8 @@ const Dashboard = ({ sala = false }) => {
         } finally {
             setCargando(false);
         }
-        await listExpedientes();
-    }, [listExpedientes]);
+        await Promise.all([listExpedientes(), fuentesCargadas]);
+    }, [listExpedientes, listFuentes]);
 
     useEffect(() => {
         cargar();
@@ -96,6 +107,7 @@ const Dashboard = ({ sala = false }) => {
                 <ExpedientesSgrPanel
                     proyectos={proyectos}
                     resumenes={resumenExpedientes}
+                    fuentes={fuentes}
                     error={errorExpedientes}
                     onReintentar={listExpedientes}
                     compacto={compacto}
