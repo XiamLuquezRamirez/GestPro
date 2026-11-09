@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { faDownload } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { describirEvento, mensajeError } from '../utils/expedienteChecklist';
-
-const fechaHora = (iso) => (iso ? new Date(iso).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : '');
+import { autorHistorial, describirEvento, fechaHoraHistorial, mensajeError } from '../utils/expedienteChecklist';
 
 /** Historial de un requisito. Se vuelve a pedir cada vez que la fila cambia. */
 const ExpedienteHistorialRequisito = ({ fila, onCargar, onDescargar }) => {
@@ -27,8 +25,8 @@ const ExpedienteHistorialRequisito = ({ fila, onCargar, onDescargar }) => {
         <ol className="exv-historial">
             {entradas.map((entrada) => (
                 <li key={entrada.id}>
-                    <span className="exv-historial-fecha">{fechaHora(entrada.fecha)}</span>
-                    <span><b>{entrada.usuario ?? 'Usuario eliminado'}</b> · {describirEvento(entrada)}</span>
+                    <span className="exv-historial-fecha">{fechaHoraHistorial(entrada.fecha)}</span>
+                    <span><b>{autorHistorial(entrada)}</b> · {describirEvento(entrada)}</span>
                     {entrada.soporte && (
                         <button type="button" className="exv-mini" onClick={() => onDescargar(entrada)}>
                             <FontAwesomeIcon icon={faDownload} /> {entrada.soporte.nombre}

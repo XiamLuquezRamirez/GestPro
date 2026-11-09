@@ -488,6 +488,60 @@ span.exv-plantilla-principal { cursor: default; }
 .exv-campo-ayuda { margin: .3rem 0 0; font-size: .76rem; color: var(--exv-tinta-tenue); }
 .exv-propio-acciones { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 
+/* Historial del expediente: se abre desde la barra, sobre el checklist */
+.exv-btn-historial[aria-expanded="true"] { border-color: var(--exv-bronce); color: var(--exv-bronce-oscuro); background: var(--exv-bronce-tinte); }
+.exv-hist {
+    margin-bottom: 1.1rem;
+    background: var(--exv-tarjeta);
+    border: 1px solid var(--exv-linea);
+    border-radius: var(--exv-radio);
+}
+.exv-hist-cabeza {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .25rem .75rem;
+    padding: .75rem 1.1rem;
+    border-bottom: 1px solid var(--exv-linea-suave);
+}
+.exv-hist-cabeza h3 { margin: 0; font-size: .82rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--exv-tinta); }
+.exv-hist-cabeza span { font-size: .75rem; color: var(--exv-tinta-tenue); font-variant-numeric: tabular-nums; }
+.exv-hist-lista { max-height: 60vh; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.exv-hist-entrada {
+    display: grid;
+    grid-template-columns: 9.5rem minmax(0, 1fr) auto;
+    gap: .2rem .9rem;
+    align-items: start;
+    padding: .55rem 1.1rem;
+    font-size: .82rem;
+    border-top: 1px solid var(--exv-linea-suave);
+}
+.exv-hist-entrada:first-child { border-top: 0; }
+.exv-hist-fecha { padding-top: .05rem; font-size: .76rem; color: var(--exv-tinta-tenue); font-variant-numeric: tabular-nums; }
+.exv-hist-texto { margin: 0; line-height: 1.4; color: var(--exv-tinta-suave); overflow-wrap: anywhere; }
+.exv-hist-texto b { font-weight: 600; color: var(--exv-tinta); }
+.exv-hist-requisito { margin: .15rem 0 0; font-size: .76rem; line-height: 1.35; color: var(--exv-tinta-tenue); overflow-wrap: anywhere; }
+.exv-hist-estado { margin: 0; padding: 1rem 1.1rem; font-size: .84rem; color: var(--exv-tinta-tenue); }
+.exv-hist-estado p { margin: 0 0 .6rem; color: var(--exv-tinta); }
+.exv-hist-pie {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem .75rem;
+    padding: .6rem 1.1rem;
+    font-size: .8rem;
+    color: var(--exv-tinta);
+    border-top: 1px solid var(--exv-linea-suave);
+}
+
+@media (max-width: 600px) {
+    .exv-hist-cabeza, .exv-hist-estado, .exv-hist-pie { padding-left: .9rem; padding-right: .9rem; }
+    .exv-hist-entrada { grid-template-columns: minmax(0, 1fr); padding: .55rem .9rem; }
+    .exv-hist-entrada .exv-mini { justify-self: start; }
+}
+
 @media (max-width: 920px) {
     .exv-shell { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
     .exv-config { position: static; max-height: none; }

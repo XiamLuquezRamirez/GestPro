@@ -3,12 +3,13 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import {
-    faArrowLeft, faArrowsRotate, faCheck, faFileExcel, faPlus, faPrint, faSliders, faStamp, faTrash,
+    faArrowLeft, faArrowsRotate, faCheck, faClockRotateLeft, faFileExcel, faPlus, faPrint, faSliders, faStamp, faTrash,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
 import ExpedienteChecklist, { AvisosDuplicados } from './ExpedienteChecklist';
 import ExpedienteConfiguracion from './ExpedienteConfiguracion';
+import ExpedienteHistorial from './ExpedienteHistorial';
 import useOcupado from './useOcupado';
 import {
     ANCHOS_HOJA_CHECKLIST,
@@ -38,6 +39,7 @@ import '../../css/ExpedienteViabilizacion.css';
 
 const ROLES_EDICION = ['Administrador', 'Gestor'];
 const ESPERA_RECALCULO_MS = 350;
+const ID_HISTORIAL = 'exv-historial-expediente';
 
 /** Una plantilla con versión nueva: "Obras de agua versión 3 disponible" y, si se puede aplicar, su botón. */
 const VersionNueva = ({ plantilla, puedeAplicar, deshabilitada, onAplicar }) => (
@@ -69,6 +71,12 @@ const ExpedienteViabilizacion = ({ user }) => {
     const [recalculando, setRecalculando] = useState(false);
     const [confirmando, setConfirmando] = useState(false);
     const [configAbierta, setConfigAbierta] = useState(false);
+    const [historialAbierto, setHistorialAbierto] = useState(false);
+    // Sube con cada cambio del expediente mostrado que el servidor ya registró: el historial
+    // abierto se vuelve a pedir desde la página 1 con cada uno. Así no se pide en cada render,
+    // ni por un cambio optimista que el servidor todavía no confirmó.
+    const [revision, setRevision] = useState(0);
+    const nuevaRevision = useCallback(() => setRevision((r) => r + 1), []);
     const [errorCarga, setErrorCarga] = useState(null);
     const [responsables, setResponsables] = useState([]);
     // Plantillas que se ofrecen al proyecto (y las que ya tiene el expediente abierto).
@@ -110,7 +118,8 @@ const ExpedienteViabilizacion = ({ user }) => {
         peticionAvisos.current += 1;
         peticionExpediente.current += 1;
         setExpediente(data);
-    }, []);
+        nuevaRevision();
+    }, [nuevaRevision]);
 
     // Como cargarPlantillas: solo vale la última petición, y solo si su expediente sigue abierto y
     // nada puso el expediente completo mientras llegaba. Una respuesta o un error que llegan tarde
@@ -188,6 +197,8 @@ const ExpedienteViabilizacion = ({ user }) => {
         // Un cambio que esperaba el temporizador ya no se manda; si hay un envío en curso, él lo apaga al terminar.
         if (!envio.current.enCurso) setRecalculando(false);
         setConfigAbierta(false);
+        // El historial es del expediente: se cierra con él, como la configuración.
+        setHistorialAbierto(false);
 
         if (!idActual) {
             ponerExpediente(null);
@@ -276,34 +287,48 @@ const ExpedienteViabilizacion = ({ user }) => {
 
     // Si la fila ya no está (se abrió otro expediente mientras llegaba la respuesta), nada cambia:
     // ni la fila ni el progreso, que es del expediente de la fila.
-    const reemplazarFila = (fila, progreso) => setExpediente((prev) => (
+    // pintarFila solo la muestra: es el cambio optimista, antes de la respuesta, o su reversión.
+    const pintarFila = (fila, progreso) => setExpediente((prev) => (
         prev?.requisitos.some((f) => f.id === fila.id)
             ? { ...prev, progreso: progreso ?? prev.progreso, requisitos: prev.requisitos.map((f) => (f.id === fila.id ? fila : f)) }
             : prev
     ));
 
-    // Un propio nuevo va al final: el backend ordena los propios después de toda plantilla.
-    const agregarFila = (expedienteId, fila, progreso) => setExpediente((prev) => (
-        prev?.id === expedienteId
-            ? { ...prev, progreso: progreso ?? prev.progreso, requisitos: [...prev.requisitos, fila] }
-            : prev
-    ));
+    // reemplazarFila, agregarFila y quitarFila ponen lo que respondió el servidor: el cambio ya
+    // quedó en el historial.
+    const reemplazarFila = (fila, progreso) => {
+        pintarFila(fila, progreso);
+        nuevaRevision();
+    };
 
-    const quitarFila = (fila, progreso) => setExpediente((prev) => (
-        prev?.requisitos.some((f) => f.id === fila.id)
-            ? { ...prev, progreso: progreso ?? prev.progreso, requisitos: prev.requisitos.filter((f) => f.id !== fila.id) }
-            : prev
-    ));
+    // Un propio nuevo va al final: el backend ordena los propios después de toda plantilla.
+    const agregarFila = (expedienteId, fila, progreso) => {
+        setExpediente((prev) => (
+            prev?.id === expedienteId
+                ? { ...prev, progreso: progreso ?? prev.progreso, requisitos: [...prev.requisitos, fila] }
+                : prev
+        ));
+        nuevaRevision();
+    };
+
+    const quitarFila = (fila, progreso) => {
+        setExpediente((prev) => (
+            prev?.requisitos.some((f) => f.id === fila.id)
+                ? { ...prev, progreso: progreso ?? prev.progreso, requisitos: prev.requisitos.filter((f) => f.id !== fila.id) }
+                : prev
+        ));
+        nuevaRevision();
+    };
 
     const urlFila = (fila) => `/expedientes/${expediente.id}/requisitos/${fila.id}`;
 
     const marcar = async (fila, cumplido) => {
-        reemplazarFila({ ...fila, cumplido, estado: cumplido ? 'cumplido' : 'pendiente' });
+        pintarFila({ ...fila, cumplido, estado: cumplido ? 'cumplido' : 'pendiente' });
         try {
             const { data } = await axios.patch(urlFila(fila), { cumplido });
             reemplazarFila(data.requisito, data.progreso);
         } catch (error) {
-            reemplazarFila(fila);
+            pintarFila(fila);
             avisarError('No se pudo actualizar el requisito', error);
         }
     };
@@ -476,12 +501,12 @@ const ExpedienteViabilizacion = ({ user }) => {
     });
 
     const asignarResponsable = async (fila, responsableId) => {
-        reemplazarFila({ ...fila, responsable: responsables.find((r) => r.id === responsableId) ?? null });
+        pintarFila({ ...fila, responsable: responsables.find((r) => r.id === responsableId) ?? null });
         try {
             const { data } = await axios.patch(urlFila(fila), { responsable_id: responsableId });
             reemplazarFila(data.requisito, data.progreso);
         } catch (error) {
-            reemplazarFila(fila);
+            pintarFila(fila);
             avisarError('No se pudo asignar el responsable', error);
         }
     };
@@ -843,6 +868,15 @@ const ExpedienteViabilizacion = ({ user }) => {
                                                 <FontAwesomeIcon icon={faSliders} />{' '}
                                                 {configAbierta ? 'Ocultar configuración' : editable ? 'Editar configuración' : 'Ver configuración'}
                                             </button>
+                                            <button
+                                                type="button"
+                                                className="exv-btn exv-btn-historial"
+                                                aria-expanded={historialAbierto}
+                                                aria-controls={historialAbierto ? ID_HISTORIAL : undefined}
+                                                onClick={() => setHistorialAbierto((abierto) => !abierto)}
+                                            >
+                                                <FontAwesomeIcon icon={faClockRotateLeft} /> Historial
+                                            </button>
                                             <button type="button" className="exv-btn" onClick={exportarExcel}>
                                                 <FontAwesomeIcon icon={faFileExcel} /> Excel
                                             </button>
@@ -934,6 +968,16 @@ const ExpedienteViabilizacion = ({ user }) => {
                                                 : `${expediente.retenidos} requisitos con trabajo guardado no aplican con esta configuración.`}{' '}
                                             Se recuperan tal cual si vuelven a aplicar.
                                         </div>
+                                    )}
+
+                                    {historialAbierto && (
+                                        <ExpedienteHistorial
+                                            key={expediente.id}
+                                            id={ID_HISTORIAL}
+                                            expedienteId={expediente.id}
+                                            revision={revision}
+                                            onDescargar={descargarSoporteHistorial}
+                                        />
                                     )}
 
                                     <ExpedienteChecklist

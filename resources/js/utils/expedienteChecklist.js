@@ -107,6 +107,11 @@ const EVENTOS = {
     requisito_propio_agregado: 'Agregó el requisito propio',
     requisito_propio_editado: 'Editó el requisito propio',
     requisito_propio_eliminado: 'Eliminó el requisito propio',
+    expediente_creado: 'Creó el expediente',
+    configuracion_confirmada: 'Confirmó la configuración',
+    configuracion_cambiada: 'Cambió la configuración',
+    expediente_radicado: 'Radicó el expediente',
+    version_aplicada: 'Aplicó una versión nueva de una plantilla',
 };
 
 const CAMPOS_PROPIO = { titulo: 'título', descripcion: 'descripción', categoria: 'categoría', caracter: 'carácter' };
@@ -114,7 +119,39 @@ const CAMPOS_PROPIO = { titulo: 'título', descripcion: 'descripción', categori
 /** "título", "título y carácter", "título, categoría y carácter". */
 const enumerar = (items) => (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`);
 
-/** Texto de una entrada del historial de un requisito. */
+const mismosIds = (a, b) => {
+    const x = new Set(a ?? []);
+    const y = new Set(b ?? []);
+    return x.size === y.size && [...x].every((id) => y.has(id));
+};
+
+/** Selecciones de la configuración que registra el backend (configuracionRegistrable), con su nombre. */
+const SELECCIONES_CONFIGURACION = [
+    ['sector_ids', 'sectores'],
+    ['tipo_ids', 'tipos de proyecto'],
+    ['componente_ids', 'componentes'],
+    ['tipologia_ids', 'tipologías'],
+];
+
+/**
+ * Qué cambió entre dos configuraciones registradas: "plantillas", "fase SGR", "sectores"…
+ * La fase solo se registra con una plantilla sgr: si aparece o desaparece, lo que cambió
+ * son las plantillas, y no se nombra aparte.
+ */
+const cambiosConfiguracion = (antes, despues) => {
+    const plantillaIds = (c) => (c.plantillas ?? []).map((p) => p.plantilla_id);
+    const principal = (c) => (c.plantillas ?? []).find((p) => p.es_principal)?.plantilla_id ?? null;
+    const cambios = [];
+    if (!mismosIds(plantillaIds(antes), plantillaIds(despues))) cambios.push('plantillas');
+    else if (principal(antes) !== principal(despues)) cambios.push('plantilla principal');
+    if ('fase_sgr' in antes && 'fase_sgr' in despues && antes.fase_sgr !== despues.fase_sgr) cambios.push('fase SGR');
+    SELECCIONES_CONFIGURACION.forEach(([campo, nombre]) => {
+        if (!mismosIds(antes[campo], despues[campo])) cambios.push(nombre);
+    });
+    return cambios;
+};
+
+/** Texto de una entrada del historial, de un requisito o del propio expediente. */
 export const describirEvento = (entrada) => {
     const base = EVENTOS[entrada.evento] ?? entrada.evento;
     const d = entrada.despues ?? {};
@@ -144,10 +181,64 @@ export const describirEvento = (entrada) => {
         }
         case 'requisito_propio_eliminado':
             return a.titulo ? `${base}: ${a.titulo}` : base;
+        case 'configuracion_cambiada': {
+            const cambios = cambiosConfiguracion(a, d);
+            return cambios.length ? `${base}: ${enumerar(cambios)}` : base;
+        }
+        case 'version_aplicada':
+            if (!d.plantilla || !d.version) return base;
+            return `Aplicó la versión ${d.version} de ${d.plantilla}${a.version ? ` (antes ${a.version})` : ''}`;
         default:
             return base;
     }
 };
+
+const LARGO_REQUISITO_HISTORIAL = 90;
+
+const truncar = (texto, largo) => (texto.length > largo ? `${texto.slice(0, largo - 1).trimEnd()}…` : texto);
+
+/**
+ * Requisito de una entrada del historial del expediente, en corto: "A.1.2 · Carta de
+ * presentación…" (código y texto truncado) o el título de un propio. De una fila que ya no
+ * existe solo se sabe algo si es un propio eliminado, que guarda su título en `antes`.
+ * Null en las entradas del propio expediente.
+ */
+export const textoRequisitoHistorial = (entrada) => {
+    if (entrada.entidad !== 'requisito') return null;
+    const r = entrada.requisito;
+    if (!r) return entrada.antes?.titulo ?? 'Requisito que ya no está en el checklist';
+    if (r.titulo) return r.titulo;
+    const texto = r.texto ? truncar(r.texto, LARGO_REQUISITO_HISTORIAL) : null;
+    return [r.codigo, texto].filter(Boolean).join(' · ') || 'Requisito sin texto';
+};
+
+/** Fecha y hora de una entrada del historial, como la muestra la pantalla. */
+export const fechaHoraHistorial = (iso) => (
+    iso ? new Date(iso).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : ''
+);
+
+/**
+ * Quién registró una entrada del historial: su nombre; "Sistema" si no la registró nadie (un
+ * comando, como expedientes:crear-faltantes), o "Usuario eliminado" si su usuario ya no existe.
+ */
+export const autorHistorial = (entrada) => {
+    if (entrada?.usuario) return entrada.usuario;
+    return entrada?.sistema ? 'Sistema' : 'Usuario eliminado';
+};
+
+/**
+ * Entradas ya mostradas más las de la página siguiente. Si entretanto se registraron
+ * movimientos nuevos, las páginas se corren y la siguiente repite el final de la anterior:
+ * lo repetido no se vuelve a poner.
+ */
+export const unirPaginaHistorial = (entradas, nuevas) => {
+    const vistas = new Set(entradas.map((e) => e.id));
+    return [...entradas, ...nuevas.filter((e) => !vistas.has(e.id))];
+};
+
+/** Si quedan páginas después de la última que llegó (GET /expedientes/{id}/historial). */
+export const hayMasHistorial = (respuesta) =>
+    Boolean(respuesta) && respuesta.pagina * respuesta.por_pagina < respuesta.total;
 
 /** Agrupa consecutivamente: el backend ya entrega las filas en el orden del catálogo. */
 const agruparConsecutivos = (items, claveDe, crear) => {

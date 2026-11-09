@@ -7,12 +7,15 @@ import {
     agruparRequisitos,
     alternarId,
     alternarSector,
+    autorHistorial,
     construirHojasExcel,
     contenidoFila,
     datosPropio,
     describirEvento,
+    fechaHoraHistorial,
     formularioPropio,
     formularioVigente,
+    hayMasHistorial,
     mensajeError,
     motivoNoEliminarPropio,
     nombreArchivoExcel,
@@ -30,6 +33,8 @@ import {
     textoOrigenes,
     textoPlantillas,
     textoPorDefinir,
+    textoRequisitoHistorial,
+    unirPaginaHistorial,
 } from './expedienteChecklist';
 
 const fila = (id, seccion, extra = {}) => ({
@@ -771,5 +776,111 @@ describe('formularioVigente', () => {
         expect(formularioVigente(9, filas)).toBeNull();
         expect(formularioVigente(5, filas)).toBeNull();
         expect(formularioVigente(4, undefined)).toBeNull();
+    });
+});
+
+describe('historial del expediente', () => {
+    const configuracion = (extra = {}) => ({
+        plantillas: [
+            { plantilla_id: 1, catalogo_version_id: 10, es_principal: true },
+            { plantilla_id: 2, catalogo_version_id: 20, es_principal: false },
+        ],
+        fase_sgr: 3,
+        sector_ids: [4],
+        tipo_ids: [],
+        componente_ids: [7],
+        tipologia_ids: [],
+        ...extra,
+    });
+
+    it('describe los eventos del propio expediente', () => {
+        expect(describirEvento({ evento: 'expediente_creado', antes: [], despues: { plantillas: [] } })).toBe('Creó el expediente');
+        expect(describirEvento({ evento: 'configuracion_confirmada', antes: [], despues: configuracion() })).toBe('Confirmó la configuración');
+        expect(describirEvento({ evento: 'expediente_radicado', antes: [], despues: { requisitos: 12 } })).toBe('Radicó el expediente');
+    });
+
+    it('dice qué cambió en la configuración', () => {
+        const cambio = (despues) => describirEvento({ evento: 'configuracion_cambiada', antes: configuracion(), despues });
+        expect(cambio(configuracion({ sector_ids: [4, 5] }))).toBe('Cambió la configuración: sectores');
+        expect(cambio(configuracion({ fase_sgr: 2, tipo_ids: [8], tipologia_ids: [9] })))
+            .toBe('Cambió la configuración: fase SGR, tipos de proyecto y tipologías');
+        expect(cambio(configuracion({ componente_ids: [] }))).toBe('Cambió la configuración: componentes');
+        // Los ids se comparan como conjuntos: el orden no es un cambio.
+        expect(cambio(configuracion({ sector_ids: [4], componente_ids: [7] }))).toBe('Cambió la configuración');
+    });
+
+    it('nombra las plantillas, o solo la principal si las plantillas son las mismas', () => {
+        const antes = configuracion();
+        const otraPrincipal = configuracion({
+            plantillas: [
+                { plantilla_id: 2, catalogo_version_id: 20, es_principal: true },
+                { plantilla_id: 1, catalogo_version_id: 10, es_principal: false },
+            ],
+        });
+        expect(describirEvento({ evento: 'configuracion_cambiada', antes, despues: otraPrincipal }))
+            .toBe('Cambió la configuración: plantilla principal');
+
+        // Al quitar la plantilla sgr también se va la fase: lo que cambió son las plantillas.
+        const { fase_sgr: _fase, ...sinSgr } = configuracion({ plantillas: [{ plantilla_id: 2, catalogo_version_id: 20, es_principal: true }] });
+        expect(describirEvento({ evento: 'configuracion_cambiada', antes, despues: sinSgr }))
+            .toBe('Cambió la configuración: plantillas');
+        expect(describirEvento({ evento: 'configuracion_cambiada', antes: null, despues: null })).toBe('Cambió la configuración');
+    });
+
+    it('describe la versión aplicada con la anterior', () => {
+        expect(describirEvento({
+            evento: 'version_aplicada',
+            antes: { plantilla_id: 2, plantilla: 'Obras de agua', version: 2, catalogo_version_id: 20 },
+            despues: { plantilla_id: 2, plantilla: 'Obras de agua', version: 3, catalogo_version_id: 21 },
+        })).toBe('Aplicó la versión 3 de Obras de agua (antes 2)');
+        expect(describirEvento({ evento: 'version_aplicada', antes: {}, despues: { plantilla: 'Vías', version: 4 } }))
+            .toBe('Aplicó la versión 4 de Vías');
+        expect(describirEvento({ evento: 'version_aplicada', antes: null, despues: null })).toBe('Aplicó una versión nueva de una plantilla');
+    });
+
+    it('da el requisito de cada entrada en corto', () => {
+        const largo = 'Carta de presentación del proyecto firmada por el representante legal de la entidad, con la fecha y el valor total solicitado';
+        const texto = textoRequisitoHistorial({ entidad: 'requisito', requisito: { id: 1, codigo: 'A.1.2', texto: largo, titulo: null } });
+        expect(texto.startsWith('A.1.2 · Carta de presentación')).toBe(true);
+        expect(texto.endsWith('…')).toBe(true);
+        expect(texto.length).toBeLessThanOrEqual('A.1.2 · '.length + 90);
+
+        expect(textoRequisitoHistorial({ entidad: 'requisito', requisito: { id: 1, codigo: 'B.3', texto: 'Acta corta', titulo: null } }))
+            .toBe('B.3 · Acta corta');
+        expect(textoRequisitoHistorial({ entidad: 'requisito', requisito: { id: 1, codigo: null, texto: 'Sin código', titulo: null } }))
+            .toBe('Sin código');
+        expect(textoRequisitoHistorial({ entidad: 'requisito', requisito: { id: 2, codigo: null, texto: null, titulo: 'Acta de vecinos' } }))
+            .toBe('Acta de vecinos');
+    });
+
+    it('de una fila que ya no existe usa el título del propio eliminado; del expediente, nada', () => {
+        expect(textoRequisitoHistorial({ entidad: 'requisito', requisito: null, antes: { titulo: 'Acta de vecinos' } })).toBe('Acta de vecinos');
+        expect(textoRequisitoHistorial({ entidad: 'requisito', requisito: null, antes: {} })).toBe('Requisito que ya no está en el checklist');
+        expect(textoRequisitoHistorial({ entidad: 'expediente', requisito: null, antes: [] })).toBeNull();
+    });
+
+    it('une las páginas sin repetir lo que se corrió de una a otra', () => {
+        const primera = [{ id: 9 }, { id: 8 }, { id: 7 }];
+        expect(unirPaginaHistorial(primera, [{ id: 7 }, { id: 6 }]).map((e) => e.id)).toEqual([9, 8, 7, 6]);
+        expect(unirPaginaHistorial([], [{ id: 3 }])).toEqual([{ id: 3 }]);
+    });
+
+    it('sabe si quedan páginas', () => {
+        expect(hayMasHistorial({ pagina: 1, por_pagina: 50, total: 51 })).toBe(true);
+        expect(hayMasHistorial({ pagina: 1, por_pagina: 50, total: 50 })).toBe(false);
+        expect(hayMasHistorial({ pagina: 2, por_pagina: 50, total: 120 })).toBe(true);
+        expect(hayMasHistorial({ pagina: 1, por_pagina: 50, total: 0 })).toBe(false);
+        expect(hayMasHistorial(null)).toBe(false);
+    });
+
+    it('formatea la fecha y hora, y nada sin fecha', () => {
+        expect(fechaHoraHistorial(null)).toBe('');
+        expect(fechaHoraHistorial('2026-11-09T10:18:15-05:00')).toMatch(/\d/);
+    });
+
+    it('nombra a quien registró la entrada, al sistema o a un usuario que ya no existe', () => {
+        expect(autorHistorial({ usuario: 'Gestora Uno', sistema: false })).toBe('Gestora Uno');
+        expect(autorHistorial({ usuario: null, sistema: true })).toBe('Sistema');
+        expect(autorHistorial({ usuario: null, sistema: false })).toBe('Usuario eliminado');
     });
 });
