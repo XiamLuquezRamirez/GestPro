@@ -517,6 +517,34 @@ export const sectoresSinTipo = (seleccion, catalogo) =>
 /** Igual que el backend: solo se radica con todo lo que aplica cumplido. */
 export const puedeRadicar = ({ total, cumplidos }) => total > 0 && cumplidos === total;
 
+/**
+ * Opcionales que se muestran en el checklist. Se pueden marcar, pero no cuentan en el avance
+ * ni para radicar (la regla es del backend); se cuentan solo para explicarlo en pantalla.
+ */
+export const contarOpcionales = (requisitos) =>
+    (requisitos ?? []).filter((r) => r.caracter === 'opcional' && r.estado !== 'no_aplica').length;
+
+/** "1 opcional, no cuenta en el avance", o null si no hay opcionales. */
+export const textoOpcionales = (cantidad) => {
+    if (!cantidad) return null;
+    return cantidad === 1
+        ? '1 opcional, no cuenta en el avance'
+        : `${cantidad} opcionales, no cuentan en el avance`;
+};
+
+/** Por qué todavía no se puede radicar, o null si ya se puede. */
+export const pistaRadicar = (progreso, opcionales) => {
+    const { total = 0, cumplidos = 0 } = progreso ?? {};
+    if (total === 0) {
+        return opcionales > 0
+            ? 'Solo hay requisitos opcionales: para radicar hace falta al menos uno obligatorio'
+            : 'Sin requisitos para radicar';
+    }
+    const faltan = total - cumplidos;
+    if (faltan <= 0) return null;
+    return `${faltan === 1 ? 'Falta' : 'Faltan'} ${faltan} para radicar`;
+};
+
 export const sectoresConFuenteA12 =(sectores) => sectores.filter((s) => s.fuente).map((s) => s.nombre);
 
 /** Mensaje legible de un error de la API (regla de negocio o validación). */

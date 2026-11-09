@@ -306,6 +306,7 @@ span.exv-plantilla-principal { cursor: default; }
 .exv-medidor-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .4rem; }
 .exv-medidor-top b { font-size: 1.05rem; font-weight: 700; }
 .exv-medidor-top b span { color: var(--exv-bronce); font-variant-numeric: tabular-nums; }
+.exv-medidor-top .exv-medidor-opcionales { font-size: .8rem; font-weight: 500; color: var(--exv-tinta-tenue); }
 .exv-medidor-top em { font-style: normal; font-size: .78rem; color: var(--exv-tinta-tenue); font-variant-numeric: tabular-nums; }
 .exv-pista { height: 7px; background: var(--exv-linea-suave); border-radius: 99px; overflow: hidden; }
 .exv-relleno { height: 100%; background: var(--gp-verde); transition: width .35s cubic-bezier(.4, 0, .2, 1); }

@@ -15,16 +15,19 @@ import {
     ANCHOS_HOJA_CHECKLIST,
     actualizarExpedienteEnLista,
     construirHojasExcel,
+    contarOpcionales,
     datosPropio,
     faseLegible,
     motivoNoEliminarPropio,
     nombreArchivoExcel,
+    pistaRadicar,
     plantillasConVersion,
     puedeRadicar,
     requiereAprobacionNoAplica,
     sectoresConFuenteA12,
     sectoresSinTipo,
     seleccionDesde,
+    textoOpcionales,
     textoPlantillas,
 } from '../utils/expedienteChecklist';
 import {
@@ -712,6 +715,10 @@ const ExpedienteViabilizacion = ({ user }) => {
     const a12 = expediente && conSgr ? sectoresConFuenteA12(expediente.configuracion.sectores) : [];
     const esDesastre = conSgr && expediente.configuracion.tipologias.some((t) => t.clave === 'desastre');
     const { cumplidos = 0, total = 0, porcentaje = 0 } = expediente?.progreso ?? {};
+    // Los opcionales no cuentan en el avance: se dice en el medidor para que 0 / 0 no parezca un error.
+    const opcionales = contarOpcionales(expediente?.requisitos);
+    const avisoOpcionales = textoOpcionales(opcionales);
+    const pistaParaRadicar = expediente ? pistaRadicar(expediente.progreso, opcionales) : null;
     const sinConfigurar = Boolean(expediente) && !expediente.configurado;
     const panelVisible = sinConfigurar ? editable : configAbierta;
     const hayBorrador = datosProyecto?.expedientes.some((e) => e.estado === 'borrador');
@@ -873,7 +880,10 @@ const ExpedienteViabilizacion = ({ user }) => {
                                     <div className="exv-barra">
                                         <div className="exv-medidor">
                                             <div className="exv-medidor-top">
-                                                <b><span>{cumplidos}</span> / {total} requisitos cumplidos</b>
+                                                <b>
+                                                    <span>{cumplidos}</span> / {total} requisitos cumplidos
+                                                    {avisoOpcionales && <small className="exv-medidor-opcionales"> · {avisoOpcionales}</small>}
+                                                </b>
                                                 <em>{porcentaje}%</em>
                                             </div>
                                             <div className="exv-pista">
@@ -913,12 +923,7 @@ const ExpedienteViabilizacion = ({ user }) => {
                                                     <button type="button" className="exv-btn exv-btn-peligro" onClick={eliminar} disabled={ocupado}>
                                                         <FontAwesomeIcon icon={faTrash} /> Eliminar
                                                     </button>
-                                                    {!puedeRadicar(expediente.progreso) && (
-                                                        <span className="exv-radicar-pista">
-                                                            {total === 0 && 'Sin requisitos para radicar'}
-                                                            {total > 0 && `${total - cumplidos === 1 ? 'Falta' : 'Faltan'} ${total - cumplidos} para radicar`}
-                                                        </span>
-                                                    )}
+                                                    {pistaParaRadicar && <span className="exv-radicar-pista">{pistaParaRadicar}</span>}
                                                     <button
                                                         type="button"
                                                         className="exv-btn exv-btn-primario"

@@ -22,8 +22,11 @@ import {
     plantillasConVersion,
     puedeMarcarNoAplica,
     puedeMarcarRequisito,
+    contarOpcionales,
+    pistaRadicar,
     puedeRadicar,
     puedeRevisarNoAplica,
+    textoOpcionales,
     requiereAprobacionNoAplica,
     responsablesDisponibles,
     sectoresSinTipo,
@@ -886,5 +889,29 @@ describe('historial del expediente', () => {
         expect(autorHistorial({ usuario: 'Gestora Uno', sistema: false })).toBe('Gestora Uno');
         expect(autorHistorial({ usuario: null, sistema: true })).toBe('Sistema');
         expect(autorHistorial({ usuario: null, sistema: false })).toBe('Usuario eliminado');
+    });
+});
+
+describe('opcionales en el avance', () => {
+    const fila = (caracter, estado = 'pendiente') => ({ caracter, estado });
+
+    it('cuenta los opcionales que se muestran, salvo los que no aplican', () => {
+        expect(contarOpcionales([fila('opcional'), fila('obligatorio'), fila('opcional', 'cumplido'), fila('opcional', 'no_aplica')])).toBe(2);
+        expect(contarOpcionales(undefined)).toBe(0);
+    });
+
+    it('explica que los opcionales no cuentan, en singular y plural', () => {
+        expect(textoOpcionales(0)).toBeNull();
+        expect(textoOpcionales(1)).toBe('1 opcional, no cuenta en el avance');
+        expect(textoOpcionales(3)).toBe('3 opcionales, no cuentan en el avance');
+    });
+
+    it('dice por qué no se puede radicar todavía', () => {
+        expect(pistaRadicar({ total: 4, cumplidos: 4 }, 0)).toBeNull();
+        expect(pistaRadicar({ total: 4, cumplidos: 3 }, 0)).toBe('Falta 1 para radicar');
+        expect(pistaRadicar({ total: 4, cumplidos: 1 }, 2)).toBe('Faltan 3 para radicar');
+        expect(pistaRadicar({ total: 0, cumplidos: 0 }, 0)).toBe('Sin requisitos para radicar');
+        expect(pistaRadicar({ total: 0, cumplidos: 0 }, 1))
+            .toBe('Solo hay requisitos opcionales: para radicar hace falta al menos uno obligatorio');
     });
 });
