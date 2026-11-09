@@ -9,9 +9,11 @@ import {
     elegirPrincipal,
     hayCompatibleSgr,
     incluyeSgr,
+    necesitaCatalogoSgr,
     opcionPlantilla,
     plantillasDelPanel,
     plantillasSinLista,
+    seleccionConSgr,
     seleccionParaNuevo,
     textoPlantillasNuevo,
 } from './plantillasExpediente';
@@ -60,6 +62,45 @@ describe('incluyeSgr', () => {
     it('una plantilla que no está en la lista no cuenta', () => {
         expect(incluyeSgr([9], [SGR])).toBe(false);
         expect(incluyeSgr([1], null)).toBe(false);
+    });
+});
+
+describe('seleccionConSgr', () => {
+    const delExpediente = { plantilla_id: 1, nombre: 'SGR', motor: 'sgr' };
+
+    it('busca la plantilla elegida en la lista de disponibles', () => {
+        expect(seleccionConSgr({ ...base, plantilla_ids: [5, 1] }, { plantillas: [SGR, AGUA] }, [])).toBe(true);
+        expect(seleccionConSgr({ ...base, plantilla_ids: [5] }, { plantillas: [SGR, AGUA] }, [])).toBe(false);
+    });
+
+    it('sin la lista, la busca en las del expediente', () => {
+        expect(seleccionConSgr({ ...base, plantilla_ids: [1] }, null, [delExpediente])).toBe(true);
+        expect(seleccionConSgr({ ...base, plantilla_ids: [1] }, null, null)).toBe(false);
+    });
+
+    it('sin selección no incluye ninguna', () => {
+        expect(seleccionConSgr(null, { plantillas: [SGR] }, [delExpediente])).toBe(false);
+    });
+});
+
+describe('necesitaCatalogoSgr', () => {
+    const expediente = (extra = {}) => ({ id: 7, tiene_sgr: false, plantillas: [], ...extra });
+
+    it('sin expediente abierto no hace falta', () => {
+        expect(necesitaCatalogoSgr(null, null, { plantillas: [SGR] })).toBe(false);
+    });
+
+    it('hace falta si el expediente tiene una plantilla sgr, aunque la selección ya la haya quitado', () => {
+        expect(necesitaCatalogoSgr(expediente({ tiene_sgr: true }), { ...base, plantilla_ids: [] }, null)).toBe(true);
+    });
+
+    it('hace falta si la selección en curso incluye una plantilla sgr', () => {
+        expect(necesitaCatalogoSgr(expediente(), { ...base, plantilla_ids: [5, 2] }, { plantillas: [AGUA, COPIA_SGR] })).toBe(true);
+    });
+
+    it('un expediente sin plantillas sgr ni en la selección no lo necesita', () => {
+        expect(necesitaCatalogoSgr(expediente(), { ...base, plantilla_ids: [5] }, { plantillas: [SGR, AGUA] })).toBe(false);
+        expect(necesitaCatalogoSgr(expediente(), null, null)).toBe(false);
     });
 });
 

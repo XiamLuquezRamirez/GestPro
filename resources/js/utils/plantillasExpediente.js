@@ -28,6 +28,20 @@ const seOfrece = (plantilla) => Boolean(plantilla?.compatible && plantilla.activ
 /** Si alguna de las plantillas elegidas tiene motor sgr. Sirve la lista de disponibles o la del expediente. */
 export const incluyeSgr = (plantillaIds, plantillas) => (plantillaIds ?? []).some((id) => esSgr(buscar(plantillas, id)));
 
+/**
+ * Si la selección en curso incluye una plantilla sgr. Se busca en la lista de disponibles y en
+ * las del expediente: si la lista no cargó, igual se sabe.
+ */
+export const seleccionConSgr = (seleccion, disponibles, plantillasExpediente) =>
+    incluyeSgr(seleccion?.plantilla_ids, [...(disponibles?.plantillas ?? []), ...(plantillasExpediente ?? [])]);
+
+/**
+ * Si la pantalla necesita el catálogo SGR (sectores, tipos, componentes y tipologías): solo
+ * cuando el expediente abierto tiene una plantilla sgr o la selección en curso incluye una.
+ */
+export const necesitaCatalogoSgr = (expediente, seleccion, disponibles) =>
+    Boolean(expediente) && (Boolean(expediente.tiene_sgr) || seleccionConSgr(seleccion, disponibles, expediente.plantillas));
+
 /** Si entre las disponibles hay una plantilla sgr que hoy se ofrece al proyecto. */
 export const hayCompatibleSgr = (disponibles) => (disponibles ?? []).some((p) => esSgr(p) && seOfrece(p));
 

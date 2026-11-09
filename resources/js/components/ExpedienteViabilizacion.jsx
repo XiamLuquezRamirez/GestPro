@@ -28,7 +28,7 @@ import {
     textoPlantillas,
 } from '../utils/expedienteChecklist';
 import {
-    AVISO_SIN_SECTOR, avisoIncompatibles, hayCompatibleSgr, seleccionParaNuevo, textoPlantillasNuevo,
+    AVISO_SIN_SECTOR, avisoIncompatibles, hayCompatibleSgr, necesitaCatalogoSgr, seleccionParaNuevo, textoPlantillasNuevo,
 } from '../utils/plantillasExpediente';
 import { mensajeApi } from '../utils/plantillasChecklist';
 import { avisarError } from '../utils/avisosPlantillas';
@@ -65,7 +65,9 @@ const ExpedienteViabilizacion = ({ user }) => {
     const navigate = useNavigate();
 
     const [datosProyecto, setDatosProyecto] = useState(null);
+    // Catálogo SGR (sectores, tipos, componentes y tipologías): solo lo usa lo propio de la SGR.
     const [catalogo, setCatalogo] = useState(null);
+    const [errorCatalogo, setErrorCatalogo] = useState(false);
     const [expediente, setExpediente] = useState(null);
     const [seleccion, setSeleccion] = useState(null);
     const [recalculando, setRecalculando] = useState(false);
@@ -179,8 +181,7 @@ const ExpedienteViabilizacion = ({ user }) => {
         let vigente = true;
         (async () => {
             try {
-                const [, respuestaCatalogo] = await Promise.all([cargarProyecto(), axios.get('/catalogo-requisitos/vigente')]);
-                if (vigente) setCatalogo(respuestaCatalogo.data);
+                await cargarProyecto();
             } catch (error) {
                 if (vigente) {
                     setErrorCarga(error?.response?.status === 404 ? 'El proyecto no existe.' : mensajeApi(error));
@@ -222,6 +223,28 @@ const ExpedienteViabilizacion = ({ user }) => {
     }, [proyectoCargado, idActual, cargarPlantillas]);
 
     useEffect(() => () => clearTimeout(envio.current.temporizador), []);
+
+    // El catálogo SGR se pide una sola vez por apertura de la pantalla, y solo cuando hace falta.
+    // Si falla, la pantalla sigue y el panel SGR ofrece reintentar. Solo vale la última petición,
+    // y ninguna después de cerrar la pantalla.
+    const peticionCatalogo = useRef(0);
+    const catalogoPedido = useRef(false);
+    const cargarCatalogo = useCallback(async () => {
+        catalogoPedido.current = true;
+        const numero = ++peticionCatalogo.current;
+        setErrorCatalogo(false);
+        try {
+            const { data } = await axios.get('/catalogo-requisitos/vigente');
+            if (numero === peticionCatalogo.current) setCatalogo(data);
+        } catch {
+            if (numero === peticionCatalogo.current) setErrorCatalogo(true);
+        }
+    }, []);
+    const necesitaCatalogo = necesitaCatalogoSgr(expediente, seleccion, disponibles);
+    useEffect(() => {
+        if (necesitaCatalogo && !catalogoPedido.current) cargarCatalogo();
+    }, [necesitaCatalogo, cargarCatalogo]);
+    useEffect(() => () => { peticionCatalogo.current += 1; }, []);
 
     // Sin la lista, el checklist igual funciona: solo no se puede elegir responsable.
     useEffect(() => {
@@ -683,7 +706,7 @@ const ExpedienteViabilizacion = ({ user }) => {
         );
     }
 
-    const cargado = datosProyecto && catalogo && (!idActual || (expediente && seleccion));
+    const cargado = datosProyecto && (!idActual || (expediente && seleccion));
     // Lo propio de regalías solo se muestra si el expediente tiene una plantilla con motor sgr.
     const conSgr = Boolean(expediente?.tiene_sgr);
     const a12 = expediente && conSgr ? sectoresConFuenteA12(expediente.configuracion.sectores) : [];
@@ -775,6 +798,8 @@ const ExpedienteViabilizacion = ({ user }) => {
                                 {panelVisible && (
                                     <ExpedienteConfiguracion
                                         catalogo={catalogo}
+                                        errorCatalogo={errorCatalogo}
+                                        onReintentarCatalogo={cargarCatalogo}
                                         expediente={expediente}
                                         seleccion={seleccion}
                                         deshabilitada={!editable}

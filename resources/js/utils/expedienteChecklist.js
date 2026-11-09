@@ -506,9 +506,10 @@ export const alternarSector = (seleccion, sectorId, catalogo) => {
 /**
  * Sectores marcados sin ningún tipo elegido, pudiendo acotarse: cargan todos sus
  * requisitos, incluidos los que no le apliquen al proyecto, y eso distorsiona el avance.
+ * Sin catálogo (todavía cargando, o falló) no se sabe: no avisa de ninguno.
  */
 export const sectoresSinTipo = (seleccion, catalogo) =>
-    catalogo.sectores
+    (catalogo?.sectores ?? [])
         .filter((s) => seleccion.sector_ids.includes(s.id))
         .filter((s) => (s.tipos ?? []).length > 0 && !s.tipos.some((t) => seleccion.tipo_ids.includes(t.id)))
         .map((s) => s.nombre);

@@ -454,6 +454,10 @@ describe('sectoresSinTipo', () => {
         expect(sectoresSinTipo({ sector_ids: [3], tipo_ids: [] }, catalogo)).toEqual([]);
         expect(sectoresSinTipo({ sector_ids: [], tipo_ids: [] }, catalogo)).toEqual([]);
     });
+
+    it('sin catálogo no avisa de ninguno', () => {
+        expect(sectoresSinTipo({ sector_ids: [1], tipo_ids: [] }, null)).toEqual([]);
+    });
 });
 
 describe('agruparChecklist', () => {
