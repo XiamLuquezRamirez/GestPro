@@ -10,6 +10,7 @@ import {
     autorHistorial,
     construirHojasExcel,
     contenidoFila,
+    textoResponsable,
     datosPropio,
     describirEvento,
     fechaHoraHistorial,
@@ -610,6 +611,14 @@ describe('contenidoFila', () => {
         expect(contenidoFila(f)).toMatchObject({ codigo: null, fuente: null, categoria: 'Técnico', cargoRevision: 'Interventor' });
     });
 
+    it('con persona en la plantilla muestra "Nombre (Cargo)"; sin ella, el cargo', () => {
+        const f = filaSimple(7, { requisito: {
+            responsable_cumplimiento: { id: 1, nombre: 'Ana Pérez', cargo: 'Interventora' }, cargo_cumplimiento: 'Interventora',
+            responsable_revision: null, cargo_revision: 'Supervisor',
+        } });
+        expect(contenidoFila(f)).toMatchObject({ cargoCumplimiento: 'Ana Pérez (Interventora)', cargoRevision: 'Supervisor' });
+    });
+
     it('trae la descripción y el soporte requerido del requisito', () => {
         const f = filaSimple(4, { requisito: { descripcion: 'Lo expide la autoridad ambiental.', soporte_requerido: 'Resolución' } });
         expect(contenidoFila(f)).toMatchObject({ descripcion: 'Lo expide la autoridad ambiental.', soporteRequerido: 'Resolución', aplicaSi: null });
@@ -913,5 +922,22 @@ describe('opcionales en el avance', () => {
         expect(pistaRadicar({ total: 0, cumplidos: 0 }, 0)).toBe('Sin requisitos para radicar');
         expect(pistaRadicar({ total: 0, cumplidos: 0 }, 1))
             .toBe('Solo hay requisitos opcionales: para radicar hace falta al menos uno obligatorio');
+    });
+});
+
+describe('textoResponsable', () => {
+    it('una persona con cargo se muestra "Nombre (Cargo)"', () => {
+        expect(textoResponsable({ id: 1, nombre: 'Ana Pérez', cargo: 'Interventora' }, 'Interventora')).toBe('Ana Pérez (Interventora)');
+    });
+
+    it('sin cargo actual usa el cargo guardado en la plantilla; sin ninguno, solo el nombre', () => {
+        expect(textoResponsable({ id: 1, nombre: 'Ana Pérez', cargo: null }, 'Interventora')).toBe('Ana Pérez (Interventora)');
+        expect(textoResponsable({ id: 1, nombre: 'Ana Pérez', cargo: '  ' }, null)).toBe('Ana Pérez');
+    });
+
+    it('sin persona muestra el cargo, o null si tampoco hay cargo', () => {
+        expect(textoResponsable(null, ' Supervisor ')).toBe('Supervisor');
+        expect(textoResponsable(undefined, '')).toBeNull();
+        expect(textoResponsable(null, null)).toBeNull();
     });
 });

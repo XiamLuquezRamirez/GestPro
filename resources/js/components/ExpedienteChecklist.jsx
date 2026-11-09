@@ -226,7 +226,7 @@ const ItemRequisito = ({
                 ) : (
                     <b>{fila.responsable ? fila.responsable.nombre : 'Sin asignar'}</b>
                 )}
-                {contenido.cargoCumplimiento && <span className="exv-responsable-cargo">Cargo indicado: {contenido.cargoCumplimiento}</span>}
+                {contenido.cargoCumplimiento && <span className="exv-responsable-cargo">Según la plantilla: {contenido.cargoCumplimiento}</span>}
                 {contenido.soporteRequerido && <span className="exv-responsable-cargo">Soporte requerido: {contenido.soporteRequerido}</span>}
             </div>
 

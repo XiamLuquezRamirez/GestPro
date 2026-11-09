@@ -1,14 +1,5 @@
 import React, { useMemo } from 'react';
-import { CONDICIONADO, agruparVistaPrevia, etiquetaCaracter, etiquetaTipo, porRedactar } from '../utils/plantillasChecklist';
-
-/** Las partes de la línea de datos de un requisito, en el orden en que se muestran. */
-const datosDe = (r, motor) => [
-    motor === 'simple' ? etiquetaCaracter(r.caracter) : null,
-    r.tipo_requisito ? etiquetaTipo(r.tipo_requisito) : null,
-    r.soporte_requerido ? `Soporte: ${r.soporte_requerido}` : null,
-    r.cargo_cumplimiento ? `Cumple: ${r.cargo_cumplimiento}` : null,
-    r.caracter === CONDICIONADO && r.condicion_descripcion && !porRedactar(r) ? `Aplica si: ${r.condicion_descripcion}` : null,
-].filter(Boolean);
+import { agruparVistaPrevia, datosVistaPrevia, porRedactar } from '../utils/plantillasChecklist';
 
 /** El checklist de la versión de trabajo como lo verá el usuario en un expediente. */
 const PlantillaVistaPrevia = ({ plantilla, version, requisitos }) => {
@@ -36,7 +27,7 @@ const PlantillaVistaPrevia = ({ plantilla, version, requisitos }) => {
                                     <div>{r.texto}</div>
                                     {r.descripcion && <small>{r.descripcion}</small>}
                                     <small className="pl-vista-datos">
-                                        {datosDe(r, plantilla.motor).join(' · ')}
+                                        {datosVistaPrevia(r, plantilla.motor).join(' · ')}
                                         {porRedactar(r) && <span className="pl-insignia pl-insignia-alerta">Por redactar</span>}
                                     </small>
                                 </div>

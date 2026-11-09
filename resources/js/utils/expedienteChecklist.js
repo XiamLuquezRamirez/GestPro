@@ -342,7 +342,23 @@ export const agruparChecklist = (filas) => {
     return bloques;
 };
 
-/** Lo que se muestra de una fila, sea de plantilla o propia. Un propio no tiene código ni fuente. */
+/**
+ * Quién debe cumplir o revisar un requisito según la plantilla: "Nombre (Cargo)" si indica una
+ * persona, o el cargo si solo indica el cargo; null si no indica nada. El cargo de la persona es
+ * el actual; sin él, el que la plantilla guardó al elegirla.
+ */
+export const textoResponsable = (persona, cargo) => {
+    const guardado = String(cargo ?? '').trim();
+    if (!persona) return guardado || null;
+    const cargoPersona = String(persona.cargo ?? '').trim() || guardado;
+    const nombre = String(persona.nombre ?? '').trim() || `Responsable ${persona.id}`;
+    return cargoPersona ? `${nombre} (${cargoPersona})` : nombre;
+};
+
+/**
+ * Lo que se muestra de una fila, sea de plantilla o propia. Un propio no tiene código ni fuente.
+ * cargoCumplimiento y cargoRevision dicen quién debe cumplir y revisar (ver textoResponsable).
+ */
 export const contenidoFila = (fila) => {
     const r = fila.requisito;
     if (esPropio(fila) || !r) {
@@ -369,8 +385,8 @@ export const contenidoFila = (fila) => {
         texto: r.texto ?? '',
         nota: r.nota ?? null,
         categoria: etiquetaCategoriaFila(fila),
-        cargoRevision: r.cargo_revision ?? null,
-        cargoCumplimiento: r.cargo_cumplimiento ?? null,
+        cargoRevision: textoResponsable(r.responsable_revision, r.cargo_revision),
+        cargoCumplimiento: textoResponsable(r.responsable_cumplimiento, r.cargo_cumplimiento),
         descripcion: r.descripcion ?? null,
         aplicaSi: condicionado ? (r.condicion_descripcion ?? null) : null,
         soporteRequerido: r.soporte_requerido ?? null,

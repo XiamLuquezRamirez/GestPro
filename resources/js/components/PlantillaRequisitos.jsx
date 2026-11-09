@@ -7,7 +7,7 @@ import { ORDEN_SECCIONES, SECCIONES } from '../utils/expedienteChecklist';
 import { avisarError } from '../utils/avisosPlantillas';
 import {
     CARACTERES, CATEGORIAS, CONDICIONADO, FUENTES_NORMATIVAS, TIPOS_REQUISITO, datosRequisito, etiquetaCaracter, etiquetaCategoria, formularioRequisito,
-    mensajeApi, mover, opcionesCargo, porRedactar, requisitoVacio,
+    mensajeApi, mover, opcionesResponsable, porRedactar, requisitoVacio,
 } from '../utils/plantillasChecklist';
 import useOcupado from './useOcupado';
 
@@ -20,21 +20,34 @@ const Campo = ({ etiqueta, children, ancho }) => (
 
 /**
  * Formulario de un requisito. En el motor sgr agrega sección, sector, tipo y condición.
- * `responsables` es el catálogo de Responsables (para elegir cargos), o null si no se pudo cargar.
+ * `responsables` es el catálogo de Responsables (para elegir personas), o null si no se pudo cargar.
  */
 const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, responsables, guardando, onGuardar, onCancelar }) => {
     const [f, setF] = useState(inicial);
     const [revisionCondicion, setRevisionCondicion] = useState(null);
     const cambiar = (campo, valor) => setF((actual) => ({ ...actual, [campo]: valor }));
     const texto = (campo, props = {}) => <input value={f[campo]} onChange={(e) => cambiar(campo, e.target.value)} {...props} />;
-    // Los cargos salen de los responsables activos. Sin el catálogo se escriben a mano, como antes.
-    const cargo = (campo) => (responsables === null ? texto(campo, { maxLength: 150 }) : (
-        <select value={f[campo]} onChange={(e) => cambiar(campo, e.target.value)}>
-            <option value="">Sin cargo</option>
-            {opcionesCargo(responsables, f[campo]).map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
-        </select>
-    ));
-    const sinCargos = responsables !== null && opcionesCargo(responsables, '').length === 0;
+    // Las personas salen de los responsables activos; la que el requisito ya tiene se conserva
+    // aunque esté inactiva, y un cargo sin persona (dato anterior), como "Solo cargo". Sin el
+    // catálogo se escribe el cargo a mano, como antes, y la persona no cambia.
+    const persona = (campoId, campoCargo, campoPersona) => {
+        if (responsables === null) {
+            return (
+                <>
+                    {texto(campoCargo, { maxLength: 150 })}
+                    {f[campoPersona] && <small className="pl-ayuda">Asignado a {f[campoPersona].nombre}. Sin la lista de responsables, por ahora solo puedes cambiar el cargo.</small>}
+                </>
+            );
+        }
+        const actual = { persona: f[campoPersona], cargo: f[campoPersona] ? null : f[campoCargo] };
+        return (
+            <select value={f[campoId]} onChange={(e) => cambiar(campoId, e.target.value)}>
+                {opcionesResponsable(responsables, actual).map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+            </select>
+        );
+    };
+    const sinPersonas = responsables !== null && !responsables.some((r) => r.activo);
+    const sufijo = responsables === null ? ' (cargo)' : '';
 
     const sector = catalogoSgr?.sectores.find((s) => s.id === Number(f.sector_id));
 
@@ -135,10 +148,10 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, responsables,
                 </>
             )}
 
-            <Campo etiqueta="Responsable de cumplimiento (cargo)">{cargo('cargo_cumplimiento')}</Campo>
-            <Campo etiqueta="Responsable de revisión (cargo)">{cargo('cargo_revision')}</Campo>
-            {sinCargos && (
-                <p className="pl-ayuda pl-campo-ancho">Ningún responsable activo tiene cargo. Regístralos en Parámetros → Responsables.</p>
+            <Campo etiqueta={`Responsable de cumplimiento${sufijo}`}>{persona('responsable_cumplimiento_id', 'cargo_cumplimiento', 'persona_cumplimiento')}</Campo>
+            <Campo etiqueta={`Responsable de revisión${sufijo}`}>{persona('responsable_revision_id', 'cargo_revision', 'persona_revision')}</Campo>
+            {sinPersonas && (
+                <p className="pl-ayuda pl-campo-ancho">No hay responsables activos. Regístralos en Parámetros → Responsables.</p>
             )}
             <Campo etiqueta="Documento o soporte requerido">{texto('soporte_requerido', { maxLength: 255 })}</Campo>
             <Campo etiqueta="Referencia normativa">{texto('referencia_normativa', { maxLength: 255 })}</Campo>
@@ -170,7 +183,7 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, responsables,
 const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
     const [editando, setEditando] = useState(null); // null, 'nuevo' o el requisito
     const [catalogoSgr, setCatalogoSgr] = useState(null);
-    // Responsables, para elegir los cargos del requisito. null mientras carga o si falla.
+    // Responsables, para elegir las personas del requisito. null mientras carga o si falla.
     const [responsables, setResponsables] = useState(null);
     const [ocupado, ejecutar] = useOcupado();
     const contenedor = useRef(null);
@@ -219,7 +232,7 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
     });
 
     const guardar = (formulario) => ejecutar(async () => {
-        const datos = datosRequisito(formulario, plantilla.motor);
+        const datos = datosRequisito(formulario, plantilla.motor, responsables !== null);
         try {
             if (editando === 'nuevo') {
                 await axios.post(`${url}/requisitos`, datos);

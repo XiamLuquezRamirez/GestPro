@@ -1,7 +1,7 @@
 // Lógica de presentación de la administración de plantillas de checklist.
 // Funciones puras, probadas en plantillasChecklist.test.js. Las reglas las valida el backend.
 
-import { CATEGORIAS, ORDEN_SECCIONES, SECCIONES, mensajeError } from './expedienteChecklist';
+import { CATEGORIAS, ORDEN_SECCIONES, SECCIONES, mensajeError, textoResponsable } from './expedienteChecklist';
 
 // La lista vive en expedienteChecklist.js porque el checklist del expediente también agrupa por categoría.
 export { CATEGORIAS };
@@ -96,8 +96,23 @@ const CAMPOS_TEXTO = [
     'clave', 'codigo', 'subtitulo', 'seccion', 'fuente', 'condicion',
 ];
 
+/** Valores del select de una persona del requisito que no son el id de un responsable. */
+export const OPCION_SIN_ASIGNAR = '';
+export const OPCION_SOLO_CARGO = 'solo-cargo';
+
+/** Papel de cada persona del requisito: campo del id, de su cargo y del objeto que trae la API. */
+const PERSONAS = [
+    ['responsable_cumplimiento_id', 'cargo_cumplimiento', 'responsable_cumplimiento'],
+    ['responsable_revision_id', 'cargo_revision', 'responsable_revision'],
+];
+// En el formulario, la persona que el requisito ya tenía: conserva su opción aunque esté inactiva.
+const personaDelFormulario = (campoObjeto) => campoObjeto.replace('responsable_', 'persona_');
+
 export const requisitoVacio = (motor) => ({
     ...Object.fromEntries(CAMPOS_TEXTO.map((c) => [c, ''])),
+    ...Object.fromEntries(PERSONAS.flatMap(([campoId, , campoObjeto]) => [
+        [campoId, OPCION_SIN_ASIGNAR], [personaDelFormulario(campoObjeto), null],
+    ])),
     caracter: 'obligatorio',
     requiere_aprobacion_no_aplica: motor === 'sgr',
     activo: true,
@@ -119,12 +134,56 @@ export const formularioRequisito = (requisito, motor) => {
         activo: conRespaldo('activo'),
         sector_id: texto('sector_id'),
         tipo_id: texto('tipo_id'),
+        // El select de cada persona: su id, "Solo cargo" si el requisito tiene un cargo sin
+        // persona (dato anterior) o "Sin asignar".
+        ...Object.fromEntries(PERSONAS.flatMap(([campoId, campoCargo, campoObjeto]) => {
+            const id = requisito[campoId];
+            const eleccion = id ? String(id) : (String(requisito[campoCargo] ?? '').trim() ? OPCION_SOLO_CARGO : OPCION_SIN_ASIGNAR);
+            return [[campoId, eleccion], [personaDelFormulario(campoObjeto), id ? (requisito[campoObjeto] ?? null) : null]];
+        })),
     };
 };
 
-/** Lo que espera la API según el motor. Los textos vacíos viajan como null. */
-export const datosRequisito = (formulario, motor) => {
+/**
+ * Opciones del select de una persona del requisito: "Sin asignar" y los responsables activos por
+ * nombre, como "Nombre (Cargo)". `actual` es lo que el requisito ya tiene: su persona, si está
+ * inactiva, se conserva como opción marcada; un cargo sin persona, como "Solo cargo".
+ */
+export const opcionesResponsable = (responsables, actual = {}) => {
+    const lista = responsables ?? [];
+    const etiqueta = (p) => textoResponsable(p, null);
+    const opciones = lista
+        .filter((p) => p.activo)
+        .sort((a, b) => String(a.nombre ?? '').localeCompare(String(b.nombre ?? ''), 'es'))
+        .map((p) => ({ valor: String(p.id), etiqueta: etiqueta(p) }));
+
+    const persona = actual.persona ?? null;
+    if (persona && !opciones.some((o) => o.valor === String(persona.id))) {
+        const enLista = lista.find((p) => String(p.id) === String(persona.id));
+        const activo = enLista ? enLista.activo : persona.activo !== false;
+        opciones.push({ valor: String(persona.id), etiqueta: `${etiqueta(enLista ?? persona)}${activo ? '' : ' (inactivo)'}` });
+    }
+    const cargo = String(actual.cargo ?? '').trim();
+    if (!persona && cargo) {
+        opciones.push({ valor: OPCION_SOLO_CARGO, etiqueta: `Solo cargo: ${cargo}` });
+    }
+    return [{ valor: OPCION_SIN_ASIGNAR, etiqueta: 'Sin asignar' }, ...opciones];
+};
+
+/**
+ * Lo que espera la API según el motor. Los textos vacíos viajan como null. Con `conPersonas`
+ * (el catálogo de responsables cargó y se eligieron en selects) van los ids de las personas; sin
+ * él solo viaja el cargo escrito y las personas del requisito no cambian.
+ */
+export const datosRequisito = (formulario, motor, conPersonas = false) => {
     const texto = (campo) => (String(formulario[campo] ?? '').trim() || null);
+    // Con persona, el cargo lo copia el servidor; "Solo cargo" conserva el escrito; "Sin asignar" lo vacía.
+    const personas = conPersonas ? Object.fromEntries(PERSONAS.flatMap(([campoId, campoCargo]) => {
+        const eleccion = String(formulario[campoId] ?? OPCION_SIN_ASIGNAR);
+        if (eleccion === OPCION_SIN_ASIGNAR) return [[campoId, null], [campoCargo, null]];
+        if (eleccion === OPCION_SOLO_CARGO) return [[campoId, null], [campoCargo, texto(campoCargo)]];
+        return [[campoId, Number(eleccion)], [campoCargo, texto(campoCargo)]];
+    })) : {};
     const comunes = {
         texto: texto('texto'),
         descripcion: texto('descripcion'),
@@ -138,6 +197,7 @@ export const datosRequisito = (formulario, motor) => {
         requiere_aprobacion_no_aplica: formulario.requiere_aprobacion_no_aplica,
         activo: formulario.activo,
         codigo_comun: texto('codigo_comun'),
+        ...personas,
     };
 
     if (motor === 'sgr') {
@@ -183,6 +243,21 @@ export const agruparVistaPrevia = (requisitos, motor) => {
     const grupos = [...CATEGORIAS, [null, 'Sin categoría']]
         .map(([clave, titulo]) => ({ clave: clave ?? 'sin', titulo, requisitos: activos.filter((r) => (CATEGORIAS.some(([c]) => c === r.categoria) ? r.categoria : null) === clave) }));
     return grupos.filter((g) => g.requisitos.length);
+};
+
+/**
+ * Las partes de la línea de datos de un requisito en la vista previa, en el orden en que se
+ * muestran. Quién cumple es "Nombre (Cargo)" si la plantilla indica una persona, o el cargo.
+ */
+export const datosVistaPrevia = (r, motor) => {
+    const cumple = textoResponsable(r.responsable_cumplimiento, r.cargo_cumplimiento);
+    return [
+        motor === 'simple' ? etiquetaCaracter(r.caracter) : null,
+        r.tipo_requisito ? etiquetaTipo(r.tipo_requisito) : null,
+        r.soporte_requerido ? `Soporte: ${r.soporte_requerido}` : null,
+        cumple ? `Cumple: ${cumple}` : null,
+        r.caracter === CONDICIONADO && r.condicion_descripcion && !porRedactar(r) ? `Aplica si: ${r.condicion_descripcion}` : null,
+    ].filter(Boolean);
 };
 
 /** La pestaña a la que llevan las flechas, Inicio y Fin desde `actual`; null si la tecla no navega. */
@@ -271,25 +346,6 @@ export const errorConLista = (error) => {
 export const escaparHtml = (texto) => String(texto ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-
-/**
- * Cargos que se ofrecen como responsable de cumplimiento o de revisión: los del catálogo de
- * Responsables activos (GET /responsables), sin repetir y en orden alfabético. El requisito guarda
- * el texto del cargo; si ya tiene uno que no está entre los activos, se conserva como opción.
- */
-export const opcionesCargo = (responsables, actual) => {
-    const activos = [...new Set((responsables ?? [])
-        .filter((r) => r.activo)
-        .map((r) => (r.cargo ?? '').trim())
-        .filter(Boolean))]
-        .sort((a, b) => a.localeCompare(b, 'es'));
-    const opciones = activos.map((c) => ({ valor: c, etiqueta: c }));
-    const propio = (actual ?? '').trim();
-    if (propio && !activos.includes(propio)) {
-        opciones.push({ valor: propio, etiqueta: `${propio} (no está en los responsables activos)` });
-    }
-    return opciones;
-};
 
 /** HTML para Swal: el mensaje y, si hay, la lista de errores (escapada y limitada a `maximo`). */
 export const htmlErrores = (mensaje, errores = [], maximo = 20) => {

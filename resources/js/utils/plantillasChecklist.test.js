@@ -9,7 +9,9 @@ import {
     TIPOS_REQUISITO,
     agruparVistaPrevia,
     escaparHtml,
-    opcionesCargo,
+    OPCION_SIN_ASIGNAR,
+    OPCION_SOLO_CARGO,
+    opcionesResponsable,
     htmlErrores,
     mensajeApi,
     porRedactar,
@@ -20,6 +22,7 @@ import {
     pestanaPorTecla,
     textoRequisitosVersion,
     datosRequisito,
+    datosVistaPrevia,
     etiquetaCategoria,
     etiquetaVersion,
     filtrarPlantillas,
@@ -392,32 +395,123 @@ describe('errorConLista y textoRequisitosVersion', () => {
     });
 });
 
-describe('opcionesCargo', () => {
+describe('opcionesResponsable', () => {
     const responsables = [
-        { id: 1, nombre: 'Ana', cargo: 'Supervisora de obra', activo: true },
+        { id: 1, nombre: 'Laura', cargo: 'Interventora', activo: true },
         { id: 2, nombre: 'Carlos', cargo: 'Interventor', activo: true },
-        { id: 3, nombre: 'Laura', cargo: ' Interventor ', activo: true },
+        { id: 3, nombre: 'Ángela', cargo: 'Interventor', activo: true },
         { id: 4, nombre: 'Pedro', cargo: 'Jefe de planeación', activo: false },
-        { id: 5, nombre: 'Sin cargo', cargo: null, activo: true },
-        { id: 6, nombre: 'Vacío', cargo: '  ', activo: true },
+        { id: 5, nombre: 'Beto', cargo: null, activo: true },
+        { id: 6, nombre: 'Daniel', cargo: '  ', activo: true },
     ];
 
-    it('ofrece los cargos de los responsables activos, sin repetir y en orden alfabético', () => {
-        expect(opcionesCargo(responsables, '')).toEqual([
-            { valor: 'Interventor', etiqueta: 'Interventor' },
-            { valor: 'Supervisora de obra', etiqueta: 'Supervisora de obra' },
+    it('ofrece "Sin asignar" y las personas activas por nombre, con su cargo si lo tienen', () => {
+        expect(opcionesResponsable(responsables, { persona: null, cargo: '' })).toEqual([
+            { valor: OPCION_SIN_ASIGNAR, etiqueta: 'Sin asignar' },
+            { valor: '3', etiqueta: 'Ángela (Interventor)' },
+            { valor: '5', etiqueta: 'Beto' },
+            { valor: '2', etiqueta: 'Carlos (Interventor)' },
+            { valor: '6', etiqueta: 'Daniel' },
+            { valor: '1', etiqueta: 'Laura (Interventora)' },
         ]);
     });
 
-    it('conserva el cargo que ya tiene el requisito aunque no esté entre los activos', () => {
-        expect(opcionesCargo(responsables, 'Jefe de planeación')).toContainEqual(
-            { valor: 'Jefe de planeación', etiqueta: 'Jefe de planeación (no está en los responsables activos)' },
-        );
-        expect(opcionesCargo(responsables, 'Interventor')).toHaveLength(2);
+    it('una persona activa ya elegida no se repite', () => {
+        const opciones = opcionesResponsable(responsables, { persona: { id: 2, nombre: 'Carlos', cargo: 'Interventor' }, cargo: 'Interventor' });
+        expect(opciones.filter((o) => o.valor === '2')).toHaveLength(1);
+        expect(opciones).toHaveLength(6);
     });
 
-    it('sin responsables no ofrece cargos', () => {
-        expect(opcionesCargo(null, '')).toEqual([]);
-        expect(opcionesCargo([], '')).toEqual([]);
+    it('conserva la persona inactiva del requisito y la marca', () => {
+        const opciones = opcionesResponsable(responsables, { persona: { id: 4, nombre: 'Pedro', cargo: 'Jefe de planeación' }, cargo: 'Jefe de planeación' });
+        expect(opciones.at(-1)).toEqual({ valor: '4', etiqueta: 'Pedro (Jefe de planeación) (inactivo)' });
+    });
+
+    it('conserva la persona del requisito aunque la lista no la traiga', () => {
+        expect(opcionesResponsable(responsables, { persona: { id: 9, nombre: 'Rosa', cargo: null, activo: false }, cargo: null }).at(-1))
+            .toEqual({ valor: '9', etiqueta: 'Rosa (inactivo)' });
+        expect(opcionesResponsable(responsables, { persona: { id: 9, nombre: 'Rosa', cargo: 'Tesorera' }, cargo: 'Tesorera' }).at(-1))
+            .toEqual({ valor: '9', etiqueta: 'Rosa (Tesorera)' });
+    });
+
+    it('un cargo sin persona (dato anterior) se conserva como "Solo cargo"', () => {
+        expect(opcionesResponsable(responsables, { persona: null, cargo: ' Interventor ' }).at(-1))
+            .toEqual({ valor: OPCION_SOLO_CARGO, etiqueta: 'Solo cargo: Interventor' });
+        // Con persona, el cargo es el suyo: no hay "Solo cargo".
+        expect(opcionesResponsable(responsables, { persona: { id: 1, nombre: 'Laura', cargo: 'Interventora' }, cargo: 'Interventora' })
+            .some((o) => o.valor === OPCION_SOLO_CARGO)).toBe(false);
+    });
+
+    it('sin responsables solo ofrece "Sin asignar"', () => {
+        expect(opcionesResponsable(null, { persona: null, cargo: '' })).toEqual([{ valor: OPCION_SIN_ASIGNAR, etiqueta: 'Sin asignar' }]);
+        expect(opcionesResponsable([], {})).toEqual([{ valor: OPCION_SIN_ASIGNAR, etiqueta: 'Sin asignar' }]);
+    });
+});
+
+describe('personas del requisito en el formulario', () => {
+    const ana = { id: 1, nombre: 'Ana', cargo: 'Interventora', activo: true };
+
+    it('un requisito nuevo nace sin personas', () => {
+        expect(requisitoVacio('simple')).toMatchObject({
+            responsable_cumplimiento_id: OPCION_SIN_ASIGNAR, responsable_revision_id: OPCION_SIN_ASIGNAR,
+            persona_cumplimiento: null, persona_revision: null,
+        });
+    });
+
+    it('lee la persona elegida, un cargo sin persona como "Solo cargo" y la ausencia de ambos', () => {
+        const f = formularioRequisito({
+            responsable_cumplimiento_id: 1, responsable_cumplimiento: ana, cargo_cumplimiento: 'Interventora',
+            responsable_revision_id: null, responsable_revision: null, cargo_revision: 'Supervisor',
+        }, 'simple');
+        expect(f).toMatchObject({
+            responsable_cumplimiento_id: '1', persona_cumplimiento: ana, cargo_cumplimiento: 'Interventora',
+            responsable_revision_id: OPCION_SOLO_CARGO, persona_revision: null, cargo_revision: 'Supervisor',
+        });
+        expect(formularioRequisito({ cargo_revision: null }, 'simple').responsable_revision_id).toBe(OPCION_SIN_ASIGNAR);
+    });
+
+    it('con el catálogo de responsables envía el id y el cargo según la elección', () => {
+        const base = { ...requisitoVacio('simple'), texto: 'X', cargo_cumplimiento: 'Interventor', cargo_revision: 'Supervisor' };
+        const datos = (cumplimiento, revision) => datosRequisito(
+            { ...base, responsable_cumplimiento_id: cumplimiento, responsable_revision_id: revision }, 'simple', true,
+        );
+
+        expect(datos('2', OPCION_SOLO_CARGO)).toMatchObject({
+            responsable_cumplimiento_id: 2, cargo_cumplimiento: 'Interventor',
+            responsable_revision_id: null, cargo_revision: 'Supervisor',
+        });
+        // "Sin asignar" vacía también el cargo.
+        expect(datos(OPCION_SIN_ASIGNAR, OPCION_SIN_ASIGNAR)).toMatchObject({
+            responsable_cumplimiento_id: null, cargo_cumplimiento: null,
+            responsable_revision_id: null, cargo_revision: null,
+        });
+    });
+
+    it('sin el catálogo de responsables solo envía el cargo escrito y no toca las personas', () => {
+        const f = { ...formularioRequisito({ responsable_cumplimiento_id: 1, responsable_cumplimiento: ana, cargo_cumplimiento: 'Interventora' }, 'sgr'), texto: 'X' };
+        const datos = datosRequisito(f, 'sgr');
+        expect(datos.cargo_cumplimiento).toBe('Interventora');
+        expect(datos).not.toHaveProperty('responsable_cumplimiento_id');
+        expect(datos).not.toHaveProperty('responsable_revision_id');
+    });
+});
+
+describe('datosVistaPrevia', () => {
+    const base = { caracter: 'opcional', tipo_requisito: 'documental', soporte_requerido: 'PDF' };
+
+    it('dice quién cumple: la persona con su cargo o, sin ella, el cargo', () => {
+        expect(datosVistaPrevia({
+            ...base, responsable_cumplimiento: { id: 1, nombre: 'Ana', cargo: 'Interventora' }, cargo_cumplimiento: 'Interventora',
+        }, 'simple')).toEqual(['Opcional', 'Documental', 'Soporte: PDF', 'Cumple: Ana (Interventora)']);
+        expect(datosVistaPrevia({ ...base, responsable_cumplimiento: null, cargo_cumplimiento: 'Supervisor' }, 'sgr'))
+            .toEqual(['Documental', 'Soporte: PDF', 'Cumple: Supervisor']);
+        expect(datosVistaPrevia({ caracter: 'obligatorio' }, 'sgr')).toEqual([]);
+    });
+
+    it('en un condicionado dice cuándo aplica, salvo que esté por redactar', () => {
+        expect(datosVistaPrevia({ caracter: 'condicionado', condicion_descripcion: 'Si compra predios' }, 'simple'))
+            .toEqual(['Condicionado', 'Aplica si: Si compra predios']);
+        expect(datosVistaPrevia({ caracter: 'condicionado', condicion_descripcion: 'Condición original: comp=predios' }, 'simple'))
+            .toEqual(['Condicionado']);
     });
 });
