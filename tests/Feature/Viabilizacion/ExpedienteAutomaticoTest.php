@@ -21,8 +21,9 @@ use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
- * El expediente como seguimiento de la formulación: nace solo al crear el proyecto,
- * se configura una vez y desde ahí solo se entra a chequear.
+ * El expediente como seguimiento de la formulación: nace al crear el proyecto, al definir
+ * su financiación o al entrar a Formulación, se configura una vez y desde ahí solo se entra
+ * a chequear.
  */
 class ExpedienteAutomaticoTest extends TestCase
 {
@@ -447,6 +448,130 @@ class ExpedienteAutomaticoTest extends TestCase
 
         $this->confirmar($expediente->id)->assertOk();
         $this->como(Rol::Consulta)->getJson($url)->assertJsonPath('0.configurado', true);
+    }
+
+    // ------------------------------------------- entrada a la fase Formulación
+
+    /** Lo que la creación automática decide por su cuenta, para comparar dos expedientes. */
+    private function preseleccion(ProyectoExpediente $expediente): array
+    {
+        return [
+            'estado' => $expediente->estado,
+            'fecha_configuracion' => $expediente->fecha_configuracion,
+            'fase_sgr' => $expediente->fase_sgr,
+            'plantillas' => $expediente->versionesPlantilla()->orderBy('catalogo_versiones.id')->get()
+                ->map(fn ($v) => [$v->id, (bool) $v->pivot->es_principal])->all(),
+            'sectores' => $expediente->sectores()->pluck('requisitos_sectores.id')->all(),
+            'aplican' => $expediente->requisitos()->where('aplica', true)->count(),
+        ];
+    }
+
+    public function test_pasar_a_formulacion_crea_el_expediente_con_la_preseleccion_del_alta(): void
+    {
+        $sector = $this->sectorMapeado();
+        $this->guardar(['nombre' => 'Alta', 'sector' => $sector])->assertOk();
+        $this->guardar(['nombre' => 'Edicion', 'sector' => $sector, 'fase' => $this->licitacion])->assertOk();
+        $editado = Proyecto::where('nombre', 'Edicion')->firstOrFail();
+        $this->assertSame(0, $editado->expedientes()->count());
+
+        $this->guardar(['accion' => 'Editar', 'id' => $editado->id, 'nombre' => 'Edicion', 'sector' => $sector])->assertOk();
+
+        $alta = Proyecto::where('nombre', 'Alta')->firstOrFail()->expedientes()->sole();
+        $expediente = $editado->expedientes()->sole();
+        $this->assertNotNull($expediente->usuario_creo_id);
+        $this->assertSame([PlantillaChecklist::sgr()->id], $expediente->versionesPlantilla()->pluck('plantilla_id')->all());
+        $this->assertSame($this->preseleccion($alta), $this->preseleccion($expediente));
+    }
+
+    public function test_pasar_a_formulacion_por_definir_no_crea_expediente(): void
+    {
+        $porDefinir = $this->proyecto(['financiacion_por_definir' => true, 'fase' => $this->licitacion], []);
+        $this->guardar(['accion' => 'Editar', 'id' => $porDefinir->id, 'fuenteIds' => [], 'financiacionPorDefinir' => true])->assertOk();
+
+        // Sin enviar la financiación sigue "por definir", aunque le queden fuentes de antes.
+        $sinEnviar = $this->proyecto(['financiacion_por_definir' => true, 'fase' => $this->licitacion], [$this->fuenteSgr]);
+        $formulario = $this->formulario(['accion' => 'Editar', 'id' => $sinEnviar->id]);
+        unset($formulario['fuenteIds']);
+        $this->como(Rol::Gestor)->postJson('/GestPro/guardarProyecto', $formulario)->assertOk();
+
+        foreach ([$porDefinir, $sinEnviar] as $proyecto) {
+            $this->assertDatabaseHas('proyectos', ['id' => $proyecto->id, 'fase' => $this->formulacion, 'financiacion_por_definir' => true]);
+        }
+        $this->assertDatabaseCount('proyectos_expedientes', 0);
+    }
+
+    public function test_pasar_a_formulacion_con_un_expediente_no_crea_otro(): void
+    {
+        $borrador = $this->proyecto(['fase' => $this->licitacion]);
+        $this->expedienteSinConfigurar($borrador);
+        $radicado = $this->proyecto(['fase' => $this->licitacion]);
+        $expediente = $this->expedienteSinConfigurar($radicado);
+        DB::table('proyectos_expedientes')->where('id', $expediente->id)->update(['estado' => 'radicado']);
+
+        $this->guardar(['accion' => 'Editar', 'id' => $borrador->id])->assertOk();
+        $this->guardar(['accion' => 'Editar', 'id' => $radicado->id])->assertOk();
+
+        $this->assertSame(1, $borrador->expedientes()->count());
+        $this->assertSame(1, $radicado->expedientes()->count());
+    }
+
+    public function test_seguir_en_formulacion_no_crea_ni_duplica_el_expediente(): void
+    {
+        $conExpediente = $this->proyecto();
+        $this->expedienteSinConfigurar($conExpediente);
+        // Un borrador eliminado a propósito no vuelve a nacer mientras siga en Formulación.
+        $eliminado = $this->proyecto();
+        app(ExpedienteService::class)->eliminar($this->expedienteSinConfigurar($eliminado));
+
+        foreach ([$conExpediente, $eliminado] as $proyecto) {
+            $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id])->assertOk();
+            $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'fuenteIds' => [$this->fuentePropios, $this->fuenteSgr]])->assertOk();
+        }
+
+        $this->assertSame(1, $conExpediente->expedientes()->count());
+        $this->assertSame(0, $eliminado->expedientes()->count());
+    }
+
+    public function test_salir_de_formulacion_no_crea_expediente(): void
+    {
+        $proyecto = $this->proyecto();
+
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'fase' => $this->licitacion])->assertOk();
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id, 'fase' => null])->assertOk();
+
+        $this->assertDatabaseCount('proyectos_expedientes', 0);
+    }
+
+    public function test_si_falla_la_creacion_al_pasar_a_formulacion_el_proyecto_se_guarda_igual(): void
+    {
+        Exceptions::fake();
+        $proyecto = $this->proyecto(['fase' => $this->licitacion, 'sector' => $this->sectorConEquivalenteInactivo()]);
+
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id])->assertOk();
+
+        $this->assertDatabaseHas('proyectos', ['id' => $proyecto->id, 'fase' => $this->formulacion]);
+        $this->assertDatabaseCount('proyectos_expedientes', 0);
+        Exceptions::assertReported(ReglaNegocioException::class);
+    }
+
+    public function test_si_falla_saber_si_entra_a_formulacion_el_proyecto_se_guarda_igual(): void
+    {
+        Exceptions::fake();
+        // Sin fase antes: la única consulta a fases después de guardar es la de entrar a Formulación.
+        $proyecto = $this->proyecto(['fase' => null]);
+        DB::listen(function ($consulta) {
+            if (str_contains($consulta->sql, '"fases"')) {
+                throw new \RuntimeException('Sin acceso a fases');
+            }
+        });
+
+        $this->guardar(['accion' => 'Editar', 'id' => $proyecto->id])
+            ->assertOk()
+            ->assertExactJson(['success' => 'Proyecto guardado correctamente']);
+
+        $this->assertDatabaseHas('proyectos', ['id' => $proyecto->id, 'fase' => $this->formulacion]);
+        $this->assertDatabaseCount('proyectos_expedientes', 0);
+        Exceptions::assertReported(fn (\RuntimeException $e) => $e->getMessage() === 'Sin acceso a fases');
     }
 
     // -------------------------------------------- salida de la fase Formulación

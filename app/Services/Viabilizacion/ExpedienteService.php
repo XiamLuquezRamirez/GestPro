@@ -123,7 +123,7 @@ final class ExpedienteService
     }
 
     /**
-     * Expediente que nace con el proyecto, si le corresponde. Con plantilla SGR compatible,
+     * Expediente que nace al guardar el proyecto, si le corresponde. Con plantilla SGR compatible,
      * la preselecciona con la fase III y el sector sugerido por el proyecto; sin ella, nace
      * sin plantillas. Nunca interrumpe a quien guarda el proyecto: un fallo se registra y el
      * expediente se puede crear a mano.
@@ -193,6 +193,23 @@ final class ExpedienteService
 
             return $expediente;
         });
+    }
+
+    /**
+     * El proyecto pasó a Formulación con este guardado. Seguir en ella no cuenta: en cada
+     * edición volvería a nacer un borrador que alguien eliminó a propósito. Se pregunta con el
+     * proyecto ya guardado: como crearAutomatico, nunca interrumpe a quien lo guardó. Un fallo
+     * al consultarlo se registra y cuenta como que no entró; el expediente se puede crear a mano.
+     */
+    public function entraAFormulacion(Proyecto $proyecto, mixed $faseAnterior): bool
+    {
+        try {
+            return ! $this->esFormulacion($faseAnterior) && $this->esFormulacion($proyecto->fase);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return false;
+        }
     }
 
     /** Aviso, sin bloquear el cambio, si el proyecto deja Formulación con un borrador. */
