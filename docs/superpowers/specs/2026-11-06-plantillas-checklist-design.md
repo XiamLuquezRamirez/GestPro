@@ -212,7 +212,7 @@ Una migración por paso, cada una con `down()` y ensayada de subida y bajada en 
 | 8 | 3 | `add_seguimiento_a_proyectos_requisitos` | `estado_aplicabilidad` (por defecto `aplica`), `justificacion_no_aplica`, `usuario_no_aplica_id`, `usuario_aprobo_id`, `fecha_aprobacion`, `caracter`, `responsable_id`. | Falla con mensaje claro si hay filas con "no aplica", carácter o responsable que se perderían; si no, elimina las columnas |
 | 9 | 3 | `create_checklist_historial_table` | `id`, `entidad_tipo`, `entidad_id`, `expediente_id`, `evento`, `antes` (JSON), `despues` (JSON), `usuario_id`, `created_at`. Sin claves foráneas a las entidades, para sobrevivir a su eliminación. | Falla con mensaje claro si tiene registros; si no, elimina la tabla |
 | 10 | 5 | `add_requisitos_propios` | `requisito_catalogo_id` y `proyectos_expedientes.catalogo_version_id` pasan a opcionales; agrega `titulo_propio`, `descripcion_propia`, `categoria_propia`. Crea `proyecto_requisito_origenes` y lo llena desde cada fila actual. | Falla con mensaje claro si hay requisitos propios o expedientes sin versión SGR; si no, restaura |
-| 11 | 6 | `drop_catalogo_version_de_expedientes` | Retira `proyectos_expedientes.catalogo_version_id`, cuando ya todo lee de `expediente_plantillas`. Hasta entonces, solo se escribe en expedientes con motor `sgr`. | Restaura la columna desde la plantilla principal |
+| 11 | 6 | `drop_catalogo_version_de_expedientes` | Retira `proyectos_expedientes.catalogo_version_id`, cuando ya todo lee de `expediente_plantillas`. Hasta entonces, solo se escribe en expedientes con motor `sgr`. | Se detiene si alguna versión de la columna no figura en `expediente_plantillas`. El rollback restaura la columna con la versión de la plantilla con motor `sgr`, o null |
 
 La plantilla SGR y las 10 fuentes se crean en migración, no en un seeder, para que existan en cualquier entorno y en las pruebas antes de sembrar el catálogo. `CatalogoRequisitosSgrSeeder` se ajusta para colgar su versión de esa plantilla.
 
@@ -378,14 +378,30 @@ Reglas para este cambio:
 
 - **Etapa 6 (migración 11):** una fila se ancla al requisito que la creó (`requisito_catalogo_id`) y sus orígenes están en `proyecto_requisito_origenes`. Las filas propias no tienen ancla. Antes de retirar `catalogo_version_id` hay que leer la versión SGR desde `expediente_plantillas`.
 - **Etapa 6 (aplicar versión nueva):** las filas se reconocen por la llave `codigo_comun` del ancla (o `req:{id}` si no la tiene). Una versión nueva con el mismo código común encuentra su fila; si el código común cambia, nace una fila nueva y la anterior queda retirada con su trabajo.
-- **Pantalla:** el expediente todavía carga `/catalogo-requisitos/vigente` al abrirse, aunque no tenga la SGR. Si algún día no hay versión SGR vigente, la pantalla fallaría.
+- **Pantalla (resuelto en la etapa 6):** el expediente pide `/catalogo-requisitos/vigente` solo si tiene o elige una plantilla SGR, y sobrevive a su fallo.
 - **Decisión: recalcular no cambia el estado de una fila.** Si otra plantilla aporta la misma llave y una fila `por_definir` pasa a carácter obligatorio, sigue `por_definir` hasta que alguien marque "Aplica". El carácter se recalcula; la decisión de aplicabilidad es de una persona.
 - **Decisión: una plantilla que vuelve con otra versión no recupera las filas sin código común.** Al quitar una plantilla y volver a ponerla con una versión nueva, sus requisitos sin `codigo_comun` tienen otra llave (`req:{id}`) y crean filas nuevas. Las antiguas quedan retiradas con su trabajo. Lo resuelve "aplicar versión nueva" en la etapa 6.
 - **Pendientes menores para la etapa 6:**
-  - **Orden en la SGR:** el tope de `orden` (9 999 999) no cuenta la sección. Una fila SGR de la sección C con un orden muy alto puede quedar después de la plantilla siguiente; esto afecta al Excel y a la impresión.
+  - **Orden en la SGR (resuelto en la etapa 6):** el orden admite hasta 99 999 y el servicio lo acota dentro de su sección o de su plantilla.
   - **Avisos de duplicados:** tras cada acción de aplicabilidad, `refrescarAvisos` pide el expediente completo solo para leer los avisos. Conviene un endpoint liviano.
-  - **Entrar a Formulación:** si un proyecto pasa a Formulación al editarlo, no se crea el expediente automático. Solo se crea al darlo de alta o al salir de "por definir". Falta decidir si también debe crearse en ese caso.
+  - **Entrar a Formulación (resuelto en la etapa 6):** por decisión del usuario, pasar un proyecto a Formulación al editarlo también crea el expediente automático, si le corresponde.
   - **Bloqueo de confirmar:** en confirmar la configuración, el `bloquear()` inicial es la única defensa frente a un PUT simultáneo que quite todas las plantillas. No hay que moverlo.
+
+**Notas de la etapa 6 (cierre):**
+
+- **Versión en el expediente:** desde la migración 11, la versión de cada plantilla vive solo en `expediente_plantillas`. `CatalogoVersion::expedientes()` cuenta por esa tabla, así que el historial de versiones de una plantilla cuenta también los expedientes donde es complementaria.
+- **Aplicar una versión nueva:**
+  - las filas se reconocen por `clave` y se re-anclan al requisito nuevo, también las retiradas;
+  - si dos filas quedan con la misma llave, se conserva la que tiene trabajo;
+  - la vista previa es la misma aplicación revertida y bloquea el expediente mientras dura.
+- **Pendientes que el usuario dejó fuera, sin prisa:**
+  - el endpoint liviano de avisos de duplicados;
+  - los pendientes de la administración de plantillas de la etapa 4;
+  - las flechas de orden de la SGR que cruzan secciones.
+- **Pendientes que encontró la revisión, menores:**
+  - **Configuración cambiada:** la vista previa protege la versión, no la configuración; si otra persona la cambia antes de confirmar, se aplica sobre lo nuevo sin aviso.
+  - **Expediente sin configurar:** el historial no se ve todavía.
+  - **Panel abierto:** el aviso de versión nueva no aparece con el panel de configuración abierto.
 
 ---
 
