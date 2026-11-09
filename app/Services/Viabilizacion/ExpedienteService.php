@@ -17,6 +17,7 @@ use App\Models\RequisitoTipologia;
 use App\Models\Responsable;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -850,6 +851,61 @@ final class ExpedienteService
             ] : null,
             'categoria' => $fila->esPropio() ? $fila->categoria_propia : $r->categoria,
         ];
+    }
+
+    /**
+     * Una página del historial completo del expediente (ver HistorialChecklist::paginaDeExpediente()).
+     * Cada entrada de una fila que todavía existe trae en `requisito` lo que muestra la fila; si
+     * la fila ya no existe, null (un propio eliminado guarda su título en `antes`).
+     *
+     * @return array{entradas: list<array>, pagina: int, por_pagina: int, total: int}
+     */
+    public function historialDe(ProyectoExpediente $expediente, int $pagina): array
+    {
+        $historial = $this->historial->paginaDeExpediente($expediente, $pagina);
+        $deFila = fn (array $entrada) => $entrada['entidad'] === HistorialChecklist::REQUISITO;
+        $filas = $this->resumenFilasHistorial($expediente, collect($historial['entradas'])->filter($deFila)->pluck('entidad_id'));
+
+        return [
+            // La fila se identifica por `requisito`; el id de la entidad no sale.
+            'entradas' => array_map(fn (array $entrada) => [
+                ...Arr::except($entrada, 'entidad_id'),
+                'requisito' => $deFila($entrada) ? ($filas[$entrada['entidad_id']] ?? null) : null,
+            ], $historial['entradas']),
+            'pagina' => $pagina,
+            'por_pagina' => $historial['por_pagina'],
+            'total' => $historial['total'],
+        ];
+    }
+
+    /**
+     * Resumen de las filas dadas que todavía existen, leídas juntas: el requisito que muestra la
+     * fila, como presentarFila(), o el título de un propio, sin código ni texto.
+     *
+     * @param Collection<int, int> $ids
+     * @return array<int, array{id: int, codigo: ?string, texto: ?string, titulo: ?string}> id de la fila => resumen
+     */
+    private function resumenFilasHistorial(ProyectoExpediente $expediente, Collection $ids): array
+    {
+        $filas = $ids->isEmpty() ? collect() : $expediente->requisitos()
+            ->whereIn('id', $ids->unique()->values())
+            ->with(['requisito', 'origenes.version:id,plantilla_id'])
+            ->get();
+        if ($filas->isEmpty()) {
+            return [];
+        }
+        $posiciones = $this->posiciones($this->plantillas->versionesDe($expediente));
+
+        return $filas->mapWithKeys(function (ProyectoRequisito $fila) use ($posiciones) {
+            $mostrado = $this->requisitoMostrado($fila, $posiciones);
+
+            return [$fila->id => [
+                'id' => $fila->id,
+                'codigo' => $mostrado?->codigo,
+                'texto' => $mostrado?->texto,
+                'titulo' => $fila->esPropio() ? $fila->titulo_propio : null,
+            ]];
+        })->all();
     }
 
     /**

@@ -18,6 +18,9 @@ final class HistorialChecklist
     public const REQUISITO = 'requisito';
     public const EXPEDIENTE = 'expediente';
 
+    /** Entradas por página del historial del expediente. */
+    public const POR_PAGINA = 50;
+
     public function registrarFila(ProyectoRequisito $fila, string $evento, array $antes, array $despues, ?User $usuario): void
     {
         $this->registrar(self::REQUISITO, $fila->id, $fila->expediente_id, $evento, $antes, $despues, $usuario);
@@ -39,6 +42,36 @@ final class HistorialChecklist
             ->get()
             ->map(fn (ChecklistHistorial $h) => $this->presentar($h))
             ->all();
+    }
+
+    /**
+     * Una página del historial completo del expediente, del más reciente al más antiguo: sus
+     * propios eventos y los de todas sus filas, también los de las ya eliminadas. Se pagina
+     * desde 1; una página fuera de rango llega vacía, con el mismo total.
+     *
+     * Cada entrada es la de presentar() más `entidad` y `entidad_id`, para que quien arma la
+     * respuesta encuentre la fila de las entradas de requisito.
+     *
+     * @return array{entradas: list<array>, por_pagina: int, total: int}
+     */
+    public function paginaDeExpediente(ProyectoExpediente $expediente, int $pagina): array
+    {
+        $consulta = ChecklistHistorial::query()->where('expediente_id', $expediente->id);
+        $total = (clone $consulta)->count();
+        // Fuera de rango no se consulta: así tampoco se calcula un desplazamiento enorme.
+        $entradas = $pagina > intdiv($total + self::POR_PAGINA - 1, self::POR_PAGINA)
+            ? collect()
+            : $consulta->with('usuario:id,name')->orderByDesc('id')->forPage($pagina, self::POR_PAGINA)->get();
+
+        return [
+            'entradas' => $entradas->map(fn (ChecklistHistorial $h) => [
+                ...$this->presentar($h),
+                'entidad' => $h->entidad_tipo,
+                'entidad_id' => $h->entidad_id,
+            ])->all(),
+            'por_pagina' => self::POR_PAGINA,
+            'total' => $total,
+        ];
     }
 
     /**
@@ -69,6 +102,11 @@ final class HistorialChecklist
             ->all();
     }
 
+    /**
+     * `usuario` es el nombre de quien registró la entrada, o null. `sistema` dice por qué falta:
+     * true si nadie la registró (un comando, como expedientes:crear-faltantes); false con un
+     * usuario_id cuyo usuario ya no existe (la tabla no tiene clave foránea a users).
+     */
     public function presentar(ChecklistHistorial $entrada): array
     {
         return [
@@ -77,6 +115,7 @@ final class HistorialChecklist
             'antes' => $this->sinRuta($entrada->antes),
             'despues' => $this->sinRuta($entrada->despues),
             'usuario' => $entrada->usuario?->name,
+            'sistema' => $entrada->usuario_id === null,
             'fecha' => $entrada->created_at?->toIso8601String(),
             'soporte' => isset($entrada->antes['soporte_archivo'])
                 ? ['nombre' => $entrada->antes['soporte_nombre'] ?? 'soporte']

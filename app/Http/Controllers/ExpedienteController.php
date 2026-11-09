@@ -182,6 +182,18 @@ class ExpedienteController extends Controller
         return response()->json($this->historial->deFila($requisito));
     }
 
+    /** Todo el historial del expediente, el suyo y el de sus filas, por páginas. */
+    public function historialExpediente(Request $request, ProyectoExpediente $expediente): JsonResponse
+    {
+        // De la consulta llega texto: `integer` admite "2", pero no "2.5" ni "dos".
+        $datos = $request->validate(['pagina' => ['sometimes', 'bail', 'integer', 'min:1']], [
+            'pagina.integer' => 'Revisa la página: debe ser un número entero.',
+            'pagina.min' => 'Revisa la página: debe ser 1 o mayor.',
+        ]);
+
+        return response()->json($this->servicio->historialDe($expediente, (int) ($datos['pagina'] ?? 1)));
+    }
+
     /** Soporte reemplazado o retirado, conservado en el historial. */
     public function descargarSoporteHistorial(ProyectoExpediente $expediente, ChecklistHistorial $entrada): StreamedResponse|JsonResponse
     {

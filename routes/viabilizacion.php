@@ -29,6 +29,8 @@ Route::get('/expedientes/{expediente}/requisitos/{requisito}/soporte', [Expedien
     ->scopeBindings()->name('expedientes.requisitos.soporte.descargar');
 Route::get('/expedientes/{expediente}/requisitos/{requisito}/historial', [ExpedienteController::class, 'historialRequisito'])
     ->scopeBindings()->name('expedientes.requisitos.historial');
+Route::get('/expedientes/{expediente}/historial', [ExpedienteController::class, 'historialExpediente'])
+    ->name('expedientes.historial');
 Route::get('/expedientes/{expediente}/historial/{entrada}/soporte', [ExpedienteController::class, 'descargarSoporteHistorial'])
     ->name('expedientes.historial.soporte');
 
