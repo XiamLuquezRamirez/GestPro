@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
-import { faArrowLeft, faCheck, faFileExcel, faPlus, faPrint, faSliders, faStamp, faTrash } from '@fortawesome/free-solid-svg-icons';
+import {
+    faArrowLeft, faArrowsRotate, faCheck, faFileExcel, faPlus, faPrint, faSliders, faStamp, faTrash,
+} from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
 import ExpedienteChecklist, { AvisosDuplicados } from './ExpedienteChecklist';
@@ -29,10 +31,31 @@ import {
 } from '../utils/plantillasExpediente';
 import { mensajeApi } from '../utils/plantillasChecklist';
 import { avisarError } from '../utils/avisosPlantillas';
+import {
+    etiquetaAplicarVersion, htmlVistaPrevia, plantillasConVersionNueva, textoVersionNueva,
+} from '../utils/versionesExpediente';
 import '../../css/ExpedienteViabilizacion.css';
 
 const ROLES_EDICION = ['Administrador', 'Gestor'];
 const ESPERA_RECALCULO_MS = 350;
+
+/** Una plantilla con versión nueva: "Obras de agua versión 3 disponible" y, si se puede aplicar, su botón. */
+const VersionNueva = ({ plantilla, puedeAplicar, deshabilitada, onAplicar }) => (
+    <span className="exv-version-nueva">
+        <b>{plantilla.nombre}</b> {textoVersionNueva(plantilla)}
+        {puedeAplicar && (
+            <button
+                type="button"
+                className="exv-btn"
+                onClick={() => onAplicar(plantilla)}
+                disabled={deshabilitada}
+                aria-label={etiquetaAplicarVersion(plantilla)}
+            >
+                <FontAwesomeIcon icon={faArrowsRotate} /> Aplicar versión {plantilla.version_nueva.numero}
+            </button>
+        )}
+    </span>
+);
 
 const ExpedienteViabilizacion = ({ user }) => {
     const { proyectoId } = useParams();
@@ -78,17 +101,20 @@ const ExpedienteViabilizacion = ({ user }) => {
         prev ? { ...prev, expedientes: actualizarExpedienteEnLista(prev.expedientes, data) } : prev
     )), []);
 
-    // Contador de los GET de avisos (refrescarAvisos). Poner un expediente completo lo sube:
-    // un GET de avisos que aún está en vuelo traería avisos más viejos que los recién puestos.
+    // Contadores de los GET del expediente (cargarExpediente) y de sus avisos (refrescarAvisos).
+    // Poner un expediente completo sube los dos: un GET que aún está en vuelo traería datos más
+    // viejos que los recién puestos, por ejemplo la respuesta de una acción.
     const peticionAvisos = useRef(0);
+    const peticionExpediente = useRef(0);
     const ponerExpediente = useCallback((data) => {
         peticionAvisos.current += 1;
+        peticionExpediente.current += 1;
         setExpediente(data);
     }, []);
 
-    // Como cargarPlantillas: solo vale la última petición, y solo si su expediente sigue abierto.
-    // Una respuesta o un error que llegan tarde se descartan en silencio.
-    const peticionExpediente = useRef(0);
+    // Como cargarPlantillas: solo vale la última petición, y solo si su expediente sigue abierto y
+    // nada puso el expediente completo mientras llegaba. Una respuesta o un error que llegan tarde
+    // se descartan en silencio. Lo que ella misma pone sube el contador después de comprobarlo.
     const cargarExpediente = useCallback(async (id) => {
         if (id !== idVigente.current) return;
         const numero = ++peticionExpediente.current;
@@ -557,6 +583,52 @@ const ExpedienteViabilizacion = ({ user }) => {
         }
     });
 
+    // Primero la vista previa, que no cambia nada; se aplica la versión que se mostró, y el
+    // servidor la rechaza si entretanto la plantilla publicó otra.
+    const aplicarVersionNueva = (plantilla) => ejecutar(async () => {
+        const { id } = expediente;
+        const url = `/expedientes/${id}/plantillas/${plantilla.plantilla_id}/version-nueva`;
+        let vista;
+        try {
+            ({ data: vista } = await axios.get(url));
+        } catch (error) {
+            // Si ya se muestra otro expediente, el error de este no se avisa ni se recarga.
+            if (!esVigente(id)) return;
+            avisarError('No se pudo preparar la vista previa', error);
+            // Otra persona pudo aplicarla o publicar otra versión: la cabecera se pone al día.
+            cargarExpediente(id).catch(() => {});
+            return;
+        }
+        if (!esVigente(id)) return;
+
+        const { isConfirmed } = await Swal.fire({
+            // titleText, no title: el nombre de la plantilla es un dato y Swal lo escapa.
+            titleText: `Aplicar la versión ${vista.version_nueva.numero} de «${vista.plantilla.nombre}»`,
+            html: htmlVistaPrevia(vista),
+            width: '46rem',
+            showCancelButton: true,
+            confirmButtonText: 'Aplicar versión',
+            cancelButtonText: 'Cancelar',
+        });
+        // Si mientras se revisaba se abrió otro expediente, no se manda nada.
+        if (!isConfirmed || !esVigente(id)) return;
+
+        try {
+            const { data } = await axios.post(url, { version_id: vista.version_nueva.id });
+            // La lista del selector se indexa por id: ponerla al día vale aunque ya se muestre otro.
+            actualizarEnLista(data);
+            if (!esVigente(data.id)) return;
+            ponerExpediente(data);
+            setSeleccion(seleccionDesde(data));
+            // La versión de la plantilla en el expediente cambió: la lista del panel lo refleja.
+            cargarPlantillas(data.id);
+        } catch (error) {
+            if (!esVigente(id)) return;
+            avisarError('No se pudo aplicar la versión nueva', error);
+            cargarExpediente(id).catch(() => {});
+        }
+    });
+
     const exportarExcel = () => {
         const { resumen, checklist } = construirHojasExcel(expediente);
         const libro = XLSX.utils.book_new();
@@ -598,6 +670,17 @@ const ExpedienteViabilizacion = ({ user }) => {
     const sinTipo = sinConfigurar && conSgr && seleccion ? sectoresSinTipo(seleccion, catalogo) : [];
     const sinPlantillasElegidas = Boolean(seleccion) && seleccion.plantilla_ids.length === 0;
     const incompatibles = avisoIncompatibles(expediente?.plantillas);
+    // Un radicado tiene el checklist congelado: no admite otra versión, y no se la ofrece.
+    const versionesNuevas = expediente?.estado === 'borrador' ? plantillasConVersionNueva(expediente.plantillas) : [];
+    const versionNueva = (p) => (
+        <VersionNueva
+            key={p.plantilla_id}
+            plantilla={p}
+            puedeAplicar={editable}
+            deshabilitada={ocupado || recalculando || confirmando}
+            onAplicar={aplicarVersionNueva}
+        />
+    );
 
     return (
         <div className="exv-pagina">
@@ -702,6 +785,12 @@ const ExpedienteViabilizacion = ({ user }) => {
                                                     {sinTipo.length > 0 && (
                                                         <div className="exv-aviso">
                                                             <b>Sin tipo de proyecto: {sinTipo.join(', ')}.</b> Se cargarán todos los requisitos de ese sector, incluidos los que no le apliquen al proyecto.
+                                                        </div>
+                                                    )}
+                                                    {versionesNuevas.length > 0 && (
+                                                        <div className="exv-nota exv-versiones-nuevas exv-no-imprimir">
+                                                            <b>{versionesNuevas.length === 1 ? 'Una plantilla tiene una versión nueva.' : 'Algunas plantillas tienen una versión nueva.'}</b>
+                                                            {versionesNuevas.map(versionNueva)}
                                                         </div>
                                                     )}
                                                     <AvisosDuplicados avisos={expediente.avisos_duplicados} total={expediente.avisos_duplicados_total} />
@@ -816,6 +905,7 @@ const ExpedienteViabilizacion = ({ user }) => {
                                     {!configAbierta && (
                                         <div className="exv-config-resumen exv-no-imprimir">
                                             <span><b>Plantillas</b> {plantillasConVersion(expediente.plantillas)}</span>
+                                            {versionesNuevas.map(versionNueva)}
                                             {conSgr && (
                                                 <>
                                                     <span><b>Fase SGR</b> {faseLegible(expediente.fase_sgr)}</span>

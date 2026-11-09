@@ -121,6 +121,33 @@
 }
 .exv-config-resumen b { margin-right: .25rem; font-weight: 700; color: var(--exv-tinta); }
 
+/* Plantilla con versión nueva: en la franja de configuración o al configurar */
+.exv-version-nueva { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; color: var(--exv-a12); }
+.exv-version-nueva b { color: var(--exv-tinta); }
+.exv-version-nueva .exv-btn { padding: .2rem .6rem; font-size: .76rem; }
+.exv-versiones-nuevas { display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; }
+
+/* Vista previa de una versión nueva, dentro de Swal: fuera de .exv-pagina, con los tokens --gp-* */
+.exv-vista-version { max-height: 60vh; overflow-y: auto; text-align: left; font-size: .88rem; line-height: 1.45; }
+.exv-vista-version p { margin: 0 0 .6rem; }
+.exv-vista-version b { color: var(--gp-texto); }
+.exv-vista-descripcion { white-space: pre-line; color: var(--gp-texto-3); }
+.exv-vista-igual { font-weight: 600; color: var(--gp-texto); }
+.exv-vista-version section { margin: .9rem 0; }
+.exv-vista-version h3 { margin: 0 0 .35rem; font-size: .92rem; font-weight: 700; color: var(--gp-texto); }
+.exv-vista-version ul { margin: 0; padding-left: 1.2rem; }
+.exv-vista-version li { margin-bottom: .3rem; }
+.exv-vista-ahora { display: block; color: var(--gp-azul-texto); }
+.exv-vista-etiqueta {
+    display: inline-block;
+    padding: 0 .4rem;
+    font-size: .74rem;
+    color: var(--gp-texto-2);
+    background: var(--gp-superficie-3);
+    border-radius: var(--gp-radio);
+}
+.exv-vista-mas { list-style: none; margin-left: -1.2rem; color: var(--gp-texto-3); }
+
 /* Panel de configuración */
 .exv-config {
     position: sticky;

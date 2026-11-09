@@ -15,7 +15,7 @@ export const CATEGORIAS = [
 
 const ETIQUETA_CATEGORIA = Object.fromEntries(CATEGORIAS);
 
-const ETIQUETA_CARACTER = { obligatorio: 'Obligatorio', opcional: 'Opcional', condicionado: 'Condicionado' };
+export const ETIQUETA_CARACTER = { obligatorio: 'Obligatorio', opcional: 'Opcional', condicionado: 'Condicionado' };
 
 export const MOTOR_SGR = 'sgr';
 
