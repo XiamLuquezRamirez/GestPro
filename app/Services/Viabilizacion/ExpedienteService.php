@@ -114,7 +114,6 @@ final class ExpedienteService
             $this->guardarSeleccion($expediente, $seleccion);
             $this->sincronizar($expediente);
             $this->historial->registrarExpediente($expediente, 'expediente_creado', [], [
-                'catalogo_version_id' => $expediente->catalogo_version_id,
                 'plantillas' => $this->plantillasRegistrables($this->plantillas->versionesDe($expediente)),
             ], $usuario);
 
@@ -623,7 +622,7 @@ final class ExpedienteService
     public function presentar(ProyectoExpediente $expediente): array
     {
         $expediente->load([
-            'proyecto:id,nombre,sector', 'version:id,numero', 'usuarioRadico:id,name', 'usuarioCreo:id,name',
+            'proyecto:id,nombre,sector', 'usuarioRadico:id,name', 'usuarioCreo:id,name',
             'sectores', 'tipos', 'componentes', 'tipologias',
         ]);
         $versiones = $this->plantillas->versionesDe($expediente);
@@ -715,7 +714,7 @@ final class ExpedienteService
     public function presentarDeProyecto(Proyecto $proyecto): array
     {
         $expedientes = $proyecto->expedientes()
-            ->with(['versionesPlantilla.plantilla', 'version:id,numero', 'usuarioRadico:id,name', 'usuarioCreo:id,name'])
+            ->with(['versionesPlantilla.plantilla', 'usuarioRadico:id,name', 'usuarioCreo:id,name'])
             ->withCount([
                 'requisitos as requisitos_aplican' => fn ($q) => $q->cuenta(),
                 'requisitos as requisitos_cumplidos' => fn ($q) => $q->cumplidaQueCuenta(),
@@ -738,15 +737,13 @@ final class ExpedienteService
      */
     public function presentarCabecera(ProyectoExpediente $expediente, ?Collection $versiones = null, ?array $compatibles = null): array
     {
-        $expediente->loadMissing(['proyecto:id,nombre,sector', 'version:id,numero', 'usuarioRadico:id,name', 'usuarioCreo:id,name']);
+        $expediente->loadMissing(['proyecto:id,nombre,sector', 'usuarioRadico:id,name', 'usuarioCreo:id,name']);
         $versiones ??= $this->plantillas->versionesDe($expediente);
         $compatibles ??= $versiones->isEmpty() ? [] : $this->plantillas->idsCompatibles($expediente->proyecto);
 
         return [
             'id' => $expediente->id,
             'proyecto' => ['id' => $expediente->proyecto->id, 'nombre' => $expediente->proyecto->nombre],
-            // Solo con plantilla SGR: es la versión que siguen las pantallas y rutas del catálogo SGR.
-            'catalogo_version' => $expediente->version ? ['id' => $expediente->version->id, 'numero' => $expediente->version->numero] : null,
             'plantillas' => $versiones->map(fn (CatalogoVersion $v) => [
                 'plantilla_id' => $v->plantilla_id,
                 'nombre' => $v->plantilla->nombre,

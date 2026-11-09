@@ -217,6 +217,26 @@ class PlantillasAdminApiTest extends TestCase
         $this->como(Rol::Gestor)->postJson("/GestPro/plantillas/{$id}/versiones", [])->assertForbidden();
     }
 
+    public function test_cada_version_cuenta_los_expedientes_que_la_usan_sea_principal_o_complementaria(): void
+    {
+        $sgr = PlantillaChecklist::sgr();
+        $otra = $this->crear()->assertCreated()->json('id');
+        $expediente = DB::table('proyectos_expedientes')->insertGetId([
+            'proyecto_id' => DB::table('proyectos')->insertGetId(['nombre' => 'Prueba']), 'fase_sgr' => 3, 'estado' => 'borrador',
+        ]);
+        DB::table('expediente_plantillas')->insert([
+            ['expediente_id' => $expediente, 'catalogo_version_id' => $sgr->versionVigente()->id, 'es_principal' => false],
+            ['expediente_id' => $expediente, 'catalogo_version_id' => DB::table('catalogo_versiones')->where('plantilla_id', $otra)->value('id'), 'es_principal' => true],
+        ]);
+
+        $this->como(Rol::Administrador)->getJson("/GestPro/plantillas/{$sgr->id}")->assertOk()
+            ->assertJsonPath('versiones.0.expedientes', 1);
+        $this->como(Rol::Administrador)->getJson("/GestPro/plantillas/{$otra}")->assertOk()
+            ->assertJsonPath('versiones.0.expedientes', 1);
+        $this->como(Rol::Administrador)->getJson('/GestPro/catalogo-requisitos/versiones')->assertOk()
+            ->assertJsonPath('0.expedientes', 1);
+    }
+
     public function test_el_detalle_ordena_las_versiones_de_la_mas_nueva_a_la_mas_antigua(): void
     {
         $sgr = PlantillaChecklist::sgr();

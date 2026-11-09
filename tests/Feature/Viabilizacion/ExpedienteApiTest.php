@@ -143,7 +143,7 @@ class ExpedienteApiTest extends TestCase
         $r->assertCreated()
             ->assertJsonPath('estado', 'borrador')
             ->assertJsonPath('fase_sgr', 3)
-            ->assertJsonPath('catalogo_version.numero', 1)
+            ->assertJsonPath('plantillas.0.version.numero', 1)
             ->assertJsonPath('progreso.total', 8)
             ->assertJsonPath('progreso.cumplidos', 0);
         $this->assertSame(['a1', 'a2', 'a3', 'a4', 'a8', 'a9', 'a10', 'a11'], $this->claves($r));

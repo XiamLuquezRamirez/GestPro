@@ -36,7 +36,7 @@ class SeguimientoRequisitoTest extends TestCase
         $requisito = DB::table('requisitos_catalogo')->value('id') ?? $this->requisito($version);
         $expediente = DB::table('proyectos_expedientes')->insertGetId([
             'proyecto_id' => DB::table('proyectos')->insertGetId(['nombre' => 'Prueba']),
-            'catalogo_version_id' => $version, 'fase_sgr' => 3, 'estado' => 'borrador',
+            'fase_sgr' => 3, 'estado' => 'borrador',
         ]);
 
         return DB::table('proyectos_requisitos')->insertGetId([

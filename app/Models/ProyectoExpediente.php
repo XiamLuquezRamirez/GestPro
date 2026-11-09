@@ -14,12 +14,11 @@ class ProyectoExpediente extends Model
 
     protected $table = 'proyectos_expedientes';
     protected $fillable = [
-        'proyecto_id', 'catalogo_version_id', 'fase_sgr', 'fecha_configuracion', 'estado',
+        'proyecto_id', 'fase_sgr', 'fecha_configuracion', 'estado',
         'fecha_radicado', 'usuario_radicado_id', 'usuario_creo_id',
     ];
     protected $casts = [
         'proyecto_id' => 'integer',
-        'catalogo_version_id' => 'integer',
         'fase_sgr' => 'integer',
         'fecha_configuracion' => 'datetime',
         'fecha_radicado' => 'datetime',
@@ -33,12 +32,6 @@ class ProyectoExpediente extends Model
     public function proyecto(): BelongsTo
     {
         return $this->belongsTo(Proyecto::class, 'proyecto_id');
-    }
-
-    /** Versión de la plantilla SGR del expediente; null si no tiene plantilla con motor sgr. */
-    public function version(): BelongsTo
-    {
-        return $this->belongsTo(CatalogoVersion::class, 'catalogo_version_id');
     }
 
     /** Versiones de plantilla que usa el expediente. La etapa 5 permite más de una. */

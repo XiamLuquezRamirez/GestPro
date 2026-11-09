@@ -15,6 +15,18 @@ class RequisitosPropiosTest extends TestCase
 {
     use RefreshDatabase;
 
+    /*
+     * Estas pruebas ensayan la migración 10 sobre el esquema que ella deja, con
+     * proyectos_expedientes.catalogo_version_id. La migración 11 la retira: se baja antes de
+     * crear filas, así su reconstrucción de la tabla en SQLite no borra nada en cascada.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        (require database_path('migrations/2026_11_09_100010_drop_catalogo_version_de_expedientes.php'))->down();
+    }
+
     private function migracion(): object
     {
         return require database_path('migrations/2026_11_08_100009_add_requisitos_propios_table.php');

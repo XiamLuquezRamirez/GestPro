@@ -363,7 +363,7 @@ class PlantillasExpedienteApiTest extends TestCase
         $this->assertSame([], $ninguna['versiones']);
     }
 
-    public function test_guardar_registra_las_versiones_la_principal_y_la_version_sgr(): void
+    public function test_guardar_registra_las_versiones_y_la_principal(): void
     {
         $proyecto = $this->proyecto(['sgr']);
         $general = $this->plantilla('General');
@@ -379,13 +379,11 @@ class PlantillasExpedienteApiTest extends TestCase
             ['catalogo_version_id' => $general->versionVigente()->id, 'es_principal' => 1],
         ], DB::table('expediente_plantillas')->where('expediente_id', $expediente->id)->get(['catalogo_version_id', 'es_principal'])
             ->map(fn ($f) => ['catalogo_version_id' => (int) $f->catalogo_version_id, 'es_principal' => (int) $f->es_principal])->all());
-        $this->assertSame($sgrVersion, $expediente->refresh()->catalogo_version_id);
 
-        // Sin la SGR, el expediente ya no tiene versión SGR.
+        // Sin la SGR, su versión sale del expediente.
         $this->servicio()->guardar($expediente, $this->servicio()->validar(['plantilla_ids' => [$general->id]], $proyecto, $expediente));
 
         $this->assertSame([$general->versionVigente()->id], DB::table('expediente_plantillas')->where('expediente_id', $expediente->id)->pluck('catalogo_version_id')->map(fn ($id) => (int) $id)->all());
-        $this->assertNull($expediente->refresh()->catalogo_version_id);
     }
 
     public function test_una_plantilla_que_ya_tiene_el_expediente_conserva_su_version_aunque_ya_no_se_ofrezca(): void

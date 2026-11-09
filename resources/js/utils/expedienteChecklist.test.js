@@ -232,7 +232,6 @@ describe('Excel', () => {
     const expediente = {
         id: 7,
         proyecto: { id: 1, nombre: 'Acueducto: veredal/norte' },
-        catalogo_version: { numero: 1 },
         plantillas: [{ plantilla_id: 1, nombre: 'SGR', motor: 'sgr', es_principal: true, version: { id: 1, numero: 1 } }],
         tiene_sgr: true,
         fase_sgr: 3,
@@ -320,7 +319,6 @@ describe('Excel', () => {
     it('sin plantilla SGR no lleva la fase ni la configuración SGR, y aguanta filas propias', () => {
         const simple = {
             ...expediente,
-            catalogo_version: null,
             tiene_sgr: false,
             plantillas: [{ plantilla_id: 5, nombre: 'Obras de agua', motor: 'simple', es_principal: true, version: { id: 8, numero: 2 } }],
             requisitos: [
@@ -359,7 +357,7 @@ describe('Excel', () => {
     });
 
     it('sin plantillas, el resumen lo dice', () => {
-        const { resumen } = construirHojasExcel({ ...expediente, plantillas: [], tiene_sgr: false, catalogo_version: null, requisitos: [] });
+        const { resumen } = construirHojasExcel({ ...expediente, plantillas: [], tiene_sgr: false, requisitos: [] });
         expect(resumen.find((r) => r.Campo === 'Plantillas')?.Valor).toBe('Sin plantillas');
     });
 

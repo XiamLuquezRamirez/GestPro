@@ -266,7 +266,8 @@ class ExpedienteConfiguracionValidacionTest extends TestCase
         $registro = DB::table('checklist_historial')->where('evento', 'expediente_creado')->where('expediente_id', $id)->sole();
         $despues = json_decode($registro->despues, true);
 
-        $this->assertSame($version->id, $despues['catalogo_version_id']);
+        // La versión va con su plantilla, no aparte.
+        $this->assertArrayNotHasKey('catalogo_version_id', $despues);
         $this->assertSame(
             [['plantilla_id' => $this->sgr->id, 'catalogo_version_id' => $version->id, 'es_principal' => true]],
             $despues['plantillas']
@@ -291,7 +292,6 @@ class ExpedienteConfiguracionValidacionTest extends TestCase
 
         $expediente = ProyectoExpediente::sole();
         $this->assertSame(0, $expediente->versionesPlantilla()->count());
-        $this->assertNull($expediente->catalogo_version_id);
         $this->assertSame(0, app(ExpedienteService::class)->progresoDe($expediente)['total']);
     }
 }

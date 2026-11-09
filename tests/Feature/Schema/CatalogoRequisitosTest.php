@@ -26,12 +26,18 @@ class CatalogoRequisitosTest extends TestCase
 
     private function crearExpediente(int $proyectoId): int
     {
-        return DB::table('proyectos_expedientes')->insertGetId([
+        $expediente = DB::table('proyectos_expedientes')->insertGetId([
             'proyecto_id' => $proyectoId,
-            'catalogo_version_id' => DB::table('catalogo_versiones')->where('vigente', true)->value('id'),
             'fase_sgr' => 3,
             'estado' => 'borrador',
         ]);
+        DB::table('expediente_plantillas')->insert([
+            'expediente_id' => $expediente,
+            'catalogo_version_id' => DB::table('catalogo_versiones')->where('vigente', true)->value('id'),
+            'es_principal' => true,
+        ]);
+
+        return $expediente;
     }
 
     public function test_tablas_del_modulo_existen_con_sus_columnas(): void
@@ -44,7 +50,7 @@ class CatalogoRequisitosTest extends TestCase
             'requisitos_tipologias' => ['clave', 'nombre', 'activo'],
             'requisitos_catalogo' => ['catalogo_version_id', 'clave', 'seccion', 'fuente', 'sector_id', 'tipo_id',
                 'subtitulo', 'codigo', 'texto', 'nota', 'condicion', 'orden', 'activo'],
-            'proyectos_expedientes' => ['proyecto_id', 'catalogo_version_id', 'fase_sgr', 'estado',
+            'proyectos_expedientes' => ['proyecto_id', 'fase_sgr', 'estado',
                 'fecha_radicado', 'usuario_radicado_id'],
             'expediente_sectores' => ['expediente_id', 'sector_id'],
             'expediente_tipos' => ['expediente_id', 'tipo_id'],

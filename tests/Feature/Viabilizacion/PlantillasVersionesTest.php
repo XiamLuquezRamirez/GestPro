@@ -188,7 +188,7 @@ class PlantillasVersionesTest extends TestCase
         $expediente = app(ExpedienteService::class)
             ->crear($this->proyectoSgr(['nombre' => 'Acueducto']), ['fase_sgr' => 3], null);
 
-        $this->assertSame($sgr->id, $expediente->catalogo_version_id);
+        $this->assertSame([$sgr->id], $expediente->versionesPlantilla()->pluck('catalogo_versiones.id')->all());
     }
 
     public function test_la_lista_de_versiones_solo_muestra_las_de_sgr(): void
@@ -226,7 +226,7 @@ class PlantillasVersionesTest extends TestCase
         $expediente = $servicio->crear($this->proyectoSgr(['nombre' => 'Acueducto']), ['fase_sgr' => 3], null);
 
         $version = $expediente->versionesPlantilla()->sole();
-        $this->assertSame($expediente->catalogo_version_id, $version->id);
+        $this->assertSame(PlantillaChecklist::sgr()->versionVigente()->id, $version->id);
         $this->assertEquals(1, $version->pivot->es_principal);
 
         $servicio->eliminar($expediente);

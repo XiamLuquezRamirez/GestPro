@@ -138,7 +138,6 @@ class ExpedienteAutomaticoTest extends TestCase
 
         $expediente = Proyecto::where('nombre', 'Recursos propios')->firstOrFail()->expedientes()->sole();
         $this->assertNull($expediente->fecha_configuracion);
-        $this->assertNull($expediente->catalogo_version_id);
         $this->assertSame(0, $expediente->versionesPlantilla()->count());
         $this->assertSame(0, $expediente->sectores()->count());
         $this->assertSame(0, $expediente->requisitos()->count());

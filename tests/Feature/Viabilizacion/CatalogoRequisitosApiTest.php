@@ -256,13 +256,13 @@ class CatalogoRequisitosApiTest extends TestCase
 
         // El expediente viejo sigue en v1, con su texto y sus 8 requisitos, aun recalculando.
         $viejo = $this->admin()->putJson("/GestPro/expedientes/{$antes->json('id')}/configuracion", ['fase_sgr' => 3])->assertOk();
-        $viejo->assertJsonPath('catalogo_version.numero', 1)->assertJsonPath('progreso.total', 8);
+        $viejo->assertJsonPath('plantillas.0.version.numero', 1)->assertJsonPath('progreso.total', 8);
         $this->assertSame($textoOriginal, collect($viejo->json('requisitos'))->firstWhere('requisito.clave', 'a1')['requisito']['texto']);
 
         // Uno nuevo usa v2.
         $otroProyecto = $this->proyectoSgr(['municipio' => $municipio->codigo, 'nombre' => 'Vía secundaria']);
         $nuevo = $this->admin()->postJson("/GestPro/proyectos/{$otroProyecto->id}/expedientes", ['fase_sgr' => 3])->assertCreated();
-        $nuevo->assertJsonPath('catalogo_version.numero', 2)->assertJsonPath('progreso.total', 7);
+        $nuevo->assertJsonPath('plantillas.0.version.numero', 2)->assertJsonPath('progreso.total', 7);
         $this->assertSame('Texto v2', collect($nuevo->json('requisitos'))->firstWhere('requisito.clave', 'a1')['requisito']['texto']);
     }
 

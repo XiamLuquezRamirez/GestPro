@@ -44,11 +44,21 @@ class PlantillasChecklistTest extends TestCase
         return require database_path('migrations/2026_11_06_100005_create_expediente_plantillas_table.php');
     }
 
-    private function expediente(int $version): int
+    /**
+     * La migración 6 llena expediente_plantillas desde proyectos_expedientes.catalogo_version_id,
+     * que la migración 11 retira: las pruebas que la ejecutan bajan antes la 11.
+     */
+    private function bajarRetiroDeVersion(): void
+    {
+        (require database_path('migrations/2026_11_09_100010_drop_catalogo_version_de_expedientes.php'))->down();
+    }
+
+    /** Con versión, la escribe en la columna anterior a la migración 11: hay que bajarla antes. */
+    private function expediente(?int $version = null): int
     {
         return DB::table('proyectos_expedientes')->insertGetId([
             'proyecto_id' => DB::table('proyectos')->insertGetId(['nombre' => 'Prueba']),
-            'catalogo_version_id' => $version,
+            ...($version !== null ? ['catalogo_version_id' => $version] : []),
             'fase_sgr' => 3,
             'estado' => 'borrador',
         ]);
@@ -334,6 +344,7 @@ class PlantillasChecklistTest extends TestCase
 
     public function test_migrar_registra_la_version_de_cada_expediente_como_principal(): void
     {
+        $this->bajarRetiroDeVersion();
         $version = $this->version(PlantillaChecklist::sgr()->id);
         $expediente = $this->expediente($version);
         $migracion = $this->migracionExpedientes();
@@ -352,7 +363,7 @@ class PlantillasChecklistTest extends TestCase
     public function test_borrar_un_expediente_borra_su_registro_de_plantillas(): void
     {
         $version = $this->version(PlantillaChecklist::sgr()->id);
-        $expediente = $this->expediente($version);
+        $expediente = $this->expediente();
         DB::table('expediente_plantillas')->insert([
             'expediente_id' => $expediente, 'catalogo_version_id' => $version, 'es_principal' => true,
         ]);
@@ -364,6 +375,7 @@ class PlantillasChecklistTest extends TestCase
 
     public function test_reintentar_la_migracion_de_expedientes_rehace_lo_que_quedo_a_medias(): void
     {
+        $this->bajarRetiroDeVersion();
         $expediente = $this->expediente($this->version(PlantillaChecklist::sgr()->id));
         $migracion = $this->migracionExpedientes();
         $migracion->down();

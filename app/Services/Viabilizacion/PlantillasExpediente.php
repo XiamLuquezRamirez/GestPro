@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\DB;
  * - Una plantilla nueva en el expediente entra con su versión vigente; la que ya tenía
  *   conserva su versión aunque haya dejado de ofrecerse (sin cambios retroactivos).
  * - Como máximo una plantilla con motor sgr y 20 en total; si hay plantillas, una es la principal.
- * - proyectos_expedientes.catalogo_version_id guarda la versión de la plantilla sgr, o null.
+ * - expediente_plantillas guarda la versión de cada plantilla del expediente, también la sgr.
  */
 final class PlantillasExpediente
 {
@@ -239,11 +239,11 @@ final class PlantillasExpediente
     }
 
     /**
-     * Deja el expediente con las plantillas elegidas, sus versiones y la versión SGR.
+     * Deja el expediente con las plantillas elegidas, sus versiones y la principal.
      *
      * Se llama dentro de la transacción que bloqueó el expediente y validó la selección
-     * (ExpedienteService). Abre la suya, que entonces es un savepoint: el pivote y
-     * catalogo_version_id nunca quedan a medias.
+     * (ExpedienteService). sync() escribe varias sentencias: abre la suya, que entonces es un
+     * savepoint, para que el pivote nunca quede a medias.
      */
     public function guardar(ProyectoExpediente $expediente, array $seleccion): void
     {
@@ -253,8 +253,7 @@ final class PlantillasExpediente
                     ->mapWithKeys(fn (int $version, int $plantilla) => [$version => ['es_principal' => $plantilla === $seleccion['principal_id']]])
                     ->all()
             );
-            $expediente->update(['catalogo_version_id' => $seleccion['version_sgr_id']]);
         });
-        $expediente->unsetRelation('versionesPlantilla')->unsetRelation('version');
+        $expediente->unsetRelation('versionesPlantilla');
     }
 }

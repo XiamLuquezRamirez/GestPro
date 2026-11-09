@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CatalogoVersion extends Model
@@ -37,9 +38,11 @@ class CatalogoVersion extends Model
         return $this->hasMany(RequisitoCatalogo::class, 'catalogo_version_id');
     }
 
-    public function expedientes(): HasMany
+    /** Expedientes que usan esta versión, como principal o complementaria. */
+    public function expedientes(): BelongsToMany
     {
-        return $this->hasMany(ProyectoExpediente::class, 'catalogo_version_id');
+        return $this->belongsToMany(ProyectoExpediente::class, 'expediente_plantillas', 'catalogo_version_id', 'expediente_id')
+            ->withPivot('es_principal');
     }
 
     public function scopeVigente(Builder $query): Builder

@@ -98,9 +98,30 @@ class ExpedientePlantillasApiTest extends TestCase
             'compatible' => true, 'version' => ['id' => $version->id, 'numero' => 1],
         ]])
             ->assertJsonPath('tiene_sgr', true)
-            ->assertJsonPath('catalogo_version', ['id' => $version->id, 'numero' => 1])
             ->assertJsonPath('progreso.total', 8)
             ->assertJsonPath('avisos_duplicados', []);
+    }
+
+    public function test_la_version_sgr_solo_viene_en_las_plantillas_del_expediente(): void
+    {
+        $agua = $this->plantilla('Obras de agua', ['Planos firmados' => [null]]);
+        $proyecto = $this->proyecto();
+        $version = $this->sgr->versionVigente();
+        $sgr = ['plantilla_id' => $this->sgr->id, 'version' => ['id' => $version->id, 'numero' => 1]];
+        $soloSgr = fn (array $plantillas) => collect($plantillas)->where('motor', 'sgr')
+            ->map(fn ($p) => ['plantilla_id' => $p['plantilla_id'], 'version' => $p['version']])->values()->all();
+
+        $creado = $this->crear($proyecto, ['fase_sgr' => 3, 'plantilla_ids' => [$this->sgr->id, $agua->id], 'principal_id' => $agua->id])
+            ->assertCreated()->assertJsonMissingPath('catalogo_version');
+        $this->assertSame([$sgr], $soloSgr($creado->json('plantillas')));
+
+        $detalle = $this->como(Rol::Consulta)->getJson("/GestPro/expedientes/{$creado->json('id')}")
+            ->assertOk()->assertJsonMissingPath('catalogo_version');
+        $this->assertSame([$sgr], $soloSgr($detalle->json('plantillas')));
+
+        $listado = $this->como(Rol::Consulta)->getJson("/GestPro/proyectos/{$proyecto->id}/expedientes")
+            ->assertOk()->assertJsonMissingPath('expedientes.0.catalogo_version');
+        $this->assertSame([$sgr], $soloSgr($listado->json('expedientes.0.plantillas')));
     }
 
     public function test_sin_plantilla_sgr_compatible_nace_sin_plantillas_y_sin_pedir_la_fase(): void
@@ -109,11 +130,9 @@ class ExpedientePlantillasApiTest extends TestCase
 
         $r->assertJsonPath('plantillas', [])
             ->assertJsonPath('tiene_sgr', false)
-            ->assertJsonPath('catalogo_version', null)
             ->assertJsonPath('fase_sgr', 3)
             ->assertJsonPath('requisitos', [])
             ->assertJsonPath('progreso.total', 0);
-        $this->assertNull(ProyectoExpediente::find($r->json('id'))->catalogo_version_id);
     }
 
     public function test_crea_con_las_plantillas_pedidas(): void
@@ -125,7 +144,6 @@ class ExpedientePlantillasApiTest extends TestCase
         $r->assertJsonPath('plantillas.0.plantilla_id', $agua->id)
             ->assertJsonPath('plantillas.0.es_principal', true)
             ->assertJsonPath('tiene_sgr', false)
-            ->assertJsonPath('catalogo_version', null)
             ->assertJsonPath('progreso.total', 2);
         $this->assertSame(['Planos firmados', 'Licencia'], collect($r->json('requisitos'))->pluck('requisito.texto')->all());
     }
@@ -230,7 +248,7 @@ class ExpedientePlantillasApiTest extends TestCase
 
         // Sin la SGR no hace falta la fase, y sus filas quedan retiradas.
         $sin = $this->configurar($id, ['plantilla_ids' => [$agua->id]])->assertOk();
-        $sin->assertJsonPath('tiene_sgr', false)->assertJsonPath('catalogo_version', null)
+        $sin->assertJsonPath('tiene_sgr', false)
             ->assertJsonPath('progreso.total', 1)->assertJsonPath('fase_sgr', 3);
         $this->assertSame(8, ProyectoExpediente::find($id)->requisitos()->where('aplica', false)->count());
 
