@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faArrowRight, faCircleExclamation } from '@fortawesome/free-solid-svg-icons';
 import axios from '../axios';
 import CurvasNivel from './CurvasNivel';
 import { getImageUrl } from '../utils/assetHelper';
+import { tomarAvisoSesion } from '../utils/sesion';
 import '../../css/Login.css';
 
 const Login = ({ onLogin }) => {
@@ -14,6 +15,13 @@ const Login = ({ onLogin }) => {
     const [errors, setErrors] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
 
+    // Si se llegó aquí porque la sesión expiró, se dice. Solo se pone si hay aviso: en desarrollo,
+    // React corre el efecto dos veces y la segunda ya no lo encuentra.
+    useEffect(() => {
+        const aviso = tomarAvisoSesion();
+        if (aviso) setErrors(aviso);
+    }, []);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setErrors(null);
@@ -21,7 +29,8 @@ const Login = ({ onLogin }) => {
 
         try {
             // Enviar login y recibir token + datos del usuario
-            const { data } = await axios.post('/login', { email, password });
+            // Un 401 aquí son credenciales incorrectas, no una sesión que renovar.
+            const { data } = await axios.post('/login', { email, password }, { _sinRenovar: true });
             const { token, user } = data;
             localStorage.setItem('token', token);
 

@@ -6,6 +6,7 @@ use App\Enums\Rol;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
+use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AutorizacionTest extends TestCase
 {
@@ -63,7 +64,50 @@ class AutorizacionTest extends TestCase
 
     public function test_sin_sesion_no_se_puede_renovar_el_token(): void
     {
-        $this->postJson('/GestPro/refrescar-token')->assertUnauthorized();
+        $this->postJson('/GestPro/refrescar-token')
+            ->assertUnauthorized()
+            ->assertJsonPath('message', 'Tu sesión expiró. Vuelve a iniciar sesión.');
+    }
+
+    public function test_un_token_vencido_se_renueva_dentro_de_la_ventana_de_renovacion(): void
+    {
+        // Sin login(): el guard no debe recordar al usuario entre peticiones de la misma prueba.
+        $token = JWTAuth::fromUser(User::factory()->create(['rol' => Rol::Consulta]));
+        $this->travel(config('jwt.ttl') + 1)->minutes();
+        // En una prueba, el guard y el servicio JWT sobreviven entre peticiones y recuerdan el
+        // usuario y el token ya leídos; en producción cada petición empieza de cero.
+        $pedir = function (string $metodo, string $ruta, string $conToken) {
+            $this->app['auth']->forgetGuards();
+            $this->app['tymon.jwt']->unsetToken();
+            JWTAuth::unsetToken();
+
+            return $this->withHeader('Authorization', "Bearer {$conToken}")->json($metodo, $ruta);
+        };
+
+        // Vencido, ya no sirve para la API, pero sí para pedir uno nuevo.
+        $pedir('GET', '/GestPro/user', $token)->assertUnauthorized();
+        $nuevo = $pedir('POST', '/GestPro/refrescar-token', $token)->assertOk()->json('token');
+
+        $pedir('GET', '/GestPro/user', $nuevo)->assertOk();
+        // El vencido queda anulado: no se puede renovar dos veces.
+        $pedir('POST', '/GestPro/refrescar-token', $token)->assertUnauthorized();
+    }
+
+    public function test_fuera_de_la_ventana_de_renovacion_hay_que_volver_a_entrar(): void
+    {
+        $token = auth('api')->login(User::factory()->create(['rol' => Rol::Consulta]));
+        $this->travel(config('jwt.refresh_ttl') + 1)->minutes();
+
+        $this->withHeader('Authorization', "Bearer {$token}")->postJson('/GestPro/refrescar-token')
+            ->assertUnauthorized()
+            ->assertJsonPath('message', 'Tu sesión expiró. Vuelve a iniciar sesión.');
+    }
+
+    public function test_un_token_invalido_no_se_renueva(): void
+    {
+        $this->withHeader('Authorization', 'Bearer no-es-un-token')->postJson('/GestPro/refrescar-token')
+            ->assertUnauthorized()
+            ->assertJsonPath('message', 'Tu sesión expiró. Vuelve a iniciar sesión.');
     }
 
     public function test_gestor_can_create_a_proyecto_via_api(): void

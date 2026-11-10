@@ -24,11 +24,14 @@ Route::get('/test', function () {
     ]);
 });
 
+// Fuera de auth:api a propósito: renueva también un token vencido, dentro de la ventana de
+// renovación de JWT (refresh_ttl). El controlador valida el token y responde 401 si no sirve.
+Route::post('/refrescar-token', [AuthController::class, 'refrescarToken'])->middleware('throttle:30,1');
+
 // 🔒 Rutas protegidas con JWT
 Route::middleware('auth:api')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
-    Route::post('/refrescar-token', [AuthController::class, 'refrescarToken']);
     Route::get('/user', [AuthController::class, 'me']);
 
     // Lectura: cualquier rol autenticado (Administrador, Gestor o Consulta)

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { EVENTO_SESION_EXPIRADA, crearRenovador, debeRenovar, guardarAvisoSesion } from './utils/sesion';
 
 // Base URL: siempre el mismo origen (protocolo+host+puerto) desde el que se
 // cargó la página — evita depender de un puerto hardcodeado que no coincide
@@ -37,10 +38,41 @@ axios.interceptors.request.use((config) => {
     return config;
 });
 
-// Interceptor para manejar errores 419 (CSRF) y 403 (sin permiso)
+// Una sola renovación del token para todas las peticiones que reciban 401 a la vez.
+const renovarToken = crearRenovador(async () => {
+    const { data } = await axios.post('refrescar-token', null, { _sinRenovar: true });
+    localStorage.setItem('token', data.token);
+    return data.token;
+});
+
+// La sesión ya no se puede renovar: se cierra y el login explica por qué (App escucha el evento).
+const expirarSesion = () => {
+    localStorage.removeItem('token');
+    delete axios.defaults.headers.common.Authorization;
+    guardarAvisoSesion();
+    window.dispatchEvent(new Event(EVENTO_SESION_EXPIRADA));
+};
+
+// Interceptor para manejar 401 (sesión vencida), 419 (CSRF) y 403 (sin permiso)
 axios.interceptors.response.use(
     (response) => response,
-    (error) => {
+    async (error) => {
+        const haySesion = Boolean(localStorage.getItem('token'));
+        if (debeRenovar(error, haySesion)) {
+            try {
+                await renovarToken();
+            } catch {
+                expirarSesion();
+                return Promise.reject(error);
+            }
+            // El interceptor de petición pone el token nuevo.
+            return axios({ ...error.config, _renovada: true });
+        }
+        // Una petición ya repetida con token nuevo que vuelve a dar 401: la sesión no sirve.
+        if (haySesion && error.response?.status === 401 && error.config?._renovada) {
+            expirarSesion();
+        }
+
         if (error.response && error.response.status === 419) {
             // Recargar la página para obtener un nuevo token CSRF
             console.warn('CSRF token mismatch, recargando página...');

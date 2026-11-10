@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Tymon\JWTAuth\Exceptions\JWTException;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 use Illuminate\Http\Request;
@@ -46,10 +47,19 @@ class AuthController extends Controller
         }
     }
 
-    /** Para pantallas que quedan encendidas, como el modo sala: la sesión dura 60 minutos. */
+    /**
+     * Token nuevo a cambio del actual, aunque ya haya vencido (dura JWT_TTL minutos), mientras
+     * esté dentro de la ventana de renovación (JWT_REFRESH_TTL). El anterior queda anulado. Lo usan
+     * el modo sala y la renovación automática del frontend cuando una petición recibe 401.
+     */
     public function refrescarToken()
     {
-        return response()->json(['token' => JWTAuth::parseToken()->refresh()]);
+        try {
+            return response()->json(['token' => JWTAuth::parseToken()->refresh()]);
+        } catch (JWTException) {
+            // Sin token, inválido, anulado o fuera de la ventana: hay que volver a entrar.
+            return response()->json(['message' => 'Tu sesión expiró. Vuelve a iniciar sesión.'], 401);
+        }
     }
 
     public function logout()

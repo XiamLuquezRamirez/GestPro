@@ -10,6 +10,7 @@ import PlantillasChecklist from './components/PlantillasChecklist';
 import PlantillaDetalle from './components/PlantillaDetalle';
 import { RUTA_PLANTILLAS, puedeVer } from './utils/navegacion';
 import axios from './axios';
+import { EVENTO_SESION_EXPIRADA } from './utils/sesion';
 import '../css/app.css';
 
 const INICIO = '/dashboard';
@@ -44,6 +45,13 @@ function App() {
 
   useEffect(() => {
     fetchUser();
+  }, []);
+
+  // axios avisa cuando la sesión ya no se puede renovar: se vuelve al login, que explica por qué.
+  useEffect(() => {
+    const alExpirar = () => setUser(null);
+    window.addEventListener(EVENTO_SESION_EXPIRADA, alExpirar);
+    return () => window.removeEventListener(EVENTO_SESION_EXPIRADA, alExpirar);
   }, []);
 
   const logout = () => {
