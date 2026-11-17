@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-11-17
 **Origen:** pedido del usuario: "hoy no hay una revisión como tal de los proyectos en licitación". La guía de Colombia Compra para SECOP II sirve de punto de partida, y el seguimiento debe ser parametrizable para procesos que no van por SECOP.
-**Estado:** aprobado por el usuario el 2026-11-17. Etapa 1 (catálogos y procesos) implementada y verificada en copia; pendiente de validar y aplicar en `gest_pro`.
+**Estado:** aprobado por el usuario el 2026-11-17. Etapa 1 (catálogos y procesos) validada y aplicada en `gest_pro`. **Corrección del 2026-11-17:** el proceso y el contrato se unifican en un solo registro, el contrato (sección 10). Donde este documento hable de "proceso", la sección 10 manda.
 
 ## Objetivo
 
@@ -213,8 +213,9 @@ La serie sigue a la 12. Cada migración lleva guardas por paso, por el DDL no tr
 | 15 | 1 | `amplia_procesos_licitacion` | `objeto`, `plataforma` (`secop_ii`, `secop_i`, `tvec`, `ninguna`), `url_proceso`, `estado` (por defecto `preparacion`), `usuario_creo_id` y timestamps | Se detiene si hay procesos con datos en las columnas nuevas |
 | 16 | 2 | `add_uso_y_modalidades_a_plantillas` | `plantillas_checklist.uso` (`viabilizacion` por defecto), `todas_modalidades` y `plantilla_modalidades` | Se detiene si hay plantillas de contratación |
 | 17 | 2 | `add_etapa_a_requisitos` | `requisitos_catalogo.etapa_id` y `proyectos_requisitos.etapa_propia_id` (FK `restrict`) | Se detiene si hay etapas asignadas |
-| 18 | 3 | `add_tipo_a_expedientes` | `proyectos_expedientes.tipo` (`viabilizacion` por defecto) y `proceso_licitacion_id` (único, opcional, cascada desde el proceso) | Se detiene si hay expedientes de contratación |
-| 19 | 4 | `create_expediente_etapas_table` | `expediente_id`, `etapa_id`, `fecha_programada`, `fecha_real`, `estado_revision` (`sin_revisar`, `aprobada`, `devuelta`), `usuario_reviso_id`, `fecha_revision`, `observacion_revision`, `pendientes_al_aprobar`; único (expediente, etapa) | Se detiene si tiene registros |
+| 18 | 3 | `unifica_proceso_en_contrato` | Ver sección 10 | Ver sección 10 |
+| 19 | 4 | `add_tipo_a_expedientes` | `proyectos_expedientes.tipo` (`viabilizacion` por defecto) y `contrato_id` (único, opcional, cascada desde el contrato) | Se detiene si hay expedientes de contratación |
+| 20 | 5 | `create_expediente_etapas_table` | `expediente_id`, `etapa_id`, `fecha_programada`, `fecha_real`, `estado_revision` (`sin_revisar`, `aprobada`, `devuelta`), `usuario_reviso_id`, `fecha_revision`, `observacion_revision`, `pendientes_al_aprobar`; único (expediente, etapa) | Se detiene si tiene registros |
 
 `eventos_licitacion` y `tipos_procesos` quedan como están, sin uso: su retiro se decide aparte.
 
@@ -249,7 +250,56 @@ Cada etapa se valida con el usuario antes de seguir, tiene su plan y se ensaya e
 |---|---|---|---|
 | 1 | Catálogos y procesos | 13-15 | Modalidades y etapas se administran, y un proyecto registra sus procesos con modalidad, plataforma y estado |
 | 2 | Plantillas de contratación | 16-17 | Un administrador crea, asocia a modalidades y publica una plantilla de contratación con requisitos por etapa; el comando siembra el borrador de licitación pública |
-| 3 | Expediente de contratación | 18 | Cada proceso tiene su checklist por etapas con todo el motor actual, se cierra con aviso y la viabilización no cambia |
-| 4 | Revisión y cronograma | 19 | Aprobar y devolver etapas con aviso, fechas programadas y reales, avisos de vencimiento e historial |
-| 5 | Tablero y contrato | — | Vista "Contratación" con filtros, y "Registrar contrato" desde un proceso adjudicado |
-| 6 (opcional) | Días hábiles y SECOP | Por definir | Calendario de festivos con plazos mínimos calculados; consulta del proceso en los datos abiertos de SECOP, si se decide |
+| 3 | Proceso y contrato en un solo registro | 18 | Un contrato nace en selección con modalidad, plataforma y SECOP, y pasa a ejecución; el proceso existente queda convertido en contrato; se retiran la pantalla y la API de procesos; el tablero solo cuenta contratos en ejecución o después |
+| 4 | Expediente de contratación | 19 | Cada contrato tiene su checklist por etapas con todo el motor actual, se cierra con aviso y la viabilización no cambia |
+| 5 | Revisión y cronograma | 20 | Aprobar y devolver etapas con aviso, fechas programadas y reales, avisos de vencimiento e historial |
+| 6 | Tablero de contratación | — | Vista "Contratación" con los contratos en selección por etapa, semáforo y filtros |
+| 7 (opcional) | Días hábiles y SECOP | Por definir | Calendario de festivos con plazos mínimos calculados; consulta del proceso en los datos abiertos de SECOP, si se decide |
+
+---
+
+## 10. Proceso y contrato en un solo registro (corrección del 2026-11-17)
+
+**Por qué.** El usuario señaló que el proceso y el contrato repiten objeto, entidad contratante, valor y estado, y que tener los dos confunde. Son el mismo trámite en dos momentos: la selección termina en un contrato. **Decisión del usuario:** solo queda el contrato, con dos fases. Esta sección reemplaza a "Proceso de contratación", "Paso a contrato" y a lo que hable de procesos en las secciones 3, 5, 6 y 7.
+
+**El contrato**
+- **Nace en selección**, con:
+  - objeto, modalidad, plataforma, número y enlace del proceso en SECOP, entidad contratante y valor estimado;
+  - el checklist por etapas y la revisión (etapas 4 y 5).
+- **Pasa a ejecución** cuando se firma. Desde ahí se llenan el número de contrato, el contratista, las fechas, la interventoría, el anticipo y el avance, como hoy.
+- **Lo de ejecución no cambia:** actividades, avances, modificaciones (adiciones y prórrogas) y anexos siguen igual. Solo cambia el formulario de crear y editar.
+- **Un contrato antiguo** (los que ya existen) queda directamente en ejecución, sin datos de selección.
+- **Lotes:** si un proceso adjudica varios, cada lote es un contrato con el mismo número de proceso.
+- **Proceso desierto:** queda como contrato desierto, y el nuevo intento es otro contrato.
+
+**Estados, en un solo flujo**
+
+| Fase | Estados |
+|---|---|
+| Selección | En preparación, Publicado, En evaluación, Adjudicado, Desierto, Cancelado |
+| Ejecución | Celebrado (firmado, sin acta de inicio), En ejecución, Suspendido, Terminado, Liquidado |
+
+- Los estados dejan de ser texto libre.
+- El texto anterior de cada contrato se conserva en `estado_original`. La conversión de los existentes ("En ejecución" y "vigente" pasan a En ejecución; "liquidado" y "Liquidado", a Liquidado; "Suspendido", a Suspendido) se informa, y lo que no se reconozca queda En ejecución y se lista para revisar.
+- Como en la etapa 1, cambiar de estado nunca se bloquea: la pantalla pide confirmación si sale de un estado de cierre (Desierto, Cancelado, Liquidado) o si retrocede.
+
+**Tablero y contratos actuales**
+- Los indicadores de contratos (avance físico y financiero, desfase, "% contratados", anticipo) solo cuentan contratos en fase de ejecución.
+- Los contratos en selección aparecen en la vista "Contratación" (etapa 6).
+
+**Migración 18, `unifica_proceso_en_contrato`**
+- **Agrega a `contratos`:** `modalidad_id` (FK restrict), `plataforma`, `codigo_proceso`, `url_proceso`, `entidad_contratante_id` (FK restrict, opcional), `estado_original`, `usuario_creo_id` y timestamps.
+- **`contratante`:** sigue siendo texto para los contratos antiguos; al elegir una entidad se llena con su nombre.
+- **`estado`:** pasa a los valores de la tabla anterior, según la conversión descrita.
+- **Procesos existentes:** cada uno en `procesos_licitacion` se copia como contrato en su estado (Celebrado si el proceso estaba "celebrado"), con su historial (`entidad_tipo = 'contrato'`). En `gest_pro` hay uno.
+- **Lo que queda sin uso** para retirarlo aparte: `procesos_licitacion`, `eventos_licitacion` y `contratos.proceso_licitacion`.
+- **`down()`:** devuelve los estados originales y quita las columnas. Se detiene si hay contratos en selección creados después de migrar, porque se perderían.
+
+**Lo que se retira de la etapa 1**
+- El botón y el diálogo "Procesos".
+- La API `routes/contratacion.php` de procesos y el servicio `ProcesosContratacion`.
+- Su lógica (validación, historial, control de ediciones simultáneas, avisos de estado) se reutiliza en el servicio de contratos.
+- El botón "Contrato" de cada proyecto abre la lista de contratos del proyecto, con las dos fases.
+- Modalidades y etapas de contratación no cambian.
+
+**Expediente de contratación:** cuelga del contrato (`proyectos_expedientes.contrato_id`), no del proceso. Se crea cuando el contrato nace en selección; los contratos antiguos no lo tienen.
