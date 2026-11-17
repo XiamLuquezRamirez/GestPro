@@ -5,6 +5,7 @@ namespace App\Services\Viabilizacion;
 use App\Exceptions\ReglaNegocioException;
 use App\Models\CatalogoVersion;
 use App\Models\FuenteFinanciacion;
+use App\Models\Modalidad;
 use App\Models\PlantillaChecklist;
 use App\Models\RequisitoCatalogo;
 use App\Models\RequisitoSector;
@@ -15,13 +16,22 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Administración de plantillas de checklist (rol Administrador): datos generales,
- * fuentes y sectores a los que aplican, y activación. Los requisitos y las versiones
- * se administran con CatalogoService.
+ * Administración de plantillas de checklist (rol Administrador): datos generales, uso,
+ * fuentes, sectores y modalidades a los que aplican, y activación. Los requisitos y las
+ * versiones se administran con CatalogoService.
+ *
+ * El uso (viabilización o contratación) se elige al crear y no cambia, ni al copiar. Solo una
+ * plantilla de contratación se asocia a modalidades, y solo usa el motor simple.
  */
 final class PlantillaService
 {
     public const ALCANCES = ['general', 'especifica'];
+
+    /** Cómo se nombra cada uso en los mensajes. */
+    private const NOMBRES_USO = [
+        PlantillaChecklist::USO_VIABILIZACION => 'viabilización',
+        PlantillaChecklist::USO_CONTRATACION => 'contratación',
+    ];
 
     /** Norma que indicaba la fuente de un requisito SGR, para conservarla al pasar a simple. */
     private const NORMAS = ['a12' => 'Acuerdo 12 de 2024', 'ot' => 'Orientaciones Transitorias'];
@@ -36,12 +46,22 @@ final class PlantillaService
         return ['requisitos', 'requisitos as requisitos_activos_count' => fn ($q) => $q->where('activo', true)];
     }
 
-    public function listar(?string $buscar): array
+    /** Modalidades en el orden del catálogo. */
+    private function modalidadesOrdenadas(): \Closure
+    {
+        return fn ($q) => $q->orderBy('modalidades.orden')->orderBy('modalidades.nombre');
+    }
+
+    public function listar(?string $buscar, ?string $uso = null): array
     {
         $buscar = trim((string) $buscar);
 
         return PlantillaChecklist::query()
-            ->with(['fuentes:id,nombre', 'sectores:id,nombre', 'versiones' => fn ($q) => $q->withCount($this->cuentasRequisitos())])
+            ->with([
+                'fuentes:id,nombre', 'sectores:id,nombre', 'modalidades' => $this->modalidadesOrdenadas(),
+                'versiones' => fn ($q) => $q->withCount($this->cuentasRequisitos()),
+            ])
+            ->when($uso !== null, fn ($q) => $q->where('uso', $uso))
             ->when($buscar !== '', function ($q) use ($buscar) {
                 $patron = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $buscar) . '%';
                 $q->where(fn ($w) => $w->whereRaw("nombre like ? escape '!'", [$patron])->orWhereRaw("descripcion like ? escape '!'", [$patron]));
@@ -56,7 +76,7 @@ final class PlantillaService
     public function presentar(PlantillaChecklist $plantilla): array
     {
         $plantilla->load([
-            'fuentes:id,nombre', 'sectores:id,nombre',
+            'fuentes:id,nombre', 'sectores:id,nombre', 'modalidades' => $this->modalidadesOrdenadas(),
             'versiones' => fn ($q) => $q->withCount([...$this->cuentasRequisitos(), 'expedientes'])->with('usuarioPublico:id,name')->orderByDesc('numero'),
         ]);
 
@@ -77,7 +97,10 @@ final class PlantillaService
         ];
     }
 
-    /** Las plantillas nuevas usan el motor simple y nacen con su primera versión en borrador. */
+    /**
+     * Las plantillas nuevas usan el motor simple y nacen con su primera versión en borrador.
+     * El uso llega validado por el controlador.
+     */
     public function crear(array $datos, ?User $usuario): PlantillaChecklist
     {
         $asociaciones = $this->validar($datos, null);
@@ -85,6 +108,8 @@ final class PlantillaService
         return DB::transaction(function () use ($datos, $asociaciones, $usuario) {
             $plantilla = PlantillaChecklist::create([
                 ...$this->datosGenerales($datos),
+                'uso' => $datos['uso'],
+                'todas_modalidades' => $asociaciones['todas_modalidades'],
                 'motor' => PlantillaChecklist::MOTOR_SIMPLE,
                 'activo' => true,
                 'usuario_creo_id' => $usuario?->id,
@@ -101,7 +126,7 @@ final class PlantillaService
         $asociaciones = $this->validar($datos, $plantilla);
 
         return DB::transaction(function () use ($plantilla, $datos, $asociaciones) {
-            $plantilla->update($this->datosGenerales($datos));
+            $plantilla->update([...$this->datosGenerales($datos), 'todas_modalidades' => $asociaciones['todas_modalidades']]);
             $this->asociar($plantilla, $asociaciones);
 
             return $plantilla;
@@ -122,6 +147,8 @@ final class PlantillaService
      * Copia independiente de una plantilla, en borrador, con los requisitos de su versión
      * vigente que se elijan y el mismo código común. Una copia con motor sgr puede pasar a
      * simple: las condiciones automáticas se vuelven condicionados que decide una persona.
+     * La copia conserva el uso y, en contratación, las modalidades activas y la etapa de cada
+     * requisito.
      */
     public function duplicar(PlantillaChecklist $origen, array $datos, ?User $usuario): PlantillaChecklist
     {
@@ -129,6 +156,9 @@ final class PlantillaService
             ?? throw new ReglaNegocioException('La plantilla no tiene una versión publicada que copiar.');
 
         $motor = $datos['motor'] ?? $origen->motor;
+        if ($origen->esContratacion() && $motor !== PlantillaChecklist::MOTOR_SIMPLE) {
+            throw new ReglaNegocioException('Una plantilla de contratación solo puede usar el motor simple.');
+        }
         if ($origen->motor === PlantillaChecklist::MOTOR_SIMPLE && $motor !== PlantillaChecklist::MOTOR_SIMPLE) {
             throw new ReglaNegocioException('Una plantilla simple solo se puede copiar como simple.');
         }
@@ -160,6 +190,7 @@ final class PlantillaService
 
         $general = [
             'nombre' => $datos['nombre'],
+            'uso' => $origen->uso,
             'descripcion' => $origen->descripcion,
             'alcance' => $origen->alcance,
             'todas_fuentes' => $origen->todas_fuentes,
@@ -167,11 +198,18 @@ final class PlantillaService
             'fuente_ids' => $origen->fuentes()->where('activo', true)->pluck('fuentes_financiacion.id')->all(),
             'sector_ids' => $origen->sectores()->where('activo', true)->pluck('sectores.id')->all(),
         ];
+        if ($origen->esContratacion()) {
+            // Sin modalidades activas que heredar, la copia queda sin ellas: publicar las pide.
+            $general['todas_modalidades'] = $origen->todas_modalidades;
+            $general['modalidad_ids'] = $origen->modalidades()->where('activo', true)->pluck('modalidades.id')->all();
+        }
         $asociaciones = $this->validar($general, null);
 
         return DB::transaction(function () use ($general, $asociaciones, $motor, $requisitos, $vigente, $origen, $usuario) {
             $copia = PlantillaChecklist::create([
                 ...$this->datosGenerales($general),
+                'uso' => $general['uso'],
+                'todas_modalidades' => $asociaciones['todas_modalidades'],
                 'motor' => $motor,
                 'activo' => true,
                 'usuario_creo_id' => $usuario?->id,
@@ -190,6 +228,7 @@ final class PlantillaService
                         'descripcion', 'categoria', 'tipo_requisito', 'caracter', 'cargo_cumplimiento', 'cargo_revision',
                         'soporte_requerido', 'referencia_normativa', 'condicion_descripcion',
                         'requiere_aprobacion_no_aplica', 'codigo_comun', 'responsable_cumplimiento_id', 'responsable_revision_id',
+                        'etapa_id',
                     ]),
                     'catalogo_version_id' => $borrador->id,
                     'orden' => $posicion + 1,
@@ -251,12 +290,15 @@ final class PlantillaService
             'nombre' => $plantilla->nombre,
             'descripcion' => $plantilla->descripcion,
             'alcance' => $plantilla->alcance,
+            'uso' => $plantilla->uso,
             'motor' => $plantilla->motor,
             'activo' => $plantilla->activo,
             'todas_fuentes' => $plantilla->todas_fuentes,
             'todos_sectores' => $plantilla->todos_sectores,
+            'todas_modalidades' => $plantilla->todas_modalidades,
             'fuentes' => $plantilla->fuentes->map(fn ($f) => ['id' => $f->id, 'nombre' => $f->nombre])->values()->all(),
             'sectores' => $plantilla->sectores->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre])->values()->all(),
+            'modalidades' => $plantilla->modalidades->map(fn ($m) => ['id' => $m->id, 'nombre' => $m->nombre, 'activo' => $m->activo])->values()->all(),
             'vigente' => $version($vigente),
             'borrador' => $version($borrador),
         ];
@@ -273,10 +315,20 @@ final class PlantillaService
         ];
     }
 
-    /** @return array{fuente_ids: list<int>, sector_ids: list<int>} */
+    /**
+     * Al crear, el uso llega en los datos; al editar es el de la plantilla y, si llega otro, es
+     * un error. Las modalidades que no llegan al editar se conservan.
+     *
+     * @return array{fuente_ids: list<int>, sector_ids: list<int>, todas_modalidades: bool, modalidad_ids: list<int>}
+     */
     private function validar(array $datos, ?PlantillaChecklist $plantilla): array
     {
         $errores = [];
+
+        $uso = $plantilla?->uso ?? $datos['uso'];
+        if ($plantilla && isset($datos['uso']) && $datos['uso'] !== $plantilla->uso) {
+            $errores[] = 'El uso de una plantilla no cambia después de crearla: esta es de ' . self::NOMBRES_USO[$plantilla->uso] . '. Si necesitas otro uso, crea una plantilla nueva.';
+        }
 
         $nombre = trim((string) ($datos['nombre'] ?? ''));
         // Se compara en PHP para que MariaDB y SQLite ignoren igual mayúsculas y tildes.
@@ -301,6 +353,21 @@ final class PlantillaService
             $errores[] = 'Elige al menos un sector o marca "Todos los sectores".';
         }
 
+        // Las modalidades pueden faltar mientras se arma la plantilla: publicar las exige.
+        $todasModalidades = false;
+        $modalidadIds = [];
+        if ($uso === PlantillaChecklist::USO_CONTRATACION) {
+            $previas = $plantilla?->modalidades()->pluck('modalidades.id')->all() ?? [];
+            $todasModalidades = (bool) ($datos['todas_modalidades'] ?? $plantilla?->todas_modalidades ?? false);
+            $modalidadIds = match (true) {
+                $todasModalidades => [],
+                array_key_exists('modalidad_ids', $datos) => $this->idsValidos(Modalidad::class, $datos['modalidad_ids'], $previas, ['La modalidad', 'inactiva'], $errores),
+                default => array_map('intval', $previas),
+            };
+        } elseif (! empty($datos['todas_modalidades']) || ! empty($datos['modalidad_ids'])) {
+            $errores[] = 'Una plantilla de viabilización no se asocia a modalidades: solo las de contratación las tienen.';
+        }
+
         // La plantilla SGR debe seguir ofreciéndose a los proyectos de regalías.
         if ($plantilla?->clave === PlantillaChecklist::CLAVE_SGR && ! $todasFuentes) {
             $sgr = FuenteFinanciacion::where('clave', FuenteFinanciacion::SGR)->value('id');
@@ -318,7 +385,7 @@ final class PlantillaService
             throw new ReglaNegocioException('La plantilla no es válida.', $errores);
         }
 
-        return ['fuente_ids' => $fuenteIds, 'sector_ids' => $sectorIds];
+        return ['fuente_ids' => $fuenteIds, 'sector_ids' => $sectorIds, 'todas_modalidades' => $todasModalidades, 'modalidad_ids' => $modalidadIds];
     }
 
     /** Ids que existen; uno inactivo solo si la plantilla ya lo tenía. */
@@ -346,5 +413,6 @@ final class PlantillaService
     {
         $plantilla->fuentes()->sync($asociaciones['fuente_ids']);
         $plantilla->sectores()->sync($asociaciones['sector_ids']);
+        $plantilla->modalidades()->sync($asociaciones['modalidad_ids']);
     }
 }

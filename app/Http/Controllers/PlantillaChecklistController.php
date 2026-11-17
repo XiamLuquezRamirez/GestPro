@@ -24,6 +24,8 @@ class PlantillaChecklistController extends Controller
         'nombre.max' => 'El nombre admite hasta 199 caracteres.',
         'alcance.in' => 'Elige el alcance: general o específica.',
         'motor.in' => 'El motor debe ser sgr o simple.',
+        'uso.required' => 'Elige el uso de la plantilla: viabilización o contratación.',
+        'uso.in' => 'Elige el uso de la plantilla: viabilización o contratación.',
     ];
 
     private const ATRIBUTOS = [
@@ -36,6 +38,10 @@ class PlantillaChecklistController extends Controller
         'fuente_ids.*' => 'cada fuente',
         'sector_ids' => 'los sectores',
         'sector_ids.*' => 'cada sector',
+        'uso' => 'el uso',
+        'todas_modalidades' => 'la opción "Todas las modalidades"',
+        'modalidad_ids' => 'las modalidades',
+        'modalidad_ids.*' => 'cada modalidad',
         'activo' => 'el estado activo',
         'motor' => 'el motor',
         'requisito_ids' => 'los requisitos',
@@ -51,9 +57,12 @@ class PlantillaChecklistController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $datos = $request->validate(['buscar' => ['nullable', 'string', 'max:199']], self::MENSAJES, self::ATRIBUTOS);
+        $datos = $request->validate([
+            'buscar' => ['nullable', 'string', 'max:199'],
+            'uso' => ['nullable', Rule::in(PlantillaChecklist::USOS)],
+        ], self::MENSAJES, self::ATRIBUTOS);
 
-        return response()->json($this->plantillas->listar($datos['buscar'] ?? null));
+        return response()->json($this->plantillas->listar($datos['buscar'] ?? null, $datos['uso'] ?? null));
     }
 
     public function show(PlantillaChecklist $plantilla): JsonResponse
@@ -63,14 +72,17 @@ class PlantillaChecklistController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $plantilla = $this->plantillas->crear($request->validate($this->reglas(), self::MENSAJES, self::ATRIBUTOS), $request->user());
+        $reglas = [...$this->reglas(), 'uso' => ['required', Rule::in(PlantillaChecklist::USOS)]];
+        $plantilla = $this->plantillas->crear($request->validate($reglas, self::MENSAJES, self::ATRIBUTOS), $request->user());
 
         return response()->json($this->plantillas->presentar($plantilla), 201);
     }
 
     public function update(Request $request, PlantillaChecklist $plantilla): JsonResponse
     {
-        $this->plantillas->actualizar($plantilla, $request->validate($this->reglas(), self::MENSAJES, self::ATRIBUTOS));
+        // El uso no cambia: si llega, el servicio comprueba que sea el mismo.
+        $reglas = [...$this->reglas(), 'uso' => ['sometimes', Rule::in(PlantillaChecklist::USOS)]];
+        $this->plantillas->actualizar($plantilla, $request->validate($reglas, self::MENSAJES, self::ATRIBUTOS));
 
         return response()->json($this->plantillas->presentar($plantilla->refresh()));
     }
@@ -116,6 +128,10 @@ class PlantillaChecklistController extends Controller
             'fuente_ids.*' => ['integer'],
             'sector_ids' => ['sometimes', 'array'],
             'sector_ids.*' => ['integer'],
+            // Solo en contratación; en viabilización el servicio las rechaza.
+            'todas_modalidades' => ['sometimes', 'boolean'],
+            'modalidad_ids' => ['sometimes', 'array'],
+            'modalidad_ids.*' => ['integer'],
         ];
     }
 }

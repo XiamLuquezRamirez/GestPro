@@ -4,6 +4,7 @@ namespace App\Services\Viabilizacion;
 
 use App\Exceptions\ReglaNegocioException;
 use App\Models\CatalogoVersion;
+use App\Models\EtapaContratacion;
 use App\Models\PlantillaChecklist;
 use App\Models\RequisitoCatalogo;
 use App\Models\RequisitoComponente;
@@ -101,6 +102,7 @@ final class CatalogoService
                 'descripcion', 'categoria', 'tipo_requisito', 'caracter', 'cargo_cumplimiento', 'cargo_revision',
                 'soporte_requerido', 'referencia_normativa', 'condicion_descripcion',
                 'requiere_aprobacion_no_aplica', 'codigo_comun', 'responsable_cumplimiento_id', 'responsable_revision_id',
+                'etapa_id',
             ];
             $vigente?->requisitos()->orderBy('id')->select($columnas)->get()
                 ->map(fn ($r) => ['catalogo_version_id' => $borrador->id, ...$r->only($columnas)])
@@ -125,6 +127,9 @@ final class CatalogoService
             if ($sinFuentes || $sinSectores) {
                 throw new ReglaNegocioException('Asocia la plantilla a sus fuentes y sectores antes de publicar.');
             }
+            if ($plantilla->esContratacion()) {
+                $this->exigirContratacionCompleta($plantilla, $actual);
+            }
 
             [$errores, $mensaje] = $plantilla->motor === PlantillaChecklist::MOTOR_SGR
                 ? [$this->erroresDeCondiciones($actual), 'La versión tiene condiciones inválidas y no puede publicarse.']
@@ -145,6 +150,23 @@ final class CatalogoService
         });
 
         return $version->refresh();
+    }
+
+    /** Contratación: la plantilla aplica a alguna modalidad y cada requisito activo tiene su etapa. */
+    private function exigirContratacionCompleta(PlantillaChecklist $plantilla, CatalogoVersion $version): void
+    {
+        if (! $plantilla->todas_modalidades && ! $plantilla->modalidades()->exists()) {
+            throw new ReglaNegocioException('Asocia la plantilla de contratación a sus modalidades, o marca "Todas las modalidades", antes de publicar.');
+        }
+
+        $sinEtapa = $version->requisitos()->where('activo', true)->whereNull('etapa_id')
+            ->orderBy('orden')->orderBy('id')
+            ->pluck('texto')
+            ->map(fn (string $texto) => "{$texto}: elige su etapa de contratación.")
+            ->all();
+        if ($sinEtapa) {
+            throw new ReglaNegocioException('La versión tiene requisitos sin etapa de contratación y no puede publicarse.', $sinEtapa);
+        }
     }
 
     /** Motor sgr: cada condición debe ser válida en el DSL. En la sección C es opcional. */
@@ -215,7 +237,9 @@ final class CatalogoService
         }
 
         $errores = [];
+        $erroresEtapa = [];
         $seccion = $datos['seccion'];
+        $this->etapaDelRequisito($version, $datos, $requisito, $erroresEtapa);
 
         $claveRepetida = RequisitoCatalogo::where('catalogo_version_id', $version->id)
             ->where('clave', $datos['clave'])
@@ -251,9 +275,7 @@ final class CatalogoService
         }
         $datos['condicion'] = $condicion !== '' ? $condicion : null;
 
-        if ($errores) {
-            throw new ReglaNegocioException('El requisito no es válido.', $errores);
-        }
+        $this->rechazarSiHayErrores($erroresEtapa, $errores);
 
         $valores = [
             'catalogo_version_id' => $version->id,
@@ -301,7 +323,9 @@ final class CatalogoService
     private function guardarRequisitoSimple(CatalogoVersion $version, array $datos, ?RequisitoCatalogo $requisito): RequisitoCatalogo
     {
         $errores = [];
+        $erroresEtapa = [];
         $clave = trim((string) ($datos['clave'] ?? '')) ?: ($requisito?->clave ?? $this->claveLibre($version));
+        $etapa = $this->etapaDelRequisito($version, $datos, $requisito, $erroresEtapa);
 
         $repetida = fn (string $columna, ?string $valor) => $valor !== null && RequisitoCatalogo::where('catalogo_version_id', $version->id)
             ->where($columna, $valor)
@@ -322,9 +346,7 @@ final class CatalogoService
             $errores[] = 'Un requisito condicionado necesita describir cuándo aplica.';
         }
 
-        if ($errores) {
-            throw new ReglaNegocioException('El requisito no es válido.', $errores);
-        }
+        $this->rechazarSiHayErrores($erroresEtapa, $errores);
 
         $valores = [
             'catalogo_version_id' => $version->id,
@@ -342,6 +364,7 @@ final class CatalogoService
             'activo' => array_key_exists('activo', $datos) ? (bool) $datos['activo'] : ($requisito?->activo ?? true),
             'codigo_comun' => $codigoComun,
             'requiere_aprobacion_no_aplica' => (bool) ($datos['requiere_aprobacion_no_aplica'] ?? $requisito?->requiere_aprobacion_no_aplica ?? false),
+            'etapa_id' => $etapa,
             ...$seguimiento,
         ];
 
@@ -352,6 +375,52 @@ final class CatalogoService
         }
 
         return RequisitoCatalogo::create($valores);
+    }
+
+    /**
+     * El requisito no se guarda si hay errores. Los de la etapa van primero en la lista y, además,
+     * en el campo `etapa_id`, para que la pantalla los muestre bajo el select sin adivinar cuáles son.
+     *
+     * @param list<string> $deEtapa
+     * @param list<string> $otros
+     */
+    private function rechazarSiHayErrores(array $deEtapa, array $otros): void
+    {
+        if ($deEtapa || $otros) {
+            throw new ReglaNegocioException('El requisito no es válido.', [...$deEtapa, ...$otros], $deEtapa ? ['etapa_id' => $deEtapa] : []);
+        }
+    }
+
+    /**
+     * Etapa de contratación del requisito. En una plantilla de contratación es obligatoria: una
+     * etapa activa o la que ya tenía, aunque esté inactiva; sin el campo en el pedido, no cambia.
+     * En una de viabilización no se acepta. Los errores se agregan a $errores.
+     */
+    private function etapaDelRequisito(CatalogoVersion $version, array $datos, ?RequisitoCatalogo $requisito, array &$errores): ?int
+    {
+        $pedida = array_key_exists('etapa_id', $datos) ? $datos['etapa_id'] : $requisito?->etapa_id;
+
+        if (! $version->plantilla->esContratacion()) {
+            if ($pedida !== null) {
+                $errores[] = 'Los requisitos de una plantilla de viabilización no llevan etapa de contratación.';
+            }
+
+            return null;
+        }
+
+        if ($pedida === null) {
+            $errores[] = 'Elige la etapa de contratación del requisito.';
+
+            return null;
+        }
+        $etapa = EtapaContratacion::find($pedida);
+        if (! $etapa) {
+            $errores[] = "La etapa de contratación con id {$pedida} no existe.";
+        } elseif (! $etapa->activo && $etapa->id !== $requisito?->etapa_id) {
+            $errores[] = "La etapa \"{$etapa->nombre}\" está inactiva.";
+        }
+
+        return (int) $pedida;
     }
 
     /** Campos que la propuesta pide a todo requisito. Lo que no llega conserva su valor. */

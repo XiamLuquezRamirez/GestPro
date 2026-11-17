@@ -79,6 +79,7 @@ class CatalogoRequisitosController extends Controller
             $version->requisitos()->with([
                 'sector:id,clave,nombre', 'tipo:id,clave,nombre',
                 'responsableCumplimiento:id,nombre,cargo,activo', 'responsableRevision:id,nombre,cargo,activo',
+                'etapa:id,clave,nombre,orden,activo',
             ])->orderBy('orden')->get()
         );
     }
@@ -172,6 +173,7 @@ class CatalogoRequisitosController extends Controller
         'fuente' => 'la fuente normativa', 'sector_id' => 'el sector', 'tipo_id' => 'el tipo de proyecto',
         'condicion' => 'la condición', 'nota' => 'las observaciones', 'orden' => 'el orden',
         'activo' => 'el estado activo', 'ids' => 'el orden de los requisitos', 'ids.*' => 'cada requisito',
+        'etapa_id' => 'la etapa',
     ];
 
     private const MENSAJES = [
@@ -219,6 +221,8 @@ class CatalogoRequisitosController extends Controller
             // Tope: el orden de una fila SGR no debe salir de su sección (ExpedienteService).
             'orden' => ['sometimes', 'integer', 'min:0', 'max:99999'],
             'activo' => ['sometimes', 'boolean'],
+            // Si la plantilla la exige o la rechaza, y si está activa, lo decide el servicio.
+            'etapa_id' => ['nullable', 'bail', 'integer', $entero],
         ];
 
         if ($version->plantilla->motor === PlantillaChecklist::MOTOR_SIMPLE) {

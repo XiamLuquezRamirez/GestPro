@@ -35,6 +35,7 @@ class PlantillasAdminApiTest extends TestCase
     {
         return [
             'nombre' => 'Requisitos generales de inversión pública',
+            'uso' => PlantillaChecklist::USO_VIABILIZACION,
             'descripcion' => 'Para todo proyecto de inversión',
             'alcance' => 'general',
             'todas_fuentes' => false,
