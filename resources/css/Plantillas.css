@@ -57,7 +57,7 @@
 
 .pl-formulario { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: .9rem 1.1rem; padding: 1.1rem; }
 .pl-campo { display: flex; flex-direction: column; gap: .3rem; min-width: 0; margin: 0; }
-.pl-campo > span { font-size: .78rem; font-weight: 600; color: var(--gp-texto-2); }
+.pl-campo > span, .pl-campo > label { font-size: .78rem; font-weight: 600; color: var(--gp-texto-2); }
 .pl-campo-ancho, .pl-asociacion, .pl-formulario-acciones, .pl-formulario > .pl-ayuda { grid-column: 1 / -1; }
 .pl-en-linea { display: flex; gap: .4rem; }
 .pl-en-linea input { flex: 1; }
@@ -75,6 +75,11 @@
 .pl-fila-etiquetas { display: inline-flex; flex-wrap: wrap; gap: .3rem; }
 .pl-fila-acciones { display: inline-flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
 .pl-codigo { font-family: var(--gp-fuente-datos); font-size: .74rem; color: var(--gp-azul-texto); }
+
+/* Requisitos de una plantilla de contratación, por etapa. */
+.pl-grupo { display: grid; gap: .5rem; margin-bottom: 1.1rem; }
+.pl-grupo .pl-aviso-suave { margin-bottom: 0; }
+.pl-grupo-titulo { display: flex; flex-wrap: wrap; gap: .45rem; align-items: baseline; margin: 0; font-size: 1rem; }
 
 .pl-vista { display: grid; gap: .8rem; }
 .pl-vista-grupo { padding: .9rem 1rem; }

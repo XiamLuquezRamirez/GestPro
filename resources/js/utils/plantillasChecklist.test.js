@@ -45,6 +45,14 @@ import {
     textoModalidades,
     usoDeConsulta,
     usoDePlantilla,
+    SIN_ETAPA,
+    agruparPorEtapa,
+    compararEtapas,
+    erroresDeEtapa,
+    mismaEtapa,
+    nombreEtapa,
+    ordenTrasMoverEnEtapa,
+    sinEtapa,
 } from './plantillasChecklist';
 import { RUTA_PLANTILLAS } from './navegacion';
 
@@ -614,5 +622,194 @@ describe('modalidades de la plantilla', () => {
         // La inactiva que la plantilla ya tiene sigue entre las opciones; otra inactiva, no.
         const opciones = opcionesCatalogo([...catalogo, { id: 9, nombre: 'Otra', activo: false }, contratacion.modalidades[1]], [3, 7]);
         expect(opciones.map((m) => m.id)).toEqual([3, 4, 7]);
+    });
+});
+
+describe('etapa del requisito de contratación', () => {
+    const etapa = { id: 11, clave: 'seleccion', nombre: 'Selección', orden: 3, activo: false };
+
+    it('un requisito nuevo de contratación nace sin etapa; uno de viabilización no la tiene', () => {
+        expect(requisitoVacio('simple', USO_CONTRATACION)).toMatchObject({ etapa_id: '', etapa_actual: null });
+        expect(requisitoVacio('simple')).not.toHaveProperty('etapa_id');
+        expect(requisitoVacio('sgr', USO_VIABILIZACION)).not.toHaveProperty('etapa_actual');
+    });
+
+    it('lee la etapa del requisito y conserva la actual para su opción', () => {
+        expect(formularioRequisito({ texto: 'x', etapa_id: 11, etapa }, 'simple', USO_CONTRATACION))
+            .toMatchObject({ etapa_id: '11', etapa_actual: etapa });
+        expect(formularioRequisito({ texto: 'x', etapa_id: null, etapa: null }, 'simple', USO_CONTRATACION))
+            .toMatchObject({ etapa_id: '', etapa_actual: null });
+        // Sin el objeto de la API, el id basta para no perder la opción.
+        expect(formularioRequisito({ texto: 'x', etapa_id: 4 }, 'simple', USO_CONTRATACION).etapa_actual).toEqual({ id: 4, nombre: 'Etapa 4' });
+        expect(formularioRequisito({ texto: 'x', etapa_id: 11, etapa }, 'simple')).not.toHaveProperty('etapa_id');
+    });
+
+    it('envía la etapa como número solo en contratación', () => {
+        const formulario = formularioRequisito({ texto: 'Estudios previos', etapa_id: 11, etapa }, 'simple', USO_CONTRATACION);
+        expect(datosRequisito(formulario, 'simple', false, USO_CONTRATACION).etapa_id).toBe(11);
+        expect(datosRequisito({ ...formulario, etapa_id: '' }, 'simple', false, USO_CONTRATACION).etapa_id).toBeNull();
+        expect(datosRequisito(formulario, 'simple')).not.toHaveProperty('etapa_id');
+        expect(datosRequisito(formulario, 'simple', true, USO_VIABILIZACION)).not.toHaveProperty('etapa_id');
+    });
+});
+
+describe('requisitos por etapa', () => {
+    const planeacion = { id: 10, nombre: 'Planeación', orden: 1, activo: true };
+    const seleccion = { id: 12, nombre: 'Selección', orden: 3, activo: false };
+    const r = (id, orden, etapa, extra) => ({ id, orden, activo: true, texto: `R${id}`, etapa_id: etapa?.id ?? null, etapa: etapa ?? null, ...extra });
+
+    it('agrupa en el orden del catálogo, numera las etapas y deja "Sin etapa" al final', () => {
+        const grupos = agruparPorEtapa([r(1, 1, seleccion), r(2, 2, null), r(3, 3, planeacion), r(4, 4, seleccion)]);
+        expect(grupos.map((g) => g.titulo)).toEqual(['1. Planeación', '3. Selección', 'Sin etapa']);
+        expect(grupos.map((g) => g.clave)).toEqual(['etapa-10', 'etapa-12', SIN_ETAPA]);
+        expect(grupos.map((g) => g.inactiva)).toEqual([false, true, false]);
+        expect(grupos[1].requisitos.map((x) => x.id)).toEqual([1, 4]);
+        expect(grupos[2].requisitos.map((x) => x.id)).toEqual([2]);
+    });
+
+    it('a igual orden decide el id; sin el objeto de la etapa usa el catálogo', () => {
+        const otra = { id: 9, nombre: 'Otra', orden: 3, activo: true };
+        const sinObjeto = { ...r(5, 1, otra), etapa: undefined };
+        const grupos = agruparPorEtapa([r(1, 2, seleccion), sinObjeto], [otra, seleccion]);
+        expect(grupos.map((g) => g.titulo)).toEqual(['3. Otra', '3. Selección']);
+        expect(agruparPorEtapa([{ ...sinObjeto }], null)[0].titulo).toBe('Etapa 9');
+        expect(agruparPorEtapa([], null)).toEqual([]);
+        expect(nombreEtapa({ nombre: 'Planeación', orden: 1 })).toBe('1. Planeación');
+        expect(nombreEtapa({ nombre: 'Planeación' })).toBe('Planeación');
+        expect(nombreEtapa(null)).toBe('');
+    });
+
+    it('sin "Sin etapa" si todos la tienen', () => {
+        expect(agruparPorEtapa([r(1, 1, planeacion)]).map((g) => g.clave)).toEqual(['etapa-10']);
+        expect(sinEtapa({ etapa_id: null })).toBe(true);
+        expect(sinEtapa({})).toBe(true);
+        expect(sinEtapa({ etapa_id: 3 })).toBe(false);
+    });
+
+    it('la vista previa de contratación agrupa por etapa los activos, por orden', () => {
+        const grupos = agruparVistaPrevia([
+            r(1, 5, planeacion), r(2, 1, planeacion), r(3, 2, null, { activo: false }), r(4, 3, seleccion), r(5, 4, null),
+        ], 'simple', USO_CONTRATACION);
+        expect(grupos.map((g) => g.clave)).toEqual(['etapa-10', 'etapa-12', SIN_ETAPA]);
+        expect(grupos[0].requisitos.map((x) => x.id)).toEqual([2, 1]);
+        expect(grupos[2].requisitos.map((x) => x.id)).toEqual([5]);
+        // Una plantilla simple de viabilización sigue por categoría.
+        expect(agruparVistaPrevia([r(1, 1, planeacion, { categoria: 'juridico' })], 'simple').map((g) => g.titulo)).toEqual(['Jurídico']);
+    });
+});
+
+describe('ordenTrasMoverEnEtapa', () => {
+    const a = { id: 'a', orden: 1 };
+    const b = { id: 'b', orden: 2 };
+    // Orden de la versión: a1, b1, a2, b2, sin1, a3. Se ve: a1, a2, a3 | b1, b2 | sin1.
+    const lista = [
+        { id: 1, etapa_id: 'a', etapa: a }, { id: 2, etapa_id: 'b', etapa: b }, { id: 3, etapa_id: 'a', etapa: a },
+        { id: 4, etapa_id: 'b', etapa: b }, { id: 5, etapa_id: null }, { id: 6, etapa_id: 'a', etapa: a },
+    ];
+    const ids = (l) => l.map((x) => x.id);
+
+    it('envía el orden que se ve, por etapas, con el requisito cambiado por su vecino de etapa', () => {
+        expect(ids(ordenTrasMoverEnEtapa(lista, 3, -1))).toEqual([3, 1, 6, 2, 4, 5]);
+        expect(ids(ordenTrasMoverEnEtapa(lista, 3, 1))).toEqual([1, 6, 3, 2, 4, 5]);
+        expect(ids(ordenTrasMoverEnEtapa(lista, 2, 1))).toEqual([1, 3, 6, 4, 2, 5]);
+    });
+
+    it('el orden enviado coincide con la lista agrupada tras recargar', () => {
+        const nueva = ordenTrasMoverEnEtapa(lista, 4, -1).map((r, i) => ({ ...r, orden: i + 1 }));
+        expect(agruparPorEtapa(nueva).flatMap((g) => g.requisitos)).toEqual(nueva);
+    });
+
+    it('sin vecino en su etapa hacia ese lado, o con un movimiento inválido, no hay orden nuevo', () => {
+        expect(ordenTrasMoverEnEtapa(lista, 1, -1)).toBeNull();
+        expect(ordenTrasMoverEnEtapa(lista, 6, 1)).toBeNull();
+        expect(ordenTrasMoverEnEtapa(lista, 2, -1)).toBeNull();
+        expect(ordenTrasMoverEnEtapa(lista, 5, -1)).toBeNull();
+        expect(ordenTrasMoverEnEtapa(lista, 99, 1)).toBeNull();
+        expect(ordenTrasMoverEnEtapa(lista, 3, 0)).toBeNull();
+        expect(ordenTrasMoverEnEtapa(lista, 3, 2)).toBeNull();
+    });
+
+    it('sin etapa también es un grupo, y las etapas sin objeto se ordenan con el catálogo', () => {
+        expect(mismaEtapa({ etapa_id: null }, {})).toBe(true);
+        expect(mismaEtapa({ etapa_id: 1 }, { etapa_id: 2 })).toBe(false);
+        const sinObjeto = [{ id: 1 }, { id: 2, etapa_id: 20 }, { id: 3, etapa_id: null }, { id: 4, etapa_id: 10 }];
+        expect(ids(ordenTrasMoverEnEtapa(sinObjeto, 3, -1, [{ id: 10, orden: 1 }, { id: 20, orden: 2 }]))).toEqual([4, 2, 3, 1]);
+    });
+});
+
+describe('compararEtapas', () => {
+    it('por orden y, a igual orden, por id; sin orden, al final', () => {
+        const etapas = [{ id: 7, orden: 2 }, { id: 3 }, { id: 9, orden: 1 }, { id: 5, orden: 2 }];
+        expect([...etapas].sort(compararEtapas).map((e) => e.id)).toEqual([9, 5, 7, 3]);
+    });
+});
+
+describe('errores de la etapa al guardar un requisito', () => {
+    const respuesta = (status, data) => ({ response: { status, data } });
+
+    it('de una regla de negocio toma los de errors.etapa_id y deja el resto de la lista para el aviso', () => {
+        const error = respuesta(422, {
+            mensaje: 'El requisito no es válido.',
+            errores: ['La etapa "Selección" está inactiva.', 'Ya existe un requisito con la clave "x" en esta versión.'],
+            errors: { etapa_id: ['La etapa "Selección" está inactiva.'] },
+        });
+        expect(erroresDeEtapa(error)).toEqual({
+            etapa: ['La etapa "Selección" está inactiva.'],
+            mensaje: 'El requisito no es válido.',
+            otros: ['Ya existe un requisito con la clave "x" en esta versión.'],
+        });
+    });
+
+    it('no adivina por el texto: sin errors.etapa_id, todo queda para el aviso', () => {
+        const error = respuesta(422, { mensaje: 'El requisito no es válido.', errores: ['La etapa de algo que no es el campo.'] });
+        expect(erroresDeEtapa(error)).toEqual({ etapa: [], mensaje: 'El requisito no es válido.', otros: ['La etapa de algo que no es el campo.'] });
+    });
+
+    it('solo con el error de la etapa no queda nada para el aviso', () => {
+        const mensaje = 'Elige la etapa de contratación del requisito.';
+        expect(erroresDeEtapa(respuesta(422, { mensaje: 'El requisito no es válido.', errores: [mensaje], errors: { etapa_id: [mensaje] } })))
+            .toEqual({ etapa: [mensaje], mensaje: 'El requisito no es válido.', otros: [] });
+    });
+
+    it('separa los de la etapa de la validación de Laravel', () => {
+        const error = respuesta(422, {
+            message: 'Revisa la etapa: debe ser un número entero.',
+            errors: { etapa_id: ['Revisa la etapa: debe ser un número entero.'], texto: ['Escribe el nombre del requisito.'] },
+        });
+        expect(erroresDeEtapa(error)).toEqual({
+            etapa: ['Revisa la etapa: debe ser un número entero.'],
+            mensaje: 'El requisito no es válido.',
+            otros: ['Escribe el nombre del requisito.'],
+        });
+    });
+
+    it('sin errores de la etapa, todo queda para el aviso; otro estado no se reparte', () => {
+        expect(erroresDeEtapa(respuesta(422, { mensaje: 'El requisito no pertenece a esta versión.' })))
+            .toEqual({ etapa: [], mensaje: 'El requisito no pertenece a esta versión.', otros: [] });
+        expect(erroresDeEtapa(respuesta(500, {}))).toBeNull();
+        expect(erroresDeEtapa(new Error('x'))).toBeNull();
+    });
+});
+
+describe('errores al publicar una plantilla de contratación', () => {
+    it('los requisitos sin etapa llegan como lista; la falta de modalidades, como mensaje', () => {
+        const sinEtapa = {
+            response: {
+                status: 422,
+                data: {
+                    mensaje: 'La versión tiene requisitos sin etapa de contratación y no puede publicarse.',
+                    errores: ['Estudios previos: elige su etapa de contratación.'],
+                },
+            },
+        };
+        expect(errorConLista(sinEtapa)).toEqual({
+            mensaje: 'La versión tiene requisitos sin etapa de contratación y no puede publicarse.',
+            errores: ['Estudios previos: elige su etapa de contratación.'],
+        });
+        const sinModalidades = {
+            response: { status: 422, data: { mensaje: 'Asocia la plantilla de contratación a sus modalidades, o marca "Todas las modalidades", antes de publicar.' } },
+        };
+        expect(errorConLista(sinModalidades)).toBeNull();
+        expect(mensajeApi(sinModalidades)).toBe('Asocia la plantilla de contratación a sus modalidades, o marca "Todas las modalidades", antes de publicar.');
     });
 });

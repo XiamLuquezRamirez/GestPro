@@ -4,7 +4,7 @@
 // adelantan los mismos mensajes para no esperar un 422.
 
 import { normalizar } from './navegacion';
-import { mover } from './plantillasChecklist';
+import { compararEtapas, mover, nombreEtapa } from './plantillasChecklist';
 
 /** Modalidades y etapas se administran con gestionar-catalogos: solo un Administrador. */
 export const puedeAdministrarCatalogos = (usuario) => usuario?.rol === 'Administrador';
@@ -270,6 +270,18 @@ export const opcionesConActual = (items, actual) => {
         opciones.push({ valor: String(actual.id), etiqueta: items === null || items === undefined ? nombre : `${nombre} (inactiva)` });
     }
     return opciones;
+};
+
+/**
+ * Opciones del select de etapa de un requisito de contratación: las activas en el orden del
+ * catálogo (por orden y, a igual orden, por id, como el servidor y la lista agrupada), numeradas,
+ * y la que el requisito ya tiene (`actual`) si está inactiva, marcada. Con el catálogo sin cargar
+ * (null) solo se ofrece la actual.
+ */
+export const opcionesEtapa = (etapas, actual) => {
+    const numerada = (etapa) => ({ ...etapa, nombre: nombreEtapa(etapa) });
+    const lista = etapas === null || etapas === undefined ? null : [...etapas].sort(compararEtapas).map(numerada);
+    return opcionesConActual(lista, actual ? numerada(actual) : null);
 };
 
 export const PROCESO_VACIO = {

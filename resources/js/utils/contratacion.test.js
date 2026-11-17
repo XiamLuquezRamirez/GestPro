@@ -28,6 +28,7 @@ import {
     indiceFocoAtrapado,
     numeroProceso,
     opcionesConActual,
+    opcionesEtapa,
     puedeEditarProcesos,
     textoContratos,
     textoValor,
@@ -503,5 +504,39 @@ describe('indiceFocoAtrapado', () => {
 
     it('sin controles, el foco se queda en el diálogo', () => {
         expect(indiceFocoAtrapado(-1, 0, false)).toBe(-1);
+    });
+});
+
+describe('opcionesEtapa', () => {
+    const etapas = [
+        { id: 12, nombre: 'Selección', orden: 3, activo: true },
+        { id: 10, nombre: 'Planeación', orden: 1, activo: true },
+        { id: 11, nombre: 'Precontractual', orden: 2, activo: false },
+    ];
+
+    it('ofrece las activas en el orden del catálogo, numeradas', () => {
+        expect(opcionesEtapa(etapas, null)).toEqual([
+            { valor: '10', etiqueta: '1. Planeación' },
+            { valor: '12', etiqueta: '3. Selección' },
+        ]);
+    });
+
+    it('conserva la etapa inactiva que el requisito ya tiene, marcada', () => {
+        expect(opcionesEtapa(etapas, { id: 11, nombre: 'Precontractual', orden: 2, activo: false }).at(-1))
+            .toEqual({ valor: '11', etiqueta: '2. Precontractual (inactiva)' });
+        expect(opcionesEtapa(etapas, { id: 10, nombre: 'Planeación', orden: 1 })).toHaveLength(2);
+    });
+
+    it('a igual orden decide el id, como el servidor y la lista agrupada, no el nombre', () => {
+        const empatadas = [
+            { id: 21, nombre: 'Adendas', orden: 6, activo: true },
+            { id: 20, nombre: 'Cierre', orden: 6, activo: true },
+        ];
+        expect(opcionesEtapa(empatadas, null).map((o) => o.valor)).toEqual(['20', '21']);
+    });
+
+    it('sin el catálogo cargado solo ofrece la actual, sin marca', () => {
+        expect(opcionesEtapa(null, { id: 11, nombre: 'Precontractual', orden: 2 })).toEqual([{ valor: '11', etiqueta: '2. Precontractual' }]);
+        expect(opcionesEtapa(undefined, null)).toEqual([]);
     });
 });

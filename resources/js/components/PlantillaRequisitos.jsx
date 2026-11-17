@@ -1,15 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import { faArrowDown, faArrowUp, faPen, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
 import { ORDEN_SECCIONES, SECCIONES } from '../utils/expedienteChecklist';
 import { avisarError } from '../utils/avisosPlantillas';
+import { opcionesEtapa } from '../utils/contratacion';
 import {
-    CARACTERES, CATEGORIAS, CONDICIONADO, FUENTES_NORMATIVAS, TIPOS_REQUISITO, datosRequisito, etiquetaCaracter, etiquetaCategoria, formularioRequisito,
-    mensajeApi, mover, opcionesResponsable, porRedactar, requisitoVacio,
+    CARACTERES, CATEGORIAS, CONDICIONADO, FUENTES_NORMATIVAS, SIN_ETAPA, TIPOS_REQUISITO, USO_CONTRATACION, agruparPorEtapa, datosRequisito,
+    erroresDeEtapa, etiquetaCaracter, etiquetaCategoria, formularioRequisito, htmlErrores, mensajeApi, mover, opcionesResponsable,
+    ordenTrasMoverEnEtapa, porRedactar, requisitoVacio, sinEtapa, usoDePlantilla,
 } from '../utils/plantillasChecklist';
 import useOcupado from './useOcupado';
+import '../../css/Contratacion.css';
 
 const Campo = ({ etiqueta, children, ancho }) => (
     <label className={`pl-campo${ancho ? ' pl-campo-ancho' : ''}`}>
@@ -21,11 +24,23 @@ const Campo = ({ etiqueta, children, ancho }) => (
 /**
  * Formulario de un requisito. En el motor sgr agrega sección, sector, tipo y condición.
  * `responsables` es el catálogo de Responsables (para elegir personas), o null si no se pudo cargar.
+ * En una plantilla de contratación pide la etapa: `etapas` es su catálogo (null mientras carga o si
+ * falló, con `avisoEtapas`) y `errorEtapa`, { texto, enfocar } con lo que el servidor objetó de
+ * ella y si el foco debe ir ya al campo (no mientras se muestra el aviso con los demás errores).
  */
-const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, responsables, guardando, onGuardar, onCancelar }) => {
+const FormularioRequisito = ({
+    motor, esSgr, contratacion, inicial, catalogoSgr, responsables, etapas, avisoEtapas, errorEtapa, onCambioEtapa, guardando, onGuardar, onCancelar,
+}) => {
     const [f, setF] = useState(inicial);
     const [revisionCondicion, setRevisionCondicion] = useState(null);
+    const campoEtapa = useRef(null);
     const cambiar = (campo, valor) => setF((actual) => ({ ...actual, [campo]: valor }));
+
+    // Si el servidor objeta la etapa, el foco va al campo, donde se muestra el error.
+    useEffect(() => {
+        if (errorEtapa?.enfocar) campoEtapa.current?.focus();
+    }, [errorEtapa]);
+
     const texto = (campo, props = {}) => <input value={f[campo]} onChange={(e) => cambiar(campo, e.target.value)} {...props} />;
     // Las personas salen de los responsables activos; la que el requisito ya tiene se conserva
     // aunque esté inactiva, y un cargo sin persona (dato anterior), como "Solo cargo". Sin el
@@ -68,6 +83,27 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, responsables,
             <Campo etiqueta="Descripción" ancho>
                 <textarea rows={2} value={f.descripcion} onChange={(e) => cambiar('descripcion', e.target.value)} />
             </Campo>
+
+            {/* El error y el aviso quedan fuera del <label>: se leen como descripción, no como nombre del campo. */}
+            {contratacion && (
+                <div className="pl-campo">
+                    <label htmlFor="pl-etapa">Etapa</label>
+                    <select
+                        id="pl-etapa"
+                        ref={campoEtapa}
+                        required
+                        value={f.etapa_id}
+                        aria-invalid={Boolean(errorEtapa)}
+                        aria-describedby={[errorEtapa && 'pl-etapa-error', avisoEtapas && 'pl-etapa-aviso'].filter(Boolean).join(' ') || undefined}
+                        onChange={(e) => { cambiar('etapa_id', e.target.value); onCambioEtapa(); }}
+                    >
+                        <option value="">Elige la etapa</option>
+                        {opcionesEtapa(etapas, f.etapa_actual).map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+                    </select>
+                    {errorEtapa && <small id="pl-etapa-error" className="ct-error-campo">{errorEtapa.texto}</small>}
+                    {avisoEtapas && <small id="pl-etapa-aviso" className="pl-ayuda">{avisoEtapas}</small>}
+                </div>
+            )}
 
             {motor === 'sgr' && (
                 <>
@@ -179,18 +215,61 @@ const FormularioRequisito = ({ motor, esSgr, inicial, catalogoSgr, responsables,
     );
 };
 
-/** Requisitos de la versión de trabajo: se editan en borrador; una versión publicada solo se lee. */
+/** Una fila de la lista de requisitos, con sus acciones si la versión es un borrador. */
+const FilaRequisito = ({ requisito: r, motor, editable, ocupado, primero, ultimo, onMover, onEditar, onEliminar }) => (
+    <li className={r.activo ? '' : 'inactivo'}>
+        <div className="pl-fila-texto">
+            <span className="pl-codigo">{r.codigo || r.clave}</span>
+            <span>{r.texto}</span>
+            <span className="pl-fila-etiquetas">
+                {r.categoria && <span className="pl-insignia pl-insignia-suave">{etiquetaCategoria(r.categoria)}</span>}
+                {motor === 'simple' && <span className="pl-insignia pl-insignia-suave">{etiquetaCaracter(r.caracter)}</span>}
+                {porRedactar(r) && <span className="pl-insignia pl-insignia-alerta">Por redactar</span>}
+                {!r.activo && <span className="pl-insignia pl-insignia-alerta">Inactivo</span>}
+            </span>
+        </div>
+        {editable && (
+            <div className="pl-fila-acciones">
+                <button type="button" className="gp-icono" aria-label={`Subir ${r.texto}`} disabled={ocupado || primero} onClick={() => onMover(-1)}>
+                    <FontAwesomeIcon icon={faArrowUp} />
+                </button>
+                <button type="button" className="gp-icono" aria-label={`Bajar ${r.texto}`} disabled={ocupado || ultimo} onClick={() => onMover(1)}>
+                    <FontAwesomeIcon icon={faArrowDown} />
+                </button>
+                <button type="button" className="gp-icono" aria-label={`Editar ${r.texto}`} disabled={ocupado} data-foco={`editar-${r.id}`} onClick={onEditar}>
+                    <FontAwesomeIcon icon={faPen} />
+                </button>
+                <button type="button" className="gp-icono" aria-label={`Eliminar ${r.texto}`} disabled={ocupado} onClick={onEliminar}>
+                    <FontAwesomeIcon icon={faTrash} />
+                </button>
+            </div>
+        )}
+    </li>
+);
+
+/**
+ * Requisitos de la versión de trabajo: se editan en borrador; una versión publicada solo se lee.
+ * En una plantilla de contratación cada requisito lleva su etapa y la lista se agrupa por etapa,
+ * en el orden del catálogo; las flechas mueven un requisito entre los de su etapa.
+ */
 const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
     const [editando, setEditando] = useState(null); // null, 'nuevo' o el requisito
     const [catalogoSgr, setCatalogoSgr] = useState(null);
     // Responsables, para elegir las personas del requisito. null mientras carga o si falla.
     const [responsables, setResponsables] = useState(null);
+    // Etapas de contratación, para el select del requisito. null mientras cargan o si fallan.
+    const [etapas, setEtapas] = useState(null);
+    const [avisoEtapas, setAvisoEtapas] = useState(null);
+    const [errorEtapa, setErrorEtapa] = useState(null); // { texto, enfocar } del servidor, bajo el campo
     const [ocupado, ejecutar] = useOcupado();
     const contenedor = useRef(null);
     const retorno = useRef(null); // data-foco del botón que abrió el formulario
     const editable = version?.estado === 'borrador';
     const esSgr = plantilla.es_sgr;
+    const uso = usoDePlantilla(plantilla);
+    const contratacion = uso === USO_CONTRATACION;
     const url = version ? `/catalogo-requisitos/versiones/${version.id}` : null;
+    const grupos = useMemo(() => (contratacion ? agruparPorEtapa(requisitos, etapas) : null), [contratacion, requisitos, etapas]);
 
     useEffect(() => {
         if (plantilla.motor !== 'sgr') return undefined;
@@ -200,6 +279,15 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
             .catch((e) => { if (vigente) avisarError('No se pudo cargar el catálogo SGR (sectores y tipos)', e); });
         return () => { vigente = false; };
     }, [plantilla.motor]);
+
+    useEffect(() => {
+        if (!contratacion) return undefined;
+        let vigente = true;
+        axios.get('/etapasContratacion')
+            .then(({ data }) => { if (vigente) setEtapas(Array.isArray(data) ? data : null); })
+            .catch((e) => { if (vigente) setAvisoEtapas(`No se pudo cargar la lista de etapas. ${mensajeApi(e)}`); });
+        return () => { vigente = false; };
+    }, [contratacion]);
 
     // Si falla, el formulario deja escribir los cargos a mano: no hace falta avisar.
     useEffect(() => {
@@ -219,7 +307,13 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
 
     const abrir = (requisito) => {
         retorno.current = requisito === 'nuevo' ? 'nuevo' : `editar-${requisito.id}`;
+        setErrorEtapa(null);
         setEditando(requisito);
+    };
+
+    const cerrar = () => {
+        setErrorEtapa(null);
+        setEditando(null);
     };
 
     const crearBorrador = () => ejecutar(async () => {
@@ -232,17 +326,37 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
     });
 
     const guardar = (formulario) => ejecutar(async () => {
-        const datos = datosRequisito(formulario, plantilla.motor, responsables !== null);
+        const datos = datosRequisito(formulario, plantilla.motor, responsables !== null, uso);
         try {
             if (editando === 'nuevo') {
                 await axios.post(`${url}/requisitos`, datos);
             } else {
                 await axios.put(`${url}/requisitos/${editando.id}`, datos);
             }
-            setEditando(null);
+            cerrar();
             await onCambio();
         } catch (e) {
-            avisarError('No se pudo guardar el requisito', e);
+            // Lo que el servidor objeta de la etapa va bajo su campo; el resto, en el aviso de siempre.
+            // El foco termina en la etapa: enseguida si no hay aviso o, si lo hay, al cerrarlo (el
+            // aviso no lo devuelve a "Guardar requisito").
+            const repartidos = contratacion ? erroresDeEtapa(e) : null;
+            if (!repartidos?.etapa.length) {
+                avisarError('No se pudo guardar el requisito', e);
+                return;
+            }
+            const texto = repartidos.etapa.join(' ');
+            if (!repartidos.otros.length) {
+                setErrorEtapa({ texto, enfocar: true });
+                return;
+            }
+            setErrorEtapa({ texto, enfocar: false });
+            await Swal.fire({
+                icon: 'error',
+                titleText: 'No se pudo guardar el requisito',
+                html: htmlErrores(repartidos.mensaje, repartidos.otros),
+                returnFocus: false,
+            });
+            setErrorEtapa((actual) => (actual ? { ...actual, enfocar: true } : actual));
         }
     });
 
@@ -264,9 +378,15 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
         }
     });
 
-    // Los botones quedan deshabilitados hasta que llega la recarga con el orden nuevo.
-    const moverRequisito = (indice, delta) => ejecutar(async () => {
-        const ids = mover(requisitos.map((r) => r.id), indice, delta);
+    // Los botones quedan deshabilitados hasta que llega la recarga con el orden nuevo. Se envía el
+    // orden de toda la versión; en contratación, el que se ve (por etapas), con el requisito
+    // cambiado por el vecino de su etapa, para que el orden guardado coincida con la lista.
+    const moverRequisito = (requisito, delta) => ejecutar(async () => {
+        const nueva = contratacion
+            ? ordenTrasMoverEnEtapa(requisitos, requisito.id, delta, etapas)
+            : mover(requisitos, requisitos.indexOf(requisito), delta);
+        if (!nueva) return;
+        const ids = nueva.map((r) => r.id);
         try {
             await axios.put(`${url}/requisitos-orden`, { ids });
             await onCambio();
@@ -276,6 +396,8 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
     });
 
     const porRedactarTotal = requisitos.filter((r) => r.activo && porRedactar(r)).length;
+    // Publicar exige la etapa de cada requisito activo; los inactivos sin etapa no lo impiden.
+    const sinEtapaActivos = contratacion ? requisitos.filter((r) => r.activo && sinEtapa(r)).length : 0;
 
     if (!version) {
         return (
@@ -291,15 +413,35 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
             <FormularioRequisito
                 motor={plantilla.motor}
                 esSgr={esSgr}
+                contratacion={contratacion}
                 catalogoSgr={catalogoSgr}
                 responsables={responsables}
+                etapas={etapas}
+                avisoEtapas={avisoEtapas}
+                errorEtapa={errorEtapa}
+                onCambioEtapa={() => setErrorEtapa(null)}
                 guardando={ocupado}
-                inicial={editando === 'nuevo' ? requisitoVacio(plantilla.motor) : formularioRequisito(editando, plantilla.motor)}
+                inicial={editando === 'nuevo' ? requisitoVacio(plantilla.motor, uso) : formularioRequisito(editando, plantilla.motor, uso)}
                 onGuardar={guardar}
-                onCancelar={() => setEditando(null)}
+                onCancelar={cerrar}
             />
         );
     }
+
+    const fila = (r, primero, ultimo) => (
+        <FilaRequisito
+            key={r.id}
+            requisito={r}
+            motor={plantilla.motor}
+            editable={editable}
+            ocupado={ocupado}
+            primero={primero}
+            ultimo={ultimo}
+            onMover={(delta) => moverRequisito(r, delta)}
+            onEditar={() => abrir(r)}
+            onEliminar={() => eliminar(r)}
+        />
+    );
 
     return (
         <div className="pl-requisitos" ref={contenedor}>
@@ -326,38 +468,29 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
 
             {requisitos.length === 0 && <p className="gp-vacio">Esta versión aún no tiene requisitos.</p>}
 
-            <ol className="pl-tabla">
-                {requisitos.map((r, indice) => (
-                    <li key={r.id} className={r.activo ? '' : 'inactivo'}>
-                        <div className="pl-fila-texto">
-                            <span className="pl-codigo">{r.codigo || r.clave}</span>
-                            <span>{r.texto}</span>
-                            <span className="pl-fila-etiquetas">
-                                {r.categoria && <span className="pl-insignia pl-insignia-suave">{etiquetaCategoria(r.categoria)}</span>}
-                                {plantilla.motor === 'simple' && <span className="pl-insignia pl-insignia-suave">{etiquetaCaracter(r.caracter)}</span>}
-                                {porRedactar(r) && <span className="pl-insignia pl-insignia-alerta">Por redactar</span>}
-                                {!r.activo && <span className="pl-insignia pl-insignia-alerta">Inactivo</span>}
-                            </span>
-                        </div>
-                        {editable && (
-                            <div className="pl-fila-acciones">
-                                <button type="button" className="gp-icono" aria-label={`Subir ${r.texto}`} disabled={ocupado || indice === 0} onClick={() => moverRequisito(indice, -1)}>
-                                    <FontAwesomeIcon icon={faArrowUp} />
-                                </button>
-                                <button type="button" className="gp-icono" aria-label={`Bajar ${r.texto}`} disabled={ocupado || indice === requisitos.length - 1} onClick={() => moverRequisito(indice, 1)}>
-                                    <FontAwesomeIcon icon={faArrowDown} />
-                                </button>
-                                <button type="button" className="gp-icono" aria-label={`Editar ${r.texto}`} disabled={ocupado} data-foco={`editar-${r.id}`} onClick={() => abrir(r)}>
-                                    <FontAwesomeIcon icon={faPen} />
-                                </button>
-                                <button type="button" className="gp-icono" aria-label={`Eliminar ${r.texto}`} disabled={ocupado} onClick={() => eliminar(r)}>
-                                    <FontAwesomeIcon icon={faTrash} />
-                                </button>
-                            </div>
-                        )}
-                    </li>
-                ))}
-            </ol>
+            {grupos ? grupos.map((g) => (
+                <section key={g.clave} className="pl-grupo" aria-labelledby={`pl-grupo-${g.clave}`}>
+                    <h2 id={`pl-grupo-${g.clave}`} className="pl-grupo-titulo">
+                        {g.titulo}
+                        {g.inactiva && <span className="pl-insignia pl-insignia-alerta">Etapa inactiva</span>}
+                        <span className="pl-ayuda">· {g.requisitos.length}</span>
+                    </h2>
+                    {g.clave === SIN_ETAPA && sinEtapaActivos > 0 && (
+                        <p className="pl-aviso-suave" role="status">
+                            {sinEtapaActivos === 1
+                                ? '1 requisito activo no tiene etapa: edítalo y elige su etapa antes de publicar.'
+                                : `${sinEtapaActivos} requisitos activos no tienen etapa: edítalos y elige la etapa de cada uno antes de publicar.`}
+                        </p>
+                    )}
+                    <ol className="pl-tabla">
+                        {g.requisitos.map((r, j) => fila(r, j === 0, j === g.requisitos.length - 1))}
+                    </ol>
+                </section>
+            )) : (
+                <ol className="pl-tabla">
+                    {requisitos.map((r, indice) => fila(r, indice === 0, indice === requisitos.length - 1))}
+                </ol>
+            )}
         </div>
     );
 };
