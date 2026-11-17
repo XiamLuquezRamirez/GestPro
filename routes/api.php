@@ -123,4 +123,7 @@ Route::middleware('auth:api')->group(function () {
 
     // Expedientes de viabilización SGR (heredan auth:api de este grupo).
     require __DIR__ . '/viabilizacion.php';
+
+    // Procesos de contratación (heredan auth:api de este grupo).
+    require __DIR__ . '/contratacion.php';
 });

@@ -32,7 +32,13 @@ class ProcesoLicitacion extends Model
         'estado', 'entidad_contratante', 'tipo_proponente', 'entidad_proponente', 'monto', 'usuario_creo_id',
     ];
     protected $attributes = ['estado' => self::PREPARACION];
-    protected $casts = ['monto' => 'decimal:2', 'usuario_creo_id' => 'integer'];
+    protected $casts = [
+        'proyecto' => 'integer',
+        'modalidad' => 'integer',
+        'entidad_contratante' => 'integer',
+        'monto' => 'decimal:2',
+        'usuario_creo_id' => 'integer',
+    ];
 
     // proyectoRel()/modalidadRel(): both FK columns (proyecto, modalidad) are single words that
     // would collide with the natural relation name (see Task 4's note on Estado::faseRel()).

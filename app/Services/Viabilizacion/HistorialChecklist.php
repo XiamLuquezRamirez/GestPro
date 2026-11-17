@@ -3,6 +3,7 @@
 namespace App\Services\Viabilizacion;
 
 use App\Models\ChecklistHistorial;
+use App\Models\ProcesoLicitacion;
 use App\Models\ProyectoExpediente;
 use App\Models\ProyectoRequisito;
 use App\Models\User;
@@ -17,6 +18,7 @@ final class HistorialChecklist
 {
     public const REQUISITO = 'requisito';
     public const EXPEDIENTE = 'expediente';
+    public const PROCESO = 'proceso';
 
     /** Entradas por página del historial del expediente. */
     public const POR_PAGINA = 50;
@@ -29,6 +31,12 @@ final class HistorialChecklist
     public function registrarExpediente(ProyectoExpediente $expediente, string $evento, array $antes, array $despues, ?User $usuario): void
     {
         $this->registrar(self::EXPEDIENTE, $expediente->id, $expediente->id, $evento, $antes, $despues, $usuario);
+    }
+
+    /** Un proceso de contratación no pertenece a un expediente: su entrada va sin expediente_id. */
+    public function registrarProceso(ProcesoLicitacion $proceso, string $evento, array $antes, array $despues, ?User $usuario): void
+    {
+        $this->registrar(self::PROCESO, $proceso->id, null, $evento, $antes, $despues, $usuario);
     }
 
     /** Historial de una fila, del más reciente al más antiguo. */
