@@ -19,3 +19,60 @@
 .ct-etapa-texto { display: grid; gap: .15rem; min-width: 0; }
 .ct-etapa-texto strong { font-size: .92rem; color: var(--gp-texto); }
 .ct-etapa-texto small { font-size: .82rem; color: var(--gp-texto-2); overflow-wrap: anywhere; }
+
+/* ---------- Procesos de contratación de un proyecto ---------- */
+
+/* Botón "Procesos" de la fila de Parámetros → Proyectos: azul, junto a Contrato (ámbar) y Expediente (verde). */
+.btn-add-contrato-list.btn-procesos { --accion: var(--gp-azul-texto); }
+
+.ct-oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Por debajo de SweetAlert (2100), que confirma y avisa encima del diálogo. */
+.ct-dialogo-fondo {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(4, 9, 7, .72);
+    backdrop-filter: blur(3px);
+}
+.ct-dialogo {
+    display: flex;
+    flex-direction: column;
+    width: min(60rem, 100%);
+    max-height: 90dvh;
+    background: var(--gp-fondo-2);
+    border: 1px solid var(--gp-linea-fuerte);
+    border-radius: var(--gp-radio-grande);
+    box-shadow: var(--gp-sombra);
+}
+.ct-dialogo:focus { outline: none; }
+.ct-dialogo-cabecera { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem 1.2rem .7rem; border-bottom: 1px solid var(--gp-linea); }
+.ct-dialogo-cabecera h2 { margin: .1rem 0 0; font-size: 1.25rem; overflow-wrap: anywhere; }
+.ct-dialogo-cuerpo { overflow-y: auto; padding: 1rem 1.2rem 1.2rem; }
+
+.ct-proceso { display: grid; gap: .7rem; padding: .95rem 1.05rem; }
+.ct-proceso-cabecera { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: flex-start; justify-content: space-between; }
+.ct-proceso-objeto { flex: 1 1 20rem; min-width: 0; margin: 0; font-weight: 650; color: var(--gp-texto); white-space: pre-line; overflow-wrap: anywhere; }
+.ct-proceso .pl-datos { margin: 0; }
+.ct-valor { font-family: var(--gp-fuente-datos); }
+.ct-enlace { display: inline-flex; gap: .3rem; align-items: baseline; color: var(--gp-azul-texto); overflow-wrap: anywhere; }
+.ct-enlace svg { font-size: .7em; }
+.ct-cambio-estado { padding: .8rem 0 0; border-top: 1px solid var(--gp-linea); }
+
+.ct-estado { flex-shrink: 0; padding: .12rem .6rem; font-size: .74rem; font-weight: 650; white-space: nowrap; border-radius: 999px; }
+.ct-estado-neutro { color: var(--gp-texto-2); background: var(--gp-superficie-3); }
+.ct-estado-azul { color: var(--gp-azul-texto); background: var(--gp-azul-suave); }
+.ct-estado-ambar { color: var(--gp-ambar); background: var(--gp-ambar-suave); }
+.ct-estado-verde { color: var(--gp-verde-texto); background: var(--gp-verde-suave); }
+.ct-estado-verde-pleno { color: var(--gp-sobre-acento); background: var(--gp-verde-texto); }
+.ct-estado-coral { color: var(--gp-coral); background: var(--gp-coral-suave); }
+
+@media (max-width: 720px) {
+    .ct-dialogo-fondo { align-items: flex-end; padding: 0; }
+    .ct-dialogo { width: 100%; max-height: 92dvh; border-radius: 14px 14px 0 0; }
+    .ct-dialogo-cuerpo { padding: .9rem 1rem 1.1rem; }
+}

@@ -1,6 +1,12 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
+    CAMPOS_PROCESO,
     CATALOGO_VACIO,
+    ESTADOS_CIERRE,
+    ESTADOS_PROCESO,
+    PLATAFORMAS,
+    PROCESO_VACIO,
     REGLAS_ETAPA,
     REGLAS_MODALIDAD,
     datosCatalogo,
@@ -11,6 +17,25 @@ import {
     puedeAdministrarCatalogos,
     textoEstadoCatalogo,
     validarCatalogo,
+    avisoCambioEstado,
+    datosEstado,
+    datosProceso,
+    esEdicionDesactualizada,
+    esEnlaceWeb,
+    etiquetaEstadoProceso,
+    etiquetaPlataforma,
+    formularioProceso,
+    indiceFocoAtrapado,
+    numeroProceso,
+    opcionesConActual,
+    puedeEditarProcesos,
+    textoContratos,
+    textoValor,
+    tonoEstado,
+    validarProceso,
+    valorDesdeApi,
+    valorEnEdicion,
+    valorParaApi,
 } from './contratacion';
 
 const modalidades = [
@@ -129,5 +154,354 @@ describe('textoEstadoCatalogo', () => {
     it('modalidades y etapas son femeninas', () => {
         expect(textoEstadoCatalogo(true)).toBe('Activa');
         expect(textoEstadoCatalogo(false)).toBe('Inactiva');
+    });
+});
+
+// ---------- Procesos de contratación ----------
+
+/** El texto con espacios normales: Intl separa el signo de pesos con un espacio duro. */
+const plano = (texto) => texto.replace(/\s/g, ' ');
+
+describe('constantes contra PHP', () => {
+    // Ruta relativa a este archivo, no al directorio desde donde se lance Vitest.
+    const modelo = readFileSync(new URL('../../../app/Models/ProcesoLicitacion.php', import.meta.url), 'utf8');
+    const valor = (nombre) => modelo.match(new RegExp(`const ${nombre} = '([a-z_]+)'`))[1];
+    const lista = (nombre) => modelo.match(new RegExp(`const ${nombre} = \\[([^\\]]*)\\]`))[1]
+        .split(',').map((x) => x.trim()).filter(Boolean).map((x) => valor(x.replace('self::', '')));
+
+    it('las plataformas y los estados coinciden con ProcesoLicitacion', () => {
+        expect(PLATAFORMAS.map(([v]) => v)).toEqual(lista('PLATAFORMAS'));
+        expect(ESTADOS_PROCESO.map(([v]) => v)).toEqual(lista('ESTADOS'));
+        expect(ESTADOS_CIERRE.every((e) => lista('ESTADOS').includes(e))).toBe(true);
+    });
+});
+
+describe('puedeEditarProcesos', () => {
+    it('Administrador o Gestor, como editar-datos', () => {
+        expect(puedeEditarProcesos({ rol: 'Administrador' })).toBe(true);
+        expect(puedeEditarProcesos({ rol: 'Gestor' })).toBe(true);
+        expect(puedeEditarProcesos({ rol: 'Consulta' })).toBe(false);
+        expect(puedeEditarProcesos(undefined)).toBe(false);
+    });
+});
+
+describe('etiquetas de plataforma y estado', () => {
+    it('dan el nombre legible', () => {
+        expect(etiquetaPlataforma('secop_ii')).toBe('SECOP II');
+        expect(etiquetaPlataforma('secop_i')).toBe('SECOP I');
+        expect(etiquetaPlataforma('tvec')).toBe('Tienda Virtual');
+        expect(etiquetaPlataforma('ninguna')).toBe('Sin plataforma');
+        expect(etiquetaEstadoProceso('preparacion')).toBe('En preparación');
+        expect(etiquetaEstadoProceso('evaluacion')).toBe('En evaluación');
+    });
+
+    it('un valor desconocido o vacío no rompe la pantalla', () => {
+        expect(etiquetaPlataforma(null)).toBe('—');
+        expect(etiquetaEstadoProceso('otro')).toBe('otro');
+        expect(etiquetaEstadoProceso(null)).toBe('—');
+    });
+
+    it('cada estado tiene un tono para su insignia', () => {
+        expect(ESTADOS_PROCESO.map(([v]) => tonoEstado(v))).toEqual(['neutro', 'azul', 'ambar', 'verde', 'coral', 'verde-pleno', 'coral']);
+        expect(tonoEstado('otro')).toBe('neutro');
+    });
+});
+
+describe('avisoCambioEstado', () => {
+    it('el avance por el flujo no avisa', () => {
+        [
+            ['preparacion', 'publicado'], ['publicado', 'evaluacion'], ['evaluacion', 'adjudicado'],
+            ['evaluacion', 'desierto'], ['adjudicado', 'celebrado'], ['adjudicado', 'desierto'],
+            ['preparacion', 'celebrado'],
+        ].forEach(([de, a]) => expect(avisoCambioEstado(de, a)).toBeNull());
+    });
+
+    it('cancelar desde un estado abierto no avisa', () => {
+        ['preparacion', 'publicado', 'evaluacion', 'adjudicado'].forEach((de) => expect(avisoCambioEstado(de, 'cancelado')).toBeNull());
+    });
+
+    it('volver atrás en el flujo avisa', () => {
+        expect(avisoCambioEstado('evaluacion', 'publicado')).toEqual({
+            titulo: 'El proceso vuelve atrás',
+            texto: '"Publicado" es un paso anterior a "En evaluación" en el flujo del proceso. ¿Seguro que quieres cambiarlo? El cambio queda en el historial.',
+        });
+        expect(avisoCambioEstado('adjudicado', 'preparacion')?.titulo).toBe('El proceso vuelve atrás');
+        expect(avisoCambioEstado('publicado', 'preparacion')?.titulo).toBe('El proceso vuelve atrás');
+    });
+
+    it('salir de un estado de cierre avisa, también hacia otro cierre o hacia adelante', () => {
+        expect(avisoCambioEstado('celebrado', 'evaluacion')).toEqual({
+            titulo: 'El proceso ya está cerrado',
+            texto: '"Celebrado" es un estado de cierre. ¿Seguro que quieres pasar el proceso a "En evaluación"? El cambio queda en el historial.',
+        });
+        expect(avisoCambioEstado('desierto', 'celebrado')?.titulo).toBe('El proceso ya está cerrado');
+        expect(avisoCambioEstado('cancelado', 'preparacion')?.titulo).toBe('El proceso ya está cerrado');
+        expect(avisoCambioEstado('desierto', 'cancelado')?.titulo).toBe('El proceso ya está cerrado');
+    });
+
+    it('sin cambio o sin datos no hay aviso', () => {
+        expect(avisoCambioEstado('celebrado', 'celebrado')).toBeNull();
+        expect(avisoCambioEstado(null, 'publicado')).toBeNull();
+        expect(avisoCambioEstado('publicado', '')).toBeNull();
+    });
+});
+
+describe('valor en pesos', () => {
+    it('agrupa los miles mientras se escribe y deja hasta 2 decimales', () => {
+        expect(valorEnEdicion('1234567')).toBe('1.234.567');
+        expect(valorEnEdicion('1234567,891')).toBe('1.234.567,89');
+        expect(valorEnEdicion('$ 1.234.5678')).toBe('12.345.678');
+        expect(valorEnEdicion('0012')).toBe('12');
+        expect(valorEnEdicion(',5')).toBe('0,5');
+        expect(valorEnEdicion('12,')).toBe('12,');
+        expect(valorEnEdicion('1,2,3')).toBe('1,23');
+        expect(valorEnEdicion('abc')).toBe('');
+        expect(valorEnEdicion('')).toBe('');
+    });
+
+    it('sin coma, un punto con 1 o 2 cifras al final es el decimal; con 3, de miles', () => {
+        expect(valorEnEdicion('1234567.89')).toBe('1.234.567,89');
+        expect(valorEnEdicion('150.5')).toBe('150,5');
+        expect(valorEnEdicion('$ 1,234.5')).toBe('1,23');
+        expect(valorEnEdicion('1.500')).toBe('1.500');
+        expect(valorEnEdicion('1.234.567.89')).toBe('1.234.567,89');
+        expect(valorEnEdicion('150.')).toBe('150');
+    });
+
+    it('al borrar de un valor agrupado el punto sigue siendo de miles', () => {
+        expect(valorEnEdicion('1.23', '1.234')).toBe('123');
+        expect(valorEnEdicion('12.34', '12.345')).toBe('1.234');
+        expect(valorEnEdicion('1.234.56', '1.234.567')).toBe('123.456');
+        expect(valorEnEdicion('1.34', '1.234')).toBe('134');
+        // Pegar sobre lo que había no es borrar.
+        expect(valorEnEdicion('150.5', '1.234.567')).toBe('150,5');
+        expect(valorEnEdicion('150.5', '')).toBe('150,5');
+    });
+
+    it('lo envía a la API sin separadores de miles y con punto decimal', () => {
+        expect(valorParaApi('1.234.567,5')).toBe('1234567.5');
+        expect(valorParaApi('1.234.567')).toBe('1234567');
+        expect(valorParaApi('0,5')).toBe('0.5');
+        expect(valorParaApi('12,')).toBe('12');
+        expect(valorParaApi('0')).toBe('0');
+        expect(valorParaApi('')).toBeNull();
+        expect(valorParaApi(',')).toBeNull();
+        expect(valorParaApi(null)).toBeNull();
+    });
+
+    it('a la API, con la misma regla del punto decimal', () => {
+        expect(valorParaApi('1234567.89')).toBe('1234567.89');
+        expect(valorParaApi('150.5')).toBe('150.5');
+        expect(valorParaApi('1.500')).toBe('1500');
+    });
+
+    it('lo trae de la API al formulario sin centavos en cero', () => {
+        expect(valorDesdeApi('1234567.50')).toBe('1.234.567,50');
+        expect(valorDesdeApi('1000.00')).toBe('1.000');
+        expect(valorDesdeApi('0.00')).toBe('0');
+        expect(valorDesdeApi(null)).toBe('');
+        expect(valorParaApi(valorDesdeApi('9999999999999.99'))).toBe('9999999999999.99');
+    });
+
+    it('lo muestra en pesos colombianos', () => {
+        expect(plano(textoValor('1234567.00'))).toBe('$ 1.234.567');
+        expect(plano(textoValor('1234567.50'))).toBe('$ 1.234.567,50');
+        expect(plano(textoValor(0))).toBe('$ 0');
+        expect(textoValor(null)).toBe('—');
+        expect(textoValor('')).toBe('—');
+        expect(textoValor('abc')).toBe('—');
+    });
+});
+
+describe('textoContratos', () => {
+    it('cuenta los contratos vinculados', () => {
+        expect(textoContratos(0)).toBe('Sin contratos');
+        expect(textoContratos(undefined)).toBe('Sin contratos');
+        expect(textoContratos(1)).toBe('1 contrato');
+        expect(textoContratos(3)).toBe('3 contratos');
+    });
+});
+
+describe('enlace y número del proceso', () => {
+    it('solo un enlace http o https completo es enlace', () => {
+        expect(esEnlaceWeb('https://community.secop.gov.co/Public/Tendering/OpportunityDetail/Index?noticeUID=CO1.NTC.1')).toBe(true);
+        expect(esEnlaceWeb(' http://ejemplo.gov.co ')).toBe(true);
+        expect(esEnlaceWeb('javascript:alert(1)')).toBe(false);
+        expect(esEnlaceWeb('ftp://ejemplo.gov.co')).toBe(false);
+        expect(esEnlaceWeb('www.secop.gov.co')).toBe(false);
+        expect(esEnlaceWeb('https://')).toBe(false);
+        expect(esEnlaceWeb(null)).toBe(false);
+    });
+
+    it('el número enlaza al proceso si tiene enlace', () => {
+        expect(numeroProceso({ codigo_proceso: 'LP-001-2026', url_proceso: 'https://secop.gov.co/x' })).toEqual({ texto: 'LP-001-2026', enlace: 'https://secop.gov.co/x' });
+        expect(numeroProceso({ codigo_proceso: null, url_proceso: 'https://secop.gov.co/x' })).toEqual({ texto: 'Ver proceso', enlace: 'https://secop.gov.co/x' });
+        expect(numeroProceso({ codigo_proceso: 'LP-001-2026', url_proceso: null })).toEqual({ texto: 'LP-001-2026', enlace: null });
+        expect(numeroProceso({ codigo_proceso: '', url_proceso: 'javascript:alert(1)' })).toEqual({ texto: '—', enlace: null });
+    });
+});
+
+describe('opcionesConActual', () => {
+    const entidades = [
+        { id: 1, nombre: 'Alcaldía', activo: 1 },
+        { id: 2, nombre: 'Gobernación', activo: 0 },
+        { id: 3, nombre: 'Ministerio', activo: true },
+    ];
+
+    it('ofrece las activas, aunque `activo` venga como 1/0', () => {
+        expect(opcionesConActual(entidades, null)).toEqual([
+            { valor: '1', etiqueta: 'Alcaldía' },
+            { valor: '3', etiqueta: 'Ministerio' },
+        ]);
+    });
+
+    it('conserva la actual inactiva, marcada', () => {
+        expect(opcionesConActual(entidades, { id: 2, nombre: 'Gobernación' }).at(-1)).toEqual({ valor: '2', etiqueta: 'Gobernación (inactiva)' });
+    });
+
+    it('conserva la actual que el catálogo ya no trae, marcada', () => {
+        expect(opcionesConActual(entidades, { id: 7, nombre: 'Ministerio de Minas' }).at(-1)).toEqual({ valor: '7', etiqueta: 'Ministerio de Minas (inactiva)' });
+    });
+
+    it('sin el catálogo cargado conserva la actual sin marcarla: no se sabe si está inactiva', () => {
+        expect(opcionesConActual(null, { id: 7, nombre: 'Gobernación' })).toEqual([{ valor: '7', etiqueta: 'Gobernación' }]);
+        expect(opcionesConActual(undefined, { id: 7, nombre: 'Gobernación' })).toEqual([{ valor: '7', etiqueta: 'Gobernación' }]);
+        expect(opcionesConActual(null, null)).toEqual([]);
+    });
+
+    it('la actual activa no se repite', () => {
+        expect(opcionesConActual(entidades, { id: 1, nombre: 'Alcaldía' })).toHaveLength(2);
+    });
+});
+
+describe('formularioProceso', () => {
+    const proceso = {
+        id: 5,
+        objeto: 'Construcción de la sede',
+        modalidad: { id: 1, nombre: 'Licitación pública', activo: true },
+        plataforma: 'secop_ii',
+        codigo_proceso: 'LP-001',
+        url_proceso: null,
+        entidad_contratante: { id: 3, nombre: 'Alcaldía' },
+        monto: '1500000.00',
+        estado: 'publicado',
+    };
+
+    it('nuevo: vacío', () => {
+        expect(formularioProceso(null)).toEqual(PROCESO_VACIO);
+        expect(CAMPOS_PROCESO).toEqual(['objeto', 'modalidad_id', 'plataforma', 'codigo_proceso', 'url_proceso', 'entidad_contratante_id', 'monto']);
+    });
+
+    it('editar: con los ids como texto para los selects y el valor formateado', () => {
+        expect(formularioProceso(proceso)).toEqual({
+            objeto: 'Construcción de la sede',
+            modalidad_id: '1',
+            plataforma: 'secop_ii',
+            codigo_proceso: 'LP-001',
+            url_proceso: '',
+            entidad_contratante_id: '3',
+            monto: '1.500.000',
+        });
+    });
+
+    it('un proceso anterior sin plataforma, entidad ni valor la elige al editar', () => {
+        expect(formularioProceso({ ...proceso, plataforma: null, entidad_contratante: null, monto: null })).toMatchObject({
+            plataforma: '', entidad_contratante_id: '', monto: '',
+        });
+    });
+});
+
+describe('validarProceso', () => {
+    const valido = {
+        ...PROCESO_VACIO, objeto: 'Interventoría', modalidad_id: '4', plataforma: 'secop_ii',
+    };
+
+    it('acepta lo mínimo: objeto, modalidad y plataforma', () => {
+        expect(validarProceso(valido)).toEqual({});
+    });
+
+    it('exige objeto, modalidad y plataforma con los mensajes del servidor', () => {
+        expect(validarProceso({ ...PROCESO_VACIO, objeto: '  ' })).toEqual({
+            objeto: 'Escribe el objeto del proceso.',
+            modalidad_id: 'Elige la modalidad del proceso.',
+            plataforma: 'Elige la plataforma del proceso.',
+        });
+        expect(validarProceso({ ...valido, plataforma: 'otra' })).toEqual({ plataforma: 'Elige una plataforma de la lista.' });
+    });
+
+    it('revisa el enlace y los largos', () => {
+        expect(validarProceso({ ...valido, url_proceso: 'secop.gov.co/x' })).toEqual({ url_proceso: 'Escribe un enlace completo que empiece por http:// o https://.' });
+        expect(validarProceso({ ...valido, url_proceso: `https://secop.gov.co/${'x'.repeat(480)}` })).toEqual({ url_proceso: 'El enlace admite hasta 500 caracteres.' });
+        expect(validarProceso({ ...valido, codigo_proceso: 'x'.repeat(101) })).toEqual({ codigo_proceso: 'El número del proceso admite hasta 100 caracteres.' });
+        expect(validarProceso({ ...valido, objeto: 'x'.repeat(5001) })).toEqual({ objeto: 'El objeto admite hasta 5000 caracteres.' });
+    });
+
+    it('el valor admite hasta 13 cifras enteras', () => {
+        expect(validarProceso({ ...valido, monto: '9.999.999.999.999,99' })).toEqual({});
+        expect(validarProceso({ ...valido, monto: '10.000.000.000.000' })).toEqual({ monto: 'El valor admite hasta 13 cifras enteras y 2 decimales.' });
+    });
+});
+
+describe('datosProceso', () => {
+    it('envía todos los campos; los opcionales vacíos como null', () => {
+        expect(datosProceso({
+            objeto: '  Obra ', modalidad_id: '2', plataforma: 'ninguna', codigo_proceso: ' ', url_proceso: '', entidad_contratante_id: '', monto: '',
+        })).toEqual({
+            objeto: 'Obra', modalidad_id: 2, plataforma: 'ninguna', codigo_proceso: null, url_proceso: null, entidad_contratante_id: null, monto: null,
+        });
+    });
+
+    it('los ids como números y el valor como texto decimal', () => {
+        expect(datosProceso({
+            objeto: 'Obra', modalidad_id: '2', plataforma: 'secop_i', codigo_proceso: 'SA-3', url_proceso: ' https://secop.gov.co/3 ', entidad_contratante_id: '9', monto: '1.234,5',
+        })).toEqual({
+            objeto: 'Obra', modalidad_id: 2, plataforma: 'secop_i', codigo_proceso: 'SA-3', url_proceso: 'https://secop.gov.co/3', entidad_contratante_id: 9, monto: '1234.5',
+        });
+    });
+
+    it('al editar envía el `actualizado` del proceso que se abrió; al crear, no', () => {
+        const formulario = { ...PROCESO_VACIO, objeto: 'Obra', modalidad_id: '2', plataforma: 'ninguna' };
+        expect(datosProceso(formulario, { id: 4, actualizado: '2026-11-17T10:00:00-05:00' })).toMatchObject({ actualizado: '2026-11-17T10:00:00-05:00' });
+        expect(datosProceso(formulario, { id: 4, actualizado: null })).toMatchObject({ actualizado: null });
+        expect(datosProceso(formulario)).not.toHaveProperty('actualizado');
+    });
+});
+
+describe('datosEstado', () => {
+    it('envía el estado, la observación sin espacios o null, y el `actualizado` del proceso', () => {
+        expect(datosEstado({ id: 4, actualizado: '2026-11-17T10:00:00-05:00' }, 'publicado', '  En SECOP II ')).toEqual({
+            estado: 'publicado', observacion: 'En SECOP II', actualizado: '2026-11-17T10:00:00-05:00',
+        });
+        expect(datosEstado({ id: 4, actualizado: null }, 'cancelado', '   ')).toEqual({ estado: 'cancelado', observacion: null, actualizado: null });
+    });
+});
+
+describe('esEdicionDesactualizada', () => {
+    it('solo el 409 del servidor', () => {
+        expect(esEdicionDesactualizada({ response: { status: 409, data: { mensaje: 'Otra persona cambió este proceso…' } } })).toBe(true);
+        expect(esEdicionDesactualizada({ response: { status: 422, data: {} } })).toBe(false);
+        expect(esEdicionDesactualizada(new Error('sin red'))).toBe(false);
+        expect(esEdicionDesactualizada(null)).toBe(false);
+    });
+});
+
+describe('indiceFocoAtrapado', () => {
+    it('Tab en el último vuelve al primero; Mayús+Tab en el primero va al último', () => {
+        expect(indiceFocoAtrapado(4, 5, false)).toBe(0);
+        expect(indiceFocoAtrapado(0, 5, true)).toBe(4);
+    });
+
+    it('en medio el navegador sigue solo', () => {
+        expect(indiceFocoAtrapado(2, 5, false)).toBeNull();
+        expect(indiceFocoAtrapado(2, 5, true)).toBeNull();
+    });
+
+    it('desde el propio diálogo entra por el primero o el último', () => {
+        expect(indiceFocoAtrapado(-1, 5, false)).toBe(0);
+        expect(indiceFocoAtrapado(-1, 5, true)).toBe(4);
+    });
+
+    it('sin controles, el foco se queda en el diálogo', () => {
+        expect(indiceFocoAtrapado(-1, 0, false)).toBe(-1);
     });
 });

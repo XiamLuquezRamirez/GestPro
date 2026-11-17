@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import axios from '../axios';
-import { faPlus, faTrash, faSave, faTimes, faCalculator, faFile, faInfo, faEdit, faClipboardCheck, faEye } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faTrash, faSave, faTimes, faCalculator, faFile, faInfo, faEdit, faClipboardCheck, faEye, faGavel } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
 import EmojiPicker from 'emoji-picker-react';
@@ -13,6 +13,7 @@ import { seccionDesdeSlug } from '../utils/navegacion';
 import { alternarFuente, datosFinanciacionDe, financiacionCompleta, fuentesDisponibles, mensajeDeError } from '../utils/fuentesProyecto';
 import CatalogoModalidades from './CatalogoModalidades';
 import CatalogoEtapasContratacion from './CatalogoEtapasContratacion';
+import ProcesosProyecto from './ProcesosProyecto';
 
 // Componente auxiliar: escucha clics en el mapa y reporta la coordenada al padre.
 // Debe vivir dentro de <MapContainer> — el hook useMapEvents solo funciona ahí.
@@ -39,7 +40,7 @@ const CabeceraSeccion = ({ seccion }) => (
     </header>
 );
 
-const Parametros = () => {
+const Parametros = ({ user }) => {
     const navigate = useNavigate();
     // La sección vive en la URL: se puede enlazar, recargar y volver con el navegador.
     const { seccion: slugSeccion } = useParams();
@@ -50,6 +51,8 @@ const Parametros = () => {
     const [modalType, setModalType] = useState('');
     // Estados para el modal de contratos
     const [showContratosModal, setShowContratosModal] = useState(false);
+    // Proyecto cuyos procesos de contratación se ven en el diálogo, o null.
+    const [proyectoProcesos, setProyectoProcesos] = useState(null);
     const [proyectoContratos, setProyectoContratos] = useState(null);
     const [showContratoForm, setShowContratoForm] = useState(false);
     const [editingContrato, setEditingContrato] = useState(null);
@@ -1806,6 +1809,16 @@ const Parametros = () => {
                                                 </button>
                                             )}
 
+                                            {type === 'proyectos' && (
+                                                <button
+                                                    onClick={() => setProyectoProcesos(item)}
+                                                    className="btn-add-contrato-list btn-procesos"
+                                                    title="Procesos de contratación"
+                                                >
+                                                    <FontAwesomeIcon icon={faGavel} /> Procesos
+                                                </button>
+                                            )}
+
                                             <button
                                                 onClick={() => handleEdit(item, type)}
                                                 className="btn-edit"
@@ -3278,6 +3291,15 @@ const Parametros = () => {
                 </div>
             )}
 
+            {proyectoProcesos && (
+                <ProcesosProyecto
+                    key={proyectoProcesos.id}
+                    proyecto={proyectoProcesos}
+                    user={user}
+                    onCerrar={() => setProyectoProcesos(null)}
+                />
+            )}
+
             {/* Modal para seleccionar emoji (global) */}
             {showEmojiModal && (
                 <div className="emoji-fondo" onClick={closeEmojiModal}>
@@ -3312,7 +3334,7 @@ const ParametrosPorSeccion = ({ user }) => {
     const seccion = seccionDesdeSlug(useParams().seccion);
     if (!seccion) return <Navigate to="/parametros/proyectos" replace />;
     const Propia = seccion?.propia ? SECCIONES_PROPIAS[seccion.tab] : null;
-    if (!Propia) return <Parametros />;
+    if (!Propia) return <Parametros user={user} />;
 
     return (
         <div className="parametros-container">
