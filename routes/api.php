@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FuenteFinanciacionController;
+use App\Http\Controllers\ModalidadController;
 use App\Http\Controllers\ProyectoController;
 use App\Http\Controllers\SectorController;
 use App\Http\Controllers\AuthController;
@@ -50,7 +51,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/sectores', [ProyectoController::class, 'sectores']);
     Route::get('/fuentesFinanciacion', [FuenteFinanciacionController::class, 'index']);
     Route::get('/tiposProcesos', [ProyectoController::class, 'tiposProcesos']);
-    Route::get('/modalidades', [ProyectoController::class, 'modalidades']);
+    Route::get('/modalidades', [ModalidadController::class, 'index']);
 
     // Escritura de datos de negocio: Administrador o Gestor
     Route::middleware('can:editar-datos')->group(function () {
@@ -103,9 +104,8 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/guardarTipoProceso', [ProyectoController::class, 'guardarTipoProceso']);
         Route::post('/eliminarTipoProceso', [ProyectoController::class, 'eliminarTipoProceso']);
         Route::post('/activarTipoProceso', [ProyectoController::class, 'activarTipoProceso']);
-        Route::post('/guardarModalidad', [ProyectoController::class, 'guardarModalidad']);
-        Route::post('/eliminarModalidad', [ProyectoController::class, 'eliminarModalidad']);
-        Route::post('/activarModalidad', [ProyectoController::class, 'activarModalidad']);
+        Route::post('/guardarModalidad', [ModalidadController::class, 'guardar']);
+        Route::post('/activarModalidad', [ModalidadController::class, 'activar']);
     });
 
     // Gestión de usuarios: solo Administrador
