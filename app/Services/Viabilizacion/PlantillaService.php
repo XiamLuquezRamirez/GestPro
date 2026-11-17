@@ -316,6 +316,21 @@ final class PlantillaService
     }
 
     /**
+     * El nombre, tal como está guardado, de otra plantilla que se llama igual sin contar mayúsculas,
+     * tildes ni espacios en los extremos; null si no hay. `$excepto` es la plantilla que se edita.
+     */
+    public function nombreEnUso(string $nombre, ?PlantillaChecklist $excepto = null): ?string
+    {
+        // Se compara en PHP para que MariaDB y SQLite ignoren igual mayúsculas y tildes.
+        $normalizar = fn (string $texto) => Str::lower(Str::ascii(trim($texto)));
+
+        return PlantillaChecklist::query()
+            ->when($excepto, fn ($q) => $q->whereKeyNot($excepto->id))
+            ->pluck('nombre')
+            ->first(fn ($guardado) => $normalizar($guardado) === $normalizar($nombre));
+    }
+
+    /**
      * Al crear, el uso llega en los datos; al editar es el de la plantilla y, si llega otro, es
      * un error. Las modalidades que no llegan al editar se conservan.
      *
@@ -330,13 +345,7 @@ final class PlantillaService
             $errores[] = 'El uso de una plantilla no cambia después de crearla: esta es de ' . self::NOMBRES_USO[$plantilla->uso] . '. Si necesitas otro uso, crea una plantilla nueva.';
         }
 
-        $nombre = trim((string) ($datos['nombre'] ?? ''));
-        // Se compara en PHP para que MariaDB y SQLite ignoren igual mayúsculas y tildes.
-        $normalizar = fn (string $texto) => Str::lower(Str::ascii(trim($texto)));
-        $existente = PlantillaChecklist::query()
-            ->when($plantilla, fn ($q) => $q->whereKeyNot($plantilla->id))
-            ->pluck('nombre')
-            ->first(fn ($guardado) => $normalizar($guardado) === $normalizar($nombre));
+        $existente = $this->nombreEnUso((string) ($datos['nombre'] ?? ''), $plantilla);
         if ($existente !== null) {
             $errores[] = "Ya existe una plantilla llamada \"{$existente}\".";
         }

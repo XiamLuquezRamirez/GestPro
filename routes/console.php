@@ -1,6 +1,8 @@
 <?php
 
+use App\Exceptions\ReglaNegocioException;
 use App\Models\Proyecto;
+use App\Services\Contratacion\PlantillaLicitacionPublica;
 use App\Services\Viabilizacion\ExpedienteService;
 use App\Services\Viabilizacion\PlantillasExpediente;
 use Illuminate\Foundation\Inspiring;
@@ -27,6 +29,45 @@ Artisan::command('expedientes:crear-faltantes {--simular : Solo lista los proyec
     $creados = $proyectos->filter(fn (Proyecto $p) => $servicio->crearAutomatico($p, null) !== null)->count();
     $this->info("Expedientes creados: {$creados} de {$proyectos->count()}.");
 })->purpose('Crea el expediente, sin configurar, a los proyectos en Formulación con al menos una fuente definida que no tienen');
+
+Artisan::command('plantillas:sembrar-contratacion {--simular : Solo lista los requisitos que crearía, sin escribir nada}', function (PlantillaLicitacionPublica $semilla) {
+    if ($existente = $semilla->existente()) {
+        $this->info("La plantilla \"{$existente->nombre}\" ya existe: no se creó nada.");
+
+        return 0;
+    }
+
+    if ($impedimentos = $semilla->impedimentos()) {
+        foreach ($impedimentos as $impedimento) {
+            $this->error($impedimento);
+        }
+
+        return 1;
+    }
+
+    if ($this->option('simular')) {
+        foreach ($semilla->vistaPrevia() as $requisito) {
+            $this->line("{$requisito['etapa']}: {$requisito['texto']}" . ($requisito['condicion'] ? " (condicionado: {$requisito['condicion']})" : ''));
+        }
+        $this->info('Se crearía la plantilla "' . PlantillaLicitacionPublica::NOMBRE . "\" en borrador con {$semilla->cantidad()} requisitos.");
+
+        return 0;
+    }
+
+    try {
+        $plantilla = $semilla->sembrar();
+    } catch (ReglaNegocioException $e) {
+        foreach ($e->errores() ?: [$e->getMessage()] as $error) {
+            $this->error($error);
+        }
+
+        return 1;
+    }
+
+    $this->info("Plantilla \"{$plantilla->nombre}\" creada en borrador con {$semilla->cantidad()} requisitos. La entidad debe validarla antes de que un administrador la publique en Plantillas de checklist.");
+
+    return 0;
+})->purpose('Crea en borrador la plantilla de contratación "Licitación pública – SECOP II" de la guía CCE-SEC-G1-18, si no existe');
 
 Artisan::command('proyectos:informe-fuentes', function () {
     $porFuente = DB::table('fuentes_financiacion as f')
