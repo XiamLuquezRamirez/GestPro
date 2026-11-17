@@ -10,8 +10,8 @@ class Modalidad extends Model
     public $timestamps = false;
 
     protected $table = 'modalidades';
-    protected $fillable = ['nombre', 'activo'];
-    protected $casts = ['activo' => 'boolean'];
+    protected $fillable = ['clave', 'nombre', 'orden', 'activo'];
+    protected $casts = ['activo' => 'boolean', 'orden' => 'integer'];
 
     public function procesosLicitacion(): HasMany
     {

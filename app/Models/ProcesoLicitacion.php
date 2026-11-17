@@ -8,14 +8,31 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProcesoLicitacion extends Model
 {
-    public $timestamps = false;
+    public const SECOP_II = 'secop_ii';
+    public const SECOP_I = 'secop_i';
+    public const TVEC = 'tvec';
+    public const NINGUNA = 'ninguna';
+    public const PLATAFORMAS = [self::SECOP_II, self::SECOP_I, self::TVEC, self::NINGUNA];
+
+    public const PREPARACION = 'preparacion';
+    public const PUBLICADO = 'publicado';
+    public const EVALUACION = 'evaluacion';
+    public const ADJUDICADO = 'adjudicado';
+    public const DESIERTO = 'desierto';
+    public const CELEBRADO = 'celebrado';
+    public const CANCELADO = 'cancelado';
+    public const ESTADOS = [
+        self::PREPARACION, self::PUBLICADO, self::EVALUACION, self::ADJUDICADO,
+        self::DESIERTO, self::CELEBRADO, self::CANCELADO,
+    ];
 
     protected $table = 'procesos_licitacion';
     protected $fillable = [
-        'proyecto', 'codigo_proceso', 'tipo_proceso', 'modalidad',
-        'entidad_contratante', 'tipo_proponente', 'entidad_proponente', 'monto',
+        'proyecto', 'objeto', 'codigo_proceso', 'tipo_proceso', 'modalidad', 'plataforma', 'url_proceso',
+        'estado', 'entidad_contratante', 'tipo_proponente', 'entidad_proponente', 'monto', 'usuario_creo_id',
     ];
-    protected $casts = ['monto' => 'decimal:2'];
+    protected $attributes = ['estado' => self::PREPARACION];
+    protected $casts = ['monto' => 'decimal:2', 'usuario_creo_id' => 'integer'];
 
     // proyectoRel()/modalidadRel(): both FK columns (proyecto, modalidad) are single words that
     // would collide with the natural relation name (see Task 4's note on Estado::faseRel()).
@@ -39,6 +56,11 @@ class ProcesoLicitacion extends Model
     public function entidadContratante(): BelongsTo
     {
         return $this->belongsTo(Entidad::class, 'entidad_contratante');
+    }
+
+    public function usuarioCreo(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'usuario_creo_id');
     }
 
     public function eventos(): HasMany
