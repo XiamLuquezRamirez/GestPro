@@ -74,7 +74,7 @@ function App() {
         <Route element={privada(<AppShell user={user} onLogout={logout} />)}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/parametros" element={<Navigate to="/parametros/proyectos" replace />} />
-          <Route path="/parametros/:seccion" element={<Parametros />} />
+          <Route path="/parametros/:seccion" element={<Parametros user={user} />} />
           {/* No usar /expedientes/...: bajo /GestPro chocaría con la API del mismo nombre. */}
           <Route path="/viabilizacion/:proyectoId" element={<ExpedienteViabilizacion user={user} />} />
           {/* Solo Administrador: el backend también lo exige. */}

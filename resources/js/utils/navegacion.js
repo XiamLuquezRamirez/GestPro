@@ -20,6 +20,9 @@ export const SECCIONES_PARAMETROS = [
     { slug: 'entidades', tab: 'entidades', titulo: 'Entidades', descripcion: 'Quienes presentan y financian los proyectos.', grupo: GRUPO.CATALOGOS, icono: 'faLandmark', palabras: 'alcaldia gobernacion ministerio catalogo' },
     { slug: 'fuentes-financiacion', tab: 'fuentes-financiacion', titulo: 'Fuentes de financiación', descripcion: 'De dónde provienen los recursos de los proyectos.', grupo: GRUPO.CATALOGOS, icono: 'faCoins', palabras: 'regalias sgr recursos propios cofinanciacion catalogo' },
     { slug: 'sectores', tab: 'sectores', titulo: 'Sectores', descripcion: 'Sectores de inversión de los proyectos.', grupo: GRUPO.CATALOGOS, icono: 'faLayerGroup', palabras: 'educacion salud transporte vivienda catalogo' },
+    // `propia`: la sección es un componente aparte que se pinta sin Parametros, no una de sus tablas.
+    { slug: 'modalidades', tab: 'modalidades', titulo: 'Modalidades', descripcion: 'Formas de contratación: licitación pública, mínima cuantía…', grupo: GRUPO.CATALOGOS, icono: 'faGavel', palabras: 'contratacion licitacion seleccion abreviada concurso meritos directa minima cuantia secop catalogo', propia: true },
+    { slug: 'etapas-contratacion', tab: 'etapas-contratacion', titulo: 'Etapas de contratación', descripcion: 'Etapas de un proceso y su orden.', grupo: GRUPO.CATALOGOS, icono: 'faListOl', palabras: 'contratacion licitacion proceso pliego adjudicacion cronograma secop catalogo', propia: true },
 ];
 
 // No usar /plantillas: bajo /GestPro chocaría con la API del mismo nombre.

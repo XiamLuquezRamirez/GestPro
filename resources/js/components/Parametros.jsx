@@ -11,6 +11,8 @@ import '../leafletIconFix';
 import '../../css/Parametros.css';
 import { seccionDesdeSlug } from '../utils/navegacion';
 import { alternarFuente, datosFinanciacionDe, financiacionCompleta, fuentesDisponibles, mensajeDeError } from '../utils/fuentesProyecto';
+import CatalogoModalidades from './CatalogoModalidades';
+import CatalogoEtapasContratacion from './CatalogoEtapasContratacion';
 
 // Componente auxiliar: escucha clics en el mapa y reporta la coordenada al padre.
 // Debe vivir dentro de <MapContainer> — el hook useMapEvents solo funciona ahí.
@@ -22,6 +24,20 @@ const CapturadorClicMapa = ({ onAgregarPunto }) => {
     });
     return null;
 };
+
+// Secciones con componente propio (`propia` en navegacion.js), por su `tab`.
+const SECCIONES_PROPIAS = {
+    modalidades: CatalogoModalidades,
+    'etapas-contratacion': CatalogoEtapasContratacion,
+};
+
+const CabeceraSeccion = ({ seccion }) => (
+    <header className="gp-cabecera">
+        <span className="gp-etiqueta">{seccion.grupo}</span>
+        <h1>{seccion.titulo}</h1>
+        <p>{seccion.descripcion}</p>
+    </header>
+);
 
 const Parametros = () => {
     const navigate = useNavigate();
@@ -1833,11 +1849,7 @@ const Parametros = () => {
 
     return (
         <div className="parametros-container">
-            <header className="gp-cabecera">
-                <span className="gp-etiqueta">{seccion.grupo}</span>
-                <h1>{seccion.titulo}</h1>
-                <p>{seccion.descripcion}</p>
-            </header>
+            <CabeceraSeccion seccion={seccion} />
 
             {activeTab === 'proyectos' && renderTable(proyectos, 'proyectos')}
                         {activeTab === 'eventos-calendario' && renderTable(eventos, 'eventos')}
@@ -3293,4 +3305,21 @@ const Parametros = () => {
     );
 };
 
-export default Parametros;
+// Una sección propia se pinta sin montar Parametros: no pide sus catálogos ni llama los hooks de
+// renderTable. Parametros solo se monta para una sección de tablas, que llama renderTable una vez,
+// así que siempre ve el mismo número de hooks (navegacion.test.js lo comprueba).
+const ParametrosPorSeccion = ({ user }) => {
+    const seccion = seccionDesdeSlug(useParams().seccion);
+    if (!seccion) return <Navigate to="/parametros/proyectos" replace />;
+    const Propia = seccion?.propia ? SECCIONES_PROPIAS[seccion.tab] : null;
+    if (!Propia) return <Parametros />;
+
+    return (
+        <div className="parametros-container">
+            <CabeceraSeccion seccion={seccion} />
+            <Propia user={user} />
+        </div>
+    );
+};
+
+export default ParametrosPorSeccion;

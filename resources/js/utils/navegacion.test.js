@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { DESTINOS, RUTA_PLANTILLAS, buscarEnPaleta, destinoActivo, destinosPara, puedeVer, seccionDesdeSlug, tituloDeRuta } from './navegacion';
+import { DESTINOS, GRUPO, RUTA_PLANTILLAS, SECCIONES_PARAMETROS, buscarEnPaleta, destinoActivo, destinosPara, puedeVer, seccionDesdeSlug, tituloDeRuta } from './navegacion';
+import { ICONOS } from './iconosNavegacion';
 
 const proyectos = [
     { id: 1, nombre: 'Construcción sede educativa', descripcion_municipio: 'MEDELLÍN' },
@@ -17,13 +19,38 @@ describe('seccionDesdeSlug', () => {
         expect(seccionDesdeSlug('nada')).toBeNull();
         expect(seccionDesdeSlug(undefined)).toBeNull();
     });
+
+    it('modalidades y etapas de contratación son catálogos con componente propio', () => {
+        expect(seccionDesdeSlug('modalidades')).toMatchObject({ tab: 'modalidades', titulo: 'Modalidades', grupo: GRUPO.CATALOGOS, propia: true });
+        expect(seccionDesdeSlug('etapas-contratacion')).toMatchObject({ tab: 'etapas-contratacion', titulo: 'Etapas de contratación', grupo: GRUPO.CATALOGOS, propia: true });
+        expect(SECCIONES_PARAMETROS.filter((s) => s.propia).map((s) => s.slug)).toEqual(['modalidades', 'etapas-contratacion']);
+    });
+
+    it('cada sección tiene un icono registrado', () => {
+        SECCIONES_PARAMETROS.forEach((s) => expect(ICONOS[s.icono]).toBeDefined());
+    });
+});
+
+describe('secciones en Parametros.jsx', () => {
+    // Ruta relativa a este archivo, no al directorio desde donde se lance Vitest.
+    const fuente = readFileSync(new URL('../components/Parametros.jsx', import.meta.url), 'utf8');
+
+    // Parametros llama hooks dentro de renderTable: cada sección que lo monta debe pintar una tabla,
+    // y cada sección propia, que se pinta sin Parametros, debe tener su componente.
+    it('cada sección de tablas llama renderTable y cada sección propia tiene componente', () => {
+        const propias = fuente.match(/const SECCIONES_PROPIAS = \{([^}]*)\}/)[1];
+        SECCIONES_PARAMETROS.forEach((s) => {
+            if (s.propia) expect(propias).toMatch(new RegExp(`^\\s*'?${s.tab}'?:`, 'm'));
+            else expect(fuente).toContain(`activeTab === '${s.tab}' && renderTable(`);
+        });
+    });
 });
 
 describe('DESTINOS', () => {
     it('lleva a cada catálogo con una sola ruta directa', () => {
         const rutas = DESTINOS.map((d) => d.ruta);
 
-        ['municipios', 'estados', 'fases', 'tipos-evento', 'prioridades', 'responsables', 'entidades', 'fuentes-financiacion', 'sectores'].forEach((slug) => {
+        ['municipios', 'estados', 'fases', 'tipos-evento', 'prioridades', 'responsables', 'entidades', 'fuentes-financiacion', 'sectores', 'modalidades', 'etapas-contratacion'].forEach((slug) => {
             expect(rutas).toContain(`/parametros/${slug}`);
         });
     });
@@ -89,6 +116,9 @@ describe('buscarEnPaleta', () => {
         expect(titulos('estadisticas')).toContain('Estadísticas');
         expect(titulos('alcaldia')).toContain('Entidades');
         expect(titulos('catalogo')).toContain('Municipios');
+        expect(titulos('secop')).toEqual(expect.arrayContaining(['Modalidades', 'Etapas de contratación']));
+        expect(titulos('licitación')).toEqual(expect.arrayContaining(['Modalidades', 'Etapas de contratación']));
+        expect(titulos('minima cuantia')).toContain('Modalidades');
     });
 
     it('encuentra proyectos por nombre o municipio y los deja después de los destinos', () => {
@@ -129,6 +159,7 @@ describe('destinoActivo', () => {
 describe('tituloDeRuta', () => {
     it('da el título de la barra móvil', () => {
         expect(tituloDeRuta('/parametros/tipos-evento', '')).toBe('Tipos de evento');
+        expect(tituloDeRuta('/parametros/etapas-contratacion', '')).toBe('Etapas de contratación');
         expect(tituloDeRuta('/dashboard', '')).toBe('Tablero');
         expect(tituloDeRuta('/viabilizacion/4', '')).toBe('Expedientes');
         expect(tituloDeRuta('/otra', '')).toBe('GestPro');

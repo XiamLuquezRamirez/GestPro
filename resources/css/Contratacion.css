@@ -1,0 +1,21 @@
+/* Contratación: catálogos de modalidades y etapas. Usa los tokens --gp-* del armazón y los
+   formularios .pl-* de la administración de plantillas. */
+
+.ct-seccion { display: grid; gap: 1rem; min-width: 0; }
+.ct-barra { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; justify-content: space-between; }
+.ct-formulario-titulo { grid-column: 1 / -1; margin: 0; font-size: 1.05rem; }
+.ct-error-campo { font-size: .8rem; color: var(--gp-coral); }
+.pl-campo [aria-invalid="true"] { border-color: var(--gp-coral); }
+
+/* Fila o elemento de un catálogo desactivado: se lee, pero atenuado. */
+.ct-inactiva { opacity: .6; }
+.ct-inactiva:hover, .ct-inactiva:focus-within { opacity: .85; }
+
+.ct-clave { font-family: var(--gp-fuente-datos); font-size: .78rem; color: var(--gp-azul-texto); }
+
+.ct-etapas li { align-items: flex-start; }
+.ct-etapa { display: flex; flex: 1 1 20rem; gap: .75rem; align-items: baseline; min-width: 0; }
+.ct-etapa-orden { flex-shrink: 0; width: 1.6rem; font-family: var(--gp-fuente-datos); font-size: .8rem; text-align: right; color: var(--gp-texto-3); }
+.ct-etapa-texto { display: grid; gap: .15rem; min-width: 0; }
+.ct-etapa-texto strong { font-size: .92rem; color: var(--gp-texto); }
+.ct-etapa-texto small { font-size: .82rem; color: var(--gp-texto-2); overflow-wrap: anywhere; }
