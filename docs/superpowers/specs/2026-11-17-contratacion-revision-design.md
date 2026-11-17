@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-11-17
 **Origen:** pedido del usuario: "hoy no hay una revisión como tal de los proyectos en licitación". La guía de Colombia Compra para SECOP II sirve de punto de partida, y el seguimiento debe ser parametrizable para procesos que no van por SECOP.
-**Estado:** aprobado por el usuario el 2026-11-17. Etapa 1 (catálogos y procesos) validada y aplicada en `gest_pro`. **Corrección del 2026-11-17:** el proceso y el contrato se unifican en un solo registro, el contrato (sección 10). Donde este documento hable de "proceso", la sección 10 manda.
+**Estado:** aprobado por el usuario el 2026-11-17. Etapa 1 (catálogos y procesos) validada y aplicada en `gest_pro`. **Actualización del 2026-11-18:** la unificación de la sección 10 queda **anulada**. Proceso y contrato son dos registros vinculados, según `docs/superpowers/specs/2026-11-18-procesos-y-contratos-propuesta.md`, cuyas 6 decisiones aprobó el usuario el 2026-11-18. Esa propuesta manda sobre este documento en el modelo de proceso y contrato, los estados, la ponderación, las fechas y el orden de las fases.
 
 ## Objetivo
 
@@ -259,6 +259,8 @@ Cada etapa se valida con el usuario antes de seguir, tiene su plan y se ensaya e
 ---
 
 ## 10. Proceso y contrato en un solo registro (corrección del 2026-11-17)
+
+> **Anulada el 2026-11-18.** El usuario aprobó mantener proceso y contrato separados y vinculados (ver `2026-11-18-procesos-y-contratos-propuesta.md`). Se conserva como registro de la decisión anterior.
 
 **Por qué.** El usuario señaló que el proceso y el contrato repiten objeto, entidad contratante, valor y estado, y que tener los dos confunde. Son el mismo trámite en dos momentos: la selección termina en un contrato. **Decisión del usuario:** solo queda el contrato, con dos fases. Esta sección reemplaza a "Proceso de contratación", "Paso a contrato" y a lo que hable de procesos en las secciones 3, 5, 6 y 7.
 
