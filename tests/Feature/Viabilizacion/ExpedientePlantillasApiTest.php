@@ -22,6 +22,8 @@ class ExpedientePlantillasApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const NO_ES_DE_VIABILIZACION = 'La plantilla "Licitación pública" es de contratación y no se usa en un expediente de viabilización.';
+
     private PlantillaChecklist $sgr;
 
     protected function setUp(): void
@@ -297,6 +299,44 @@ class ExpedientePlantillasApiTest extends TestCase
         $registro = DB::table('checklist_historial')->where('evento', 'configuracion_cambiada')->sole();
         $this->assertCount(1, json_decode($registro->antes, true)['plantillas']);
         $this->assertCount(2, json_decode($registro->despues, true)['plantillas']);
+    }
+
+    // ------------------------------------------------------- contratación
+
+    /** Publicada, activa y de todas las fuentes y sectores: compatible en todo salvo el uso. */
+    private function plantillaDeContratacion(): PlantillaChecklist
+    {
+        return $this->plantilla('Licitación pública', ['Estudios previos' => [null]], [
+            'uso' => PlantillaChecklist::USO_CONTRATACION, 'todas_modalidades' => true,
+        ]);
+    }
+
+    public function test_crear_un_expediente_rechaza_una_plantilla_de_contratacion(): void
+    {
+        $contratacion = $this->plantillaDeContratacion();
+        $proyecto = $this->proyecto();
+
+        $this->crear($proyecto, ['fase_sgr' => 3, 'plantilla_ids' => [$contratacion->id]])
+            ->assertStatus(422)
+            ->assertJsonPath('mensaje', 'La configuración del expediente no es válida.')
+            ->assertJsonPath('errores', [self::NO_ES_DE_VIABILIZACION]);
+        $this->crear($proyecto, ['fase_sgr' => 3, 'plantilla_ids' => [$this->sgr->id, $contratacion->id], 'principal_id' => $this->sgr->id])
+            ->assertStatus(422)
+            ->assertJsonPath('errores', [self::NO_ES_DE_VIABILIZACION]);
+        $this->assertDatabaseCount('proyectos_expedientes', 0);
+    }
+
+    public function test_configurar_un_expediente_rechaza_una_plantilla_de_contratacion_y_conserva_la_seleccion(): void
+    {
+        $contratacion = $this->plantillaDeContratacion();
+        $id = $this->crear($this->proyecto(), ['fase_sgr' => 3])->assertCreated()->json('id');
+
+        $this->configurar($id, ['fase_sgr' => 3, 'plantilla_ids' => [$this->sgr->id, $contratacion->id], 'principal_id' => $this->sgr->id])
+            ->assertStatus(422)
+            ->assertJsonPath('mensaje', 'La configuración del expediente no es válida.')
+            ->assertJsonPath('errores', [self::NO_ES_DE_VIABILIZACION]);
+
+        $this->assertSame([$this->sgr->id], ProyectoExpediente::findOrFail($id)->versionesPlantilla()->pluck('catalogo_versiones.plantilla_id')->all());
     }
 
     // ------------------------------------------------------------ presentación

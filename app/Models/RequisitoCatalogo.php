@@ -25,6 +25,7 @@ class RequisitoCatalogo extends Model
         'descripcion', 'categoria', 'tipo_requisito', 'caracter', 'cargo_cumplimiento', 'cargo_revision',
         'soporte_requerido', 'referencia_normativa', 'condicion_descripcion',
         'requiere_aprobacion_no_aplica', 'codigo_comun', 'responsable_cumplimiento_id', 'responsable_revision_id',
+        'etapa_id',
     ];
     protected $casts = [
         'catalogo_version_id' => 'integer',
@@ -33,6 +34,7 @@ class RequisitoCatalogo extends Model
         'orden' => 'integer',
         'responsable_cumplimiento_id' => 'integer',
         'responsable_revision_id' => 'integer',
+        'etapa_id' => 'integer',
         'activo' => 'boolean',
         'requiere_aprobacion_no_aplica' => 'boolean',
     ];
@@ -62,5 +64,11 @@ class RequisitoCatalogo extends Model
     public function responsableRevision(): BelongsTo
     {
         return $this->belongsTo(Responsable::class, 'responsable_revision_id');
+    }
+
+    /** Etapa de contratación a la que pertenece. Solo la tienen los requisitos de una plantilla de contratación. */
+    public function etapa(): BelongsTo
+    {
+        return $this->belongsTo(EtapaContratacion::class, 'etapa_id');
     }
 }

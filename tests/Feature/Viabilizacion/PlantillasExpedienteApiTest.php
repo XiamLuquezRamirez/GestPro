@@ -404,4 +404,47 @@ class PlantillasExpedienteApiTest extends TestCase
 
         $this->assertSame($anterior, $seleccion['versiones'][$propios->id]);
     }
+
+    // ------------------------------------------------------- contratación
+
+    public function test_una_plantilla_de_contratacion_no_se_ofrece_ni_se_preselecciona_en_un_expediente(): void
+    {
+        // Activa, publicada, de todas las fuentes y sectores: compatible en todo salvo el uso.
+        $contratacion = $this->plantilla('Licitación pública', [], ['Estudios previos' => true], [
+            'uso' => PlantillaChecklist::USO_CONTRATACION, 'todas_modalidades' => true,
+        ]);
+        // Ni siquiera con motor sgr, que es lo que se preselecciona (el administrador no puede
+        // crearla así; se fuerza para probar el filtro).
+        $conMotorSgr = $this->plantilla('Contratación con motor SGR', [], ['Requisito' => true], [
+            'uso' => PlantillaChecklist::USO_CONTRATACION, 'motor' => PlantillaChecklist::MOTOR_SGR,
+        ]);
+        $proyecto = $this->proyecto(['recursos_propios'], $this->agua);
+
+        $this->assertSame([], $this->servicio()->idsCompatibles($proyecto));
+        $this->assertSame([], $this->nombres($this->compatibles($proyecto)->assertOk()));
+        $this->assertNull($this->servicio()->sgrCompatible($proyecto));
+        $this->assertSame(['plantilla_ids' => [], 'principal_id' => null], $this->servicio()->preseleccion($proyecto));
+
+        $errores = $this->errores(fn () => $this->servicio()->validar(
+            ['plantilla_ids' => [$contratacion->id, $conMotorSgr->id], 'principal_id' => $contratacion->id], $proyecto, null
+        ));
+        $this->assertSame([
+            'La plantilla "Licitación pública" es de contratación y no se usa en un expediente de viabilización.',
+            'La plantilla "Contratación con motor SGR" es de contratación y no se usa en un expediente de viabilización.',
+        ], $errores);
+    }
+
+    public function test_un_expediente_automatico_no_recibe_una_plantilla_de_contratacion(): void
+    {
+        $this->plantilla('Contratación con motor SGR', [], ['Requisito' => true], [
+            'uso' => PlantillaChecklist::USO_CONTRATACION, 'motor' => PlantillaChecklist::MOTOR_SGR,
+        ]);
+        $proyecto = $this->proyecto(['recursos_propios'], $this->agua);
+        $proyecto->update(['fase' => DB::table('fases')->insertGetId(['nombre' => 'Formulación'])]);
+
+        $expediente = app(ExpedienteService::class)->crearAutomatico($proyecto->refresh(), null);
+
+        $this->assertNotNull($expediente);
+        $this->assertSame([], $expediente->versionesPlantilla()->pluck('catalogo_versiones.id')->all());
+    }
 }

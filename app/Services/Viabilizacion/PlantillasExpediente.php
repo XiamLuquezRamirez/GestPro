@@ -16,8 +16,9 @@ use Illuminate\Support\Facades\DB;
  * y con qué versión quedan.
  *
  * Reglas:
- * - Se ofrecen las plantillas activas con versión vigente de alguna fuente del proyecto
- *   (o de todas) y de su sector (o de todos). Sin sector, solo las de todos los sectores.
+ * - Se ofrecen las plantillas de viabilización activas con versión vigente de alguna fuente
+ *   del proyecto (o de todas) y de su sector (o de todos). Sin sector, solo las de todos los
+ *   sectores. Una plantilla de contratación nunca se ofrece ni se elige.
  * - Una plantilla nueva en el expediente entra con su versión vigente; la que ya tenía
  *   conserva su versión aunque haya dejado de ofrecerse (sin cambios retroactivos), hasta
  *   que se le aplique otra de forma explícita (VersionesExpediente).
@@ -85,6 +86,7 @@ final class PlantillasExpediente
         $sector = $proyecto->sector;
 
         return PlantillaChecklist::query()
+            ->where('uso', PlantillaChecklist::USO_VIABILIZACION)
             ->where('activo', true)
             ->whereHas('versiones', fn (Builder $q) => $q->vigente())
             ->where(fn (Builder $q) => $q->where('todas_fuentes', true)
@@ -236,7 +238,9 @@ final class PlantillasExpediente
 
             $version = $previas->get($id) ?? $plantilla->versiones->first();
             if (! $previas->has($id)) {
-                if (! $plantilla->activo) {
+                if ($plantilla->esContratacion()) {
+                    $errores[] = "La plantilla \"{$plantilla->nombre}\" es de contratación y no se usa en un expediente de viabilización.";
+                } elseif (! $plantilla->activo) {
                     $errores[] = "La plantilla \"{$plantilla->nombre}\" está inactiva.";
                 } elseif (! $version) {
                     $errores[] = "La plantilla \"{$plantilla->nombre}\" no tiene una versión publicada.";

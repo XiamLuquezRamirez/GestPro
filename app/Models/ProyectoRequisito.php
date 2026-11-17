@@ -23,7 +23,7 @@ class ProyectoRequisito extends Model
         'usuario_cumplido_id', 'observacion', 'soporte_archivo', 'soporte_nombre', 'orden',
         'estado_aplicabilidad', 'justificacion_no_aplica', 'usuario_no_aplica_id', 'usuario_aprobo_id',
         'fecha_aprobacion', 'caracter', 'responsable_id',
-        'titulo_propio', 'descripcion_propia', 'categoria_propia',
+        'titulo_propio', 'descripcion_propia', 'categoria_propia', 'etapa_propia_id',
     ];
     protected $attributes = [
         'estado_aplicabilidad' => self::APLICA,
@@ -40,6 +40,7 @@ class ProyectoRequisito extends Model
         'usuario_aprobo_id' => 'integer',
         'fecha_aprobacion' => 'datetime',
         'responsable_id' => 'integer',
+        'etapa_propia_id' => 'integer',
     ];
 
     /**
@@ -119,6 +120,15 @@ class ProyectoRequisito extends Model
     public function origenes(): BelongsToMany
     {
         return $this->belongsToMany(RequisitoCatalogo::class, 'proyecto_requisito_origenes', 'proyecto_requisito_id', 'requisito_catalogo_id');
+    }
+
+    /**
+     * Etapa que eligió un requisito propio de un expediente de contratación. Los de plantilla
+     * toman la etapa de su requisito.
+     */
+    public function etapaPropia(): BelongsTo
+    {
+        return $this->belongsTo(EtapaContratacion::class, 'etapa_propia_id');
     }
 
     /** Requisito agregado en el expediente, con sus textos en la fila y sin plantilla. */
