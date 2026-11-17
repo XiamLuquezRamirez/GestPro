@@ -6,7 +6,10 @@ import Swal from 'sweetalert2';
 import axios from '../axios';
 import { alternarId } from '../utils/expedienteChecklist';
 import { avisarError } from '../utils/avisosPlantillas';
-import { ALCANCES, datosGuardarPlantilla, formularioPlantilla, mensajeApi, opcionesCatalogo, pestanaPorTecla, resumenVersiones, versionDeTrabajo } from '../utils/plantillasChecklist';
+import {
+    ALCANCES, USO_CONTRATACION, catalogoConPropios, datosGuardarPlantilla, etiquetaUso, formularioPlantilla, mensajeApi, opcionesCatalogo,
+    pestanaPorTecla, resumenVersiones, rutaListaPlantillas, usoDePlantilla, versionDeTrabajo,
+} from '../utils/plantillasChecklist';
 import PlantillaRequisitos from './PlantillaRequisitos';
 import PlantillaVistaPrevia from './PlantillaVistaPrevia';
 import PlantillaVersiones from './PlantillaVersiones';
@@ -26,6 +29,7 @@ const idPestana = (id) => `pl-pestana-${id}`;
 const ID_PANEL = 'pl-panel-detalle';
 
 const NOTA_SGR = 'La plantilla SGR aplica a todos los sectores y siempre incluye la fuente SGR.';
+const NOTA_MODALIDADES = 'Elige al menos una modalidad, o marca "Todas las modalidades", antes de publicar.';
 
 const ListaChequeo = ({ titulo, todas, textoTodas, onTodas, bloquearTodas, items, elegidos, onAlternar, sufijoInactivo, fijos = [], nota }) => (
     <fieldset className="pl-asociacion">
@@ -47,13 +51,18 @@ const ListaChequeo = ({ titulo, todas, textoTodas, onTodas, bloquearTodas, items
     </fieldset>
 );
 
-/** Detalle de una plantilla: datos, asociaciones, requisitos, vista previa y versiones. */
+/**
+ * Detalle de una plantilla: datos, asociaciones, requisitos, vista previa y versiones. El uso se
+ * muestra pero no se edita; una plantilla de contratación se asocia además a modalidades y usa
+ * siempre el motor simple.
+ */
 const PlantillaDetalle = () => {
     const { plantillaId } = useParams();
     const [plantilla, setPlantilla] = useState(null);
     const [formulario, setFormulario] = useState(null);
     const [fuentes, setFuentes] = useState([]);
     const [sectores, setSectores] = useState([]);
+    const [modalidades, setModalidades] = useState([]);
     const [requisitos, setRequisitos] = useState([]);
     const [pestana, setPestana] = useState('general');
     const [guardando, guardarUnaVez] = useOcupado();
@@ -62,6 +71,8 @@ const PlantillaDetalle = () => {
     const cargada = useRef(false);
 
     const version = versionDeTrabajo(plantilla);
+    const uso = usoDePlantilla(plantilla);
+    const contratacion = uso === USO_CONTRATACION;
 
     // `reiniciar` vuelve a llenar el formulario de General; las recargas por requisitos o versiones lo respetan.
     // Solo vale la última petición, y solo el fallo de la carga inicial reemplaza la página.
@@ -118,6 +129,17 @@ const PlantillaDetalle = () => {
         return () => { vigente = false; };
     }, []);
 
+    // Las modalidades solo hacen falta en una plantilla de contratación. Trae también las inactivas:
+    // opcionesCatalogo ofrece las activas y las que la plantilla ya tiene.
+    useEffect(() => {
+        if (!contratacion) return undefined;
+        let vigente = true;
+        axios.get('/modalidades')
+            .then(({ data }) => { if (vigente) setModalidades(Array.isArray(data) ? data : []); })
+            .catch((e) => { if (vigente) avisarError('No se pudieron cargar las modalidades', e); });
+        return () => { vigente = false; };
+    }, [contratacion]);
+
     const cambiar = (campo, valor) => setFormulario((f) => ({ ...f, [campo]: valor }));
 
     const guardar = (e) => {
@@ -162,10 +184,12 @@ const PlantillaDetalle = () => {
 
     return (
         <div className="pl-pagina">
-            <Link to={RUTA_PLANTILLAS} className="pl-volver"><FontAwesomeIcon icon={faArrowLeft} /> Plantillas</Link>
+            <Link to={rutaListaPlantillas(uso)} className="pl-volver">
+                <FontAwesomeIcon icon={faArrowLeft} /> Plantillas de {etiquetaUso(uso).toLowerCase()}
+            </Link>
             <header className="gp-cabecera">
                 <span className="gp-etiqueta">
-                    {plantilla.motor === 'sgr' ? 'Evaluador SGR' : 'Plantilla simple'} · {resumenVersiones(plantilla)}
+                    {contratacion ? 'Plantilla de contratación' : (plantilla.motor === 'sgr' ? 'Evaluador SGR' : 'Plantilla simple')} · {resumenVersiones(plantilla)}
                 </span>
                 <h1>{plantilla.nombre}</h1>
                 {!plantilla.activo && <p>Inactiva: no se ofrece en expedientes nuevos.</p>}
@@ -184,6 +208,11 @@ const PlantillaDetalle = () => {
             <div role="tabpanel" id={ID_PANEL} aria-labelledby={idPestana(pestana)}>
                 {pestana === 'general' && (
                     <form className="gp-panel pl-formulario" onSubmit={guardar}>
+                        <div className="pl-campo">
+                            <span>Uso</span>
+                            <p className="pl-solo-lectura">{etiquetaUso(uso)}</p>
+                            <small className="pl-ayuda">Se elige al crear la plantilla y no cambia.</small>
+                        </div>
                         <label className="pl-campo">
                             <span>Nombre</span>
                             <input value={formulario.nombre} maxLength={199} required onChange={(e) => cambiar('nombre', e.target.value)} />
@@ -222,6 +251,19 @@ const PlantillaDetalle = () => {
                             elegidos={formulario.sector_ids}
                             onAlternar={(id) => cambiar('sector_ids', alternarId(formulario.sector_ids, id))}
                         />
+                        {contratacion && (
+                            <ListaChequeo
+                                titulo="Modalidades de contratación"
+                                sufijoInactivo="inactiva"
+                                nota={NOTA_MODALIDADES}
+                                todas={formulario.todas_modalidades}
+                                textoTodas="Todas las modalidades"
+                                onTodas={(v) => cambiar('todas_modalidades', v)}
+                                items={catalogoConPropios(modalidades, plantilla.modalidades)}
+                                elegidos={formulario.modalidad_ids}
+                                onAlternar={(id) => cambiar('modalidad_ids', alternarId(formulario.modalidad_ids, id))}
+                            />
+                        )}
                         <div className="pl-formulario-acciones">
                             <button type="submit" className="gp-boton gp-boton-primario" disabled={guardando}>
                                 <FontAwesomeIcon icon={faFloppyDisk} /> Guardar

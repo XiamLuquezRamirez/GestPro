@@ -45,6 +45,16 @@
 .pl-pestana:hover { color: var(--gp-texto); }
 .pl-pestana.activa { color: var(--gp-azul-texto); border-bottom-color: var(--gp-azul-texto); }
 
+/* Selector de uso de la lista: botones con aria-pressed, de los que uno está pulsado. */
+.pl-segmento { display: inline-flex; flex-wrap: wrap; gap: .2rem; margin-bottom: 1rem; padding: .2rem; background: var(--gp-superficie-2); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
+.pl-segmento-opcion { padding: .4rem .9rem; font: inherit; font-size: .88rem; font-weight: 600; color: var(--gp-texto-2); background: none; border: 0; border-radius: var(--gp-radio); cursor: pointer; }
+.pl-segmento-opcion:hover { color: var(--gp-texto); }
+.pl-segmento-opcion:focus-visible { outline: none; box-shadow: var(--gp-enfoque); }
+.pl-segmento-opcion.activa { color: var(--gp-sobre-acento); background: var(--gp-azul); }
+
+/* Dato de solo lectura dentro de un formulario (el uso de la plantilla). */
+.pl-solo-lectura { margin: 0; font-size: .9rem; color: var(--gp-texto); }
+
 .pl-formulario { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: .9rem 1.1rem; padding: 1.1rem; }
 .pl-campo { display: flex; flex-direction: column; gap: .3rem; min-width: 0; margin: 0; }
 .pl-campo > span { font-size: .78rem; font-weight: 600; color: var(--gp-texto-2); }

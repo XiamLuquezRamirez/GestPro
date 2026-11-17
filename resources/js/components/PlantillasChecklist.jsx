@@ -1,31 +1,52 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { faCopy, faPlus, faPowerOff } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
 import { avisarError } from '../utils/avisosPlantillas';
-import { filtrarPlantillas, mensajeApi, resumenVersiones, textoAsociaciones } from '../utils/plantillasChecklist';
+import {
+    USOS, USO_CONTRATACION, USO_VIABILIZACION, datosNuevaPlantilla, esContratacion, etiquetaUso, filtrarPlantillas, mensajeApi,
+    resumenVersiones, textoAsociaciones, textoModalidades, usoDeConsulta,
+} from '../utils/plantillasChecklist';
 import { RUTA_PLANTILLAS } from '../utils/navegacion';
 import useOcupado from './useOcupado';
 import '../../css/Plantillas.css';
 
-/** Lista de plantillas de checklist (solo Administrador). */
+const DESCRIPCION_USO = {
+    [USO_VIABILIZACION]: 'Conjuntos de requisitos que se aplican a los expedientes según su fuente de financiación y su sector.',
+    [USO_CONTRATACION]: 'Conjuntos de requisitos de un proceso de contratación, por etapa, según su modalidad, su fuente de financiación y su sector.',
+};
+
+// Al crear se dice el uso: no cambia después.
+const AYUDA_CREAR = {
+    [USO_VIABILIZACION]: 'Plantilla de viabilización (el uso no cambia después). Nace para todas las fuentes y sectores, con su primera versión en borrador. Ajústalo en el detalle.',
+    [USO_CONTRATACION]: 'Plantilla de contratación (el uso no cambia después). Nace para todas las fuentes y sectores, sin modalidades y con su primera versión en borrador. Elige sus modalidades en el detalle antes de publicar.',
+};
+
+/**
+ * Lista de plantillas de checklist (solo Administrador), por uso: viabilización o contratación.
+ * El uso elegido vive en la URL (`?uso=contratacion`) para que un enlace o el volver lo conserven.
+ */
 const PlantillasChecklist = () => {
     const navigate = useNavigate();
+    const [consulta, setConsulta] = useSearchParams();
+    const uso = usoDeConsulta(consulta.get('uso'));
     const [plantillas, setPlantillas] = useState(null);
     const [buscar, setBuscar] = useState('');
     const [soloActivas, setSoloActivas] = useState(false);
     const [error, setError] = useState(null);
     const [ocupado, ejecutar] = useOcupado();
     const peticion = useRef(0);
-    const primera = useRef(true);
+    // Lo que la lista muestra ahora (uso y búsqueda). Una recarga tras una acción pide esto y no
+    // lo que había al empezarla: si entretanto se cambió de pestaña, no la pisa con la anterior.
+    const vigente = useRef(null);
 
     // Solo vale la respuesta de la última petición: las anteriores llegan desordenadas y se descartan.
-    const cargar = useCallback(async (texto) => {
+    const cargar = useCallback(async (texto, usoLista) => {
         const numero = ++peticion.current;
         try {
-            const { data } = await axios.get('/plantillas', { params: texto ? { buscar: texto } : {} });
+            const { data } = await axios.get('/plantillas', { params: { uso: usoLista, ...(texto ? { buscar: texto } : {}) } });
             if (numero !== peticion.current) return;
             setPlantillas(data);
             setError(null);
@@ -34,13 +55,28 @@ const PlantillasChecklist = () => {
         }
     }, []);
 
-    // La primera carga es inmediata; la búsqueda espera a que se deje de escribir.
+    // La primera carga y el cambio de uso son inmediatos; la búsqueda espera a que se deje de
+    // escribir. Al cambiar de uso no se muestran, mientras tanto, las plantillas del otro.
     useEffect(() => {
-        const espera = primera.current ? 0 : 300;
-        primera.current = false;
-        const temporizador = setTimeout(() => cargar(buscar.trim()), espera);
+        const cambioUso = vigente.current?.uso !== uso;
+        if (cambioUso && vigente.current !== null) {
+            setPlantillas(null);
+            setError(null);
+        }
+        vigente.current = { uso, buscar: buscar.trim() };
+        const temporizador = setTimeout(() => cargar(buscar.trim(), uso), cambioUso ? 0 : 300);
         return () => clearTimeout(temporizador);
-    }, [buscar, cargar]);
+    }, [buscar, uso, cargar]);
+
+    const recargar = () => cargar(vigente.current.buscar, vigente.current.uso);
+
+    // Reemplaza la entrada del historial: cambiar de pestaña no es una página nueva.
+    const elegirUso = (nuevo) => setConsulta((actual) => {
+        const siguiente = new URLSearchParams(actual);
+        if (nuevo === USO_VIABILIZACION) siguiente.delete('uso');
+        else siguiente.set('uso', nuevo);
+        return siguiente;
+    }, { replace: true });
 
     const visibles = useMemo(() => filtrarPlantillas(plantillas ?? [], { soloActivas }), [plantillas, soloActivas]);
 
@@ -57,13 +93,10 @@ const PlantillasChecklist = () => {
     });
 
     const crear = () => ejecutar(async () => {
-        const { isConfirmed, value } = await pedirNombre(
-            'Nueva plantilla',
-            'Nace para todas las fuentes y sectores, con su primera versión en borrador. Ajústalo en el detalle.'
-        );
+        const { isConfirmed, value } = await pedirNombre(`Nueva plantilla de ${etiquetaUso(uso).toLowerCase()}`, AYUDA_CREAR[uso]);
         if (!isConfirmed) return;
         try {
-            const { data } = await axios.post('/plantillas', { nombre: value.trim(), todas_fuentes: true, todos_sectores: true });
+            const { data } = await axios.post('/plantillas', datosNuevaPlantilla(value, uso));
             navigate(`${RUTA_PLANTILLAS}/${data.id}`);
         } catch (e) {
             avisarError('No se pudo crear la plantilla', e);
@@ -126,7 +159,7 @@ const PlantillasChecklist = () => {
         }
         try {
             await axios.post(`/plantillas/${plantilla.id}/activar`, { activo: !plantilla.activo });
-            await cargar(buscar.trim());
+            await recargar();
         } catch (e) {
             avisarError('No se pudo cambiar el estado', e);
         }
@@ -137,8 +170,17 @@ const PlantillasChecklist = () => {
             <header className="gp-cabecera">
                 <span className="gp-etiqueta">Catálogos</span>
                 <h1>Plantillas de checklist</h1>
-                <p>Conjuntos de requisitos que se aplican a los expedientes según su fuente de financiación y su sector.</p>
+                <p>{DESCRIPCION_USO[uso]}</p>
             </header>
+
+            <div className="pl-segmento" role="group" aria-label="Uso de las plantillas">
+                {USOS.map(([valor, texto]) => (
+                    <button key={valor} type="button" aria-pressed={uso === valor}
+                        className={`pl-segmento-opcion${uso === valor ? ' activa' : ''}`} onClick={() => elegirUso(valor)}>
+                        {texto}
+                    </button>
+                ))}
+            </div>
 
             <div className="pl-barra">
                 <input
@@ -159,7 +201,9 @@ const PlantillasChecklist = () => {
 
             {error && <p className="pl-error" role="alert">{error}</p>}
             {plantillas === null && !error && <p className="gp-vacio">Cargando plantillas…</p>}
-            {plantillas !== null && visibles.length === 0 && <p className="gp-vacio">No hay plantillas que coincidan.</p>}
+            {plantillas !== null && visibles.length === 0 && (
+                <p className="gp-vacio">No hay plantillas de {etiquetaUso(uso).toLowerCase()} que coincidan.</p>
+            )}
 
             <ul className="pl-lista">
                 {visibles.map((p) => (
@@ -168,7 +212,7 @@ const PlantillasChecklist = () => {
                             <div className="pl-tarjeta-titulo">
                                 <Link to={`${RUTA_PLANTILLAS}/${p.id}`}>{p.nombre}</Link>
                                 {p.es_sgr && <span className="pl-insignia">SGR</span>}
-                                <span className="pl-insignia pl-insignia-suave">{p.motor === 'sgr' ? 'Evaluador SGR' : 'Simple'}</span>
+                                {!esContratacion(p) && <span className="pl-insignia pl-insignia-suave">{p.motor === 'sgr' ? 'Evaluador SGR' : 'Simple'}</span>}
                                 {!p.activo && <span className="pl-insignia pl-insignia-alerta">Inactiva</span>}
                             </div>
                             {p.descripcion && <p className="pl-tarjeta-descripcion">{p.descripcion}</p>}
@@ -177,6 +221,7 @@ const PlantillasChecklist = () => {
                                 <div><dt>Requisitos</dt><dd>{p.vigente?.requisitos ?? p.borrador?.requisitos ?? 0}</dd></div>
                                 <div><dt>Fuentes</dt><dd>{textoAsociaciones(p.todas_fuentes, p.fuentes, 'Todas')}</dd></div>
                                 <div><dt>Sectores</dt><dd>{textoAsociaciones(p.todos_sectores, p.sectores, 'Todos')}</dd></div>
+                                {esContratacion(p) && <div><dt>Modalidades</dt><dd>{textoModalidades(p)}</dd></div>}
                             </dl>
                         </div>
                         <div className="pl-tarjeta-acciones">

@@ -34,7 +34,19 @@ import {
     resumenVersiones,
     textoAsociaciones,
     versionDeTrabajo,
+    USOS,
+    USO_CONTRATACION,
+    USO_VIABILIZACION,
+    catalogoConPropios,
+    datosNuevaPlantilla,
+    esContratacion,
+    etiquetaUso,
+    rutaListaPlantillas,
+    textoModalidades,
+    usoDeConsulta,
+    usoDePlantilla,
 } from './plantillasChecklist';
+import { RUTA_PLANTILLAS } from './navegacion';
 
 describe('formulario de la plantilla', () => {
     const plantilla = {
@@ -46,8 +58,9 @@ describe('formulario de la plantilla', () => {
         const formulario = formularioPlantilla(plantilla);
         expect(formulario).toEqual({
             nombre: 'Educación', descripcion: '', alcance: 'especifica', todas_fuentes: false, todos_sectores: false,
-            fuente_ids: [4], sector_ids: [2],
+            fuente_ids: [4], sector_ids: [2], todas_modalidades: false, modalidad_ids: [],
         });
+        // En viabilización las modalidades no viajan: el servidor las rechaza.
         expect(datosPlantilla({ ...formulario, nombre: '  Educación  ', descripcion: ' ' })).toEqual({
             nombre: 'Educación', descripcion: null, alcance: 'especifica', todas_fuentes: false, todos_sectores: false,
             fuente_ids: [4], sector_ids: [2],
@@ -513,5 +526,93 @@ describe('datosVistaPrevia', () => {
             .toEqual(['Condicionado', 'Aplica si: Si compra predios']);
         expect(datosVistaPrevia({ caracter: 'condicionado', condicion_descripcion: 'Condición original: comp=predios' }, 'simple'))
             .toEqual(['Condicionado']);
+    });
+});
+
+describe('uso de la plantilla', () => {
+    it('los usos coinciden con PlantillaChecklist::USOS', () => {
+        const modelo = readFileSync(new URL('../../../app/Models/PlantillaChecklist.php', import.meta.url), 'utf8');
+        const valor = (n) => modelo.match(new RegExp(`const ${n} = '([a-z_]+)'`))[1];
+        expect(USOS.map(([v]) => v)).toEqual([valor('USO_VIABILIZACION'), valor('USO_CONTRATACION')]);
+        expect(modelo).toMatch(/const USOS = \[self::USO_VIABILIZACION, self::USO_CONTRATACION\]/);
+        expect(USOS.map(([, t]) => t)).toEqual(['Viabilización', 'Contratación']);
+        expect(etiquetaUso(USO_CONTRATACION)).toBe('Contratación');
+    });
+
+    it('una plantilla sin uso es de viabilización', () => {
+        expect(esContratacion({ uso: 'contratacion' })).toBe(true);
+        expect(esContratacion({ uso: 'viabilizacion' })).toBe(false);
+        expect(esContratacion({})).toBe(false);
+        expect(esContratacion(null)).toBe(false);
+        expect(usoDePlantilla({ uso: 'contratacion' })).toBe(USO_CONTRATACION);
+        expect(usoDePlantilla(undefined)).toBe(USO_VIABILIZACION);
+    });
+
+    it('lee el uso de la URL y vuelve a la lista en esa pestaña', () => {
+        expect(usoDeConsulta('contratacion')).toBe(USO_CONTRATACION);
+        expect(usoDeConsulta('viabilizacion')).toBe(USO_VIABILIZACION);
+        expect(usoDeConsulta(null)).toBe(USO_VIABILIZACION);
+        expect(usoDeConsulta('otro')).toBe(USO_VIABILIZACION);
+        expect(rutaListaPlantillas(USO_CONTRATACION)).toBe(`${RUTA_PLANTILLAS}?uso=contratacion`);
+        expect(rutaListaPlantillas(USO_VIABILIZACION)).toBe(RUTA_PLANTILLAS);
+        expect(usoDeConsulta(new URL(`http://x${rutaListaPlantillas(USO_CONTRATACION)}`).searchParams.get('uso'))).toBe(USO_CONTRATACION);
+    });
+
+    it('crea con el uso de la pestaña; la de contratación, sin modalidades', () => {
+        expect(datosNuevaPlantilla('  Mínima cuantía ', USO_CONTRATACION)).toEqual({
+            nombre: 'Mínima cuantía', uso: 'contratacion', todas_fuentes: true, todos_sectores: true,
+            todas_modalidades: false, modalidad_ids: [],
+        });
+        expect(datosNuevaPlantilla('PGN', USO_VIABILIZACION)).toEqual({
+            nombre: 'PGN', uso: 'viabilizacion', todas_fuentes: true, todos_sectores: true,
+        });
+    });
+});
+
+describe('modalidades de la plantilla', () => {
+    const contratacion = {
+        uso: 'contratacion', nombre: 'Licitación', descripcion: null, alcance: null, todas_fuentes: true, todos_sectores: true,
+        fuentes: [], sectores: [], todas_modalidades: false,
+        modalidades: [{ id: 3, nombre: 'Licitación pública', activo: true }, { id: 7, nombre: 'Concurso de méritos', activo: false }],
+    };
+
+    it('lee las modalidades y las envía solo en contratación', () => {
+        const formulario = formularioPlantilla(contratacion);
+        expect(formulario).toMatchObject({ todas_modalidades: false, modalidad_ids: [3, 7] });
+        expect(datosPlantilla(formulario, USO_CONTRATACION)).toMatchObject({ todas_modalidades: false, modalidad_ids: [3, 7] });
+        expect(datosPlantilla(formulario, USO_VIABILIZACION)).not.toHaveProperty('modalidad_ids');
+        expect(datosPlantilla(formulario)).not.toHaveProperty('todas_modalidades');
+    });
+
+    it('con "Todas las modalidades" envía la lista vacía', () => {
+        const formulario = { ...formularioPlantilla(contratacion), todas_modalidades: true };
+        expect(datosPlantilla(formulario, USO_CONTRATACION)).toMatchObject({ todas_modalidades: true, modalidad_ids: [] });
+    });
+
+    it('al guardar sigue el uso de la plantilla y no lo envía: no cambia', () => {
+        const formulario = formularioPlantilla(contratacion);
+        const datos = datosGuardarPlantilla(formulario, contratacion, []);
+        expect(datos).toMatchObject({ modalidad_ids: [3, 7] });
+        expect(datos).not.toHaveProperty('uso');
+        expect(datosGuardarPlantilla(formulario, { uso: 'viabilizacion', es_sgr: false }, [])).not.toHaveProperty('modalidad_ids');
+        expect(datosGuardarPlantilla(formulario, { uso: 'viabilizacion', es_sgr: true }, [])).not.toHaveProperty('modalidad_ids');
+        expect(PLANTILLA_VACIA).toMatchObject({ todas_modalidades: false, modalidad_ids: [] });
+    });
+
+    it('resume las modalidades en la lista y marca las inactivas', () => {
+        expect(textoModalidades(contratacion)).toBe('Licitación pública, Concurso de méritos (inactiva)');
+        expect(textoModalidades({ ...contratacion, todas_modalidades: true })).toBe('Todas las modalidades');
+        expect(textoModalidades({ ...contratacion, modalidades: [] })).toBe('Sin modalidades');
+        expect(textoModalidades({})).toBe('Sin modalidades');
+    });
+
+    it('conserva en el catálogo lo que la plantilla tiene y el catálogo no trae', () => {
+        const catalogo = [{ id: 3, nombre: 'Licitación pública', activo: true }, { id: 4, nombre: 'Selección abreviada', activo: true }];
+        expect(catalogoConPropios(catalogo, contratacion.modalidades).map((m) => m.id)).toEqual([3, 4, 7]);
+        expect(catalogoConPropios(null, contratacion.modalidades).map((m) => m.id)).toEqual([3, 7]);
+        expect(catalogoConPropios(catalogo, undefined)).toEqual(catalogo);
+        // La inactiva que la plantilla ya tiene sigue entre las opciones; otra inactiva, no.
+        const opciones = opcionesCatalogo([...catalogo, { id: 9, nombre: 'Otra', activo: false }, contratacion.modalidades[1]], [3, 7]);
+        expect(opciones.map((m) => m.id)).toEqual([3, 4, 7]);
     });
 });

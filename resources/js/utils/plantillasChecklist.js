@@ -2,6 +2,7 @@
 // Funciones puras, probadas en plantillasChecklist.test.js. Las reglas las valida el backend.
 
 import { CATEGORIAS, ORDEN_SECCIONES, SECCIONES, mensajeError, textoResponsable } from './expedienteChecklist';
+import { RUTA_PLANTILLAS } from './navegacion';
 
 // La lista vive en expedienteChecklist.js porque el checklist del expediente también agrupa por categoría.
 export { CATEGORIAS };
@@ -31,6 +32,16 @@ export const ALCANCES = [
     ['especifica', 'Específica'],
 ];
 
+// Los valores son los de PlantillaChecklist::USOS (plantillasChecklist.test.js lo comprueba).
+export const USO_VIABILIZACION = 'viabilizacion';
+export const USO_CONTRATACION = 'contratacion';
+
+/** Usos de una plantilla, en el orden del selector de la lista. El uso se elige al crear y no cambia. */
+export const USOS = [
+    [USO_VIABILIZACION, 'Viabilización'],
+    [USO_CONTRATACION, 'Contratación'],
+];
+
 const etiqueta = (lista, valor) => lista.find(([v]) => v === valor)?.[1] ?? '';
 
 export const etiquetaCategoria = (valor) => etiqueta(CATEGORIAS, valor);
@@ -38,10 +49,42 @@ export const etiquetaTipo = (valor) => etiqueta(TIPOS_REQUISITO, valor);
 export const etiquetaCaracter = (valor) => etiqueta(CARACTERES, valor);
 export const etiquetaAlcance = (valor) => etiqueta(ALCANCES, valor);
 export const etiquetaFuenteNormativa = (valor) => etiqueta(FUENTES_NORMATIVAS, valor);
+export const etiquetaUso = (valor) => etiqueta(USOS, valor);
+
+/** Una plantilla sin uso es de viabilización: así quedaron todas las anteriores a la contratación. */
+export const esContratacion = (plantilla) => plantilla?.uso === USO_CONTRATACION;
+export const usoDePlantilla = (plantilla) => (esContratacion(plantilla) ? USO_CONTRATACION : USO_VIABILIZACION);
+
+/** El uso que pide la URL de la lista (`?uso=`); sin él o con un valor desconocido, viabilización. */
+export const usoDeConsulta = (valor) => (USOS.some(([v]) => v === valor) ? valor : USO_VIABILIZACION);
+
+/** La ruta de la lista en la pestaña de un uso: la de viabilización es la de siempre, sin parámetro. */
+export const rutaListaPlantillas = (uso) => (uso === USO_CONTRATACION ? `${RUTA_PLANTILLAS}?uso=${USO_CONTRATACION}` : RUTA_PLANTILLAS);
+
+/**
+ * Lo que se envía al crear una plantilla desde la lista: el uso de la pestaña activa, para todas
+ * las fuentes y sectores. Una de contratación nace sin modalidades: se eligen en el detalle y
+ * publicar las exige, para que no se ofrezca a todas sin que nadie lo haya decidido.
+ */
+export const datosNuevaPlantilla = (nombre, uso) => ({
+    nombre: String(nombre ?? '').trim(),
+    uso,
+    todas_fuentes: true,
+    todos_sectores: true,
+    ...(uso === USO_CONTRATACION ? { todas_modalidades: false, modalidad_ids: [] } : {}),
+});
 
 /** "Todas las fuentes" o los nombres separados por coma. */
 export const textoAsociaciones = (todas, items, textoTodas) =>
     todas ? textoTodas : (items.length ? items.map((i) => i.nombre).join(', ') : '—');
+
+/** Las modalidades de una plantilla de contratación en la lista; las inactivas, marcadas. */
+export const textoModalidades = (plantilla) => {
+    if (plantilla?.todas_modalidades) return 'Todas las modalidades';
+    const modalidades = plantilla?.modalidades ?? [];
+    if (!modalidades.length) return 'Sin modalidades';
+    return modalidades.map((m) => (m.activo === false ? `${m.nombre} (inactiva)` : m.nombre)).join(', ');
+};
 
 export const PLANTILLA_VACIA = {
     nombre: '',
@@ -51,8 +94,11 @@ export const PLANTILLA_VACIA = {
     todos_sectores: true,
     fuente_ids: [],
     sector_ids: [],
+    todas_modalidades: false,
+    modalidad_ids: [],
 };
 
+/** El formulario de General. Las modalidades solo se usan en una plantilla de contratación. */
 export const formularioPlantilla = (plantilla) => ({
     nombre: plantilla.nombre ?? '',
     descripcion: plantilla.descripcion ?? '',
@@ -61,10 +107,15 @@ export const formularioPlantilla = (plantilla) => ({
     todos_sectores: Boolean(plantilla.todos_sectores),
     fuente_ids: (plantilla.fuentes ?? []).map((f) => f.id),
     sector_ids: (plantilla.sectores ?? []).map((s) => s.id),
+    todas_modalidades: Boolean(plantilla.todas_modalidades),
+    modalidad_ids: (plantilla.modalidades ?? []).map((m) => m.id),
 });
 
-/** Lo que espera la API: con "todas", la lista se envía vacía. */
-export const datosPlantilla = (formulario) => ({
+/**
+ * Lo que espera la API: con "todas", la lista se envía vacía. Las modalidades solo viajan en una
+ * plantilla de contratación (`uso`): la de viabilización las rechaza. El uso no se envía: no cambia.
+ */
+export const datosPlantilla = (formulario, uso = USO_VIABILIZACION) => ({
     nombre: formulario.nombre.trim(),
     descripcion: formulario.descripcion.trim() || null,
     alcance: formulario.alcance || null,
@@ -72,6 +123,10 @@ export const datosPlantilla = (formulario) => ({
     todos_sectores: formulario.todos_sectores,
     fuente_ids: formulario.todas_fuentes ? [] : formulario.fuente_ids,
     sector_ids: formulario.todos_sectores ? [] : formulario.sector_ids,
+    ...(uso === USO_CONTRATACION ? {
+        todas_modalidades: Boolean(formulario.todas_modalidades),
+        modalidad_ids: formulario.todas_modalidades ? [] : (formulario.modalidad_ids ?? []),
+    } : {}),
 });
 
 /**
@@ -79,16 +134,26 @@ export const datosPlantilla = (formulario) => ({
  * fuente SGR (salvo que ya sea para todas las fuentes): un dato inconsistente no debe llegar como 422.
  */
 export const datosGuardarPlantilla = (formulario, plantilla, fuentes = []) => {
-    if (!plantilla?.es_sgr) return datosPlantilla(formulario);
+    if (!plantilla?.es_sgr) return datosPlantilla(formulario, plantilla?.uso);
     const idSgr = fuentes.find((f) => f.clave === 'sgr')?.id;
     const conSgr = idSgr === undefined || formulario.todas_fuentes || formulario.fuente_ids.includes(idSgr)
         ? formulario.fuente_ids
         : [...formulario.fuente_ids, idSgr];
-    return datosPlantilla({ ...formulario, todos_sectores: true, fuente_ids: conSgr });
+    return datosPlantilla({ ...formulario, todos_sectores: true, fuente_ids: conSgr }, plantilla.uso);
 };
 
 /** Opciones de un catálogo: las activas y las que la plantilla ya tiene. */
 export const opcionesCatalogo = (items, elegidos) => items.filter((i) => i.activo || elegidos.includes(i.id));
+
+/**
+ * El catálogo más lo que la plantilla ya tiene y el catálogo no trae (por ejemplo, porque no se
+ * pudo cargar): así no desaparece una casilla marcada. Lo que falta va al final, como llega.
+ */
+export const catalogoConPropios = (items, propios) => {
+    const lista = items ?? [];
+    const faltan = (propios ?? []).filter((p) => !lista.some((i) => i.id === p.id));
+    return [...lista, ...faltan];
+};
 
 const CAMPOS_TEXTO = [
     'texto', 'descripcion', 'categoria', 'tipo_requisito', 'cargo_cumplimiento', 'cargo_revision',
