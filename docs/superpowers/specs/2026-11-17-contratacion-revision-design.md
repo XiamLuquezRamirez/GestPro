@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-11-17
 **Origen:** pedido del usuario: "hoy no hay una revisión como tal de los proyectos en licitación". La guía de Colombia Compra para SECOP II sirve de punto de partida, y el seguimiento debe ser parametrizable para procesos que no van por SECOP.
-**Estado:** borrador para revisión del usuario.
+**Estado:** aprobado por el usuario el 2026-11-17. Etapa 1 (catálogos y procesos) implementada y verificada en copia; pendiente de validar y aplicar en `gest_pro`.
 
 ## Objetivo
 
