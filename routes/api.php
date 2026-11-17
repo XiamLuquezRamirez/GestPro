@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\EtapaContratacionController;
 use App\Http\Controllers\FuenteFinanciacionController;
 use App\Http\Controllers\ModalidadController;
 use App\Http\Controllers\ProyectoController;
@@ -52,6 +53,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/fuentesFinanciacion', [FuenteFinanciacionController::class, 'index']);
     Route::get('/tiposProcesos', [ProyectoController::class, 'tiposProcesos']);
     Route::get('/modalidades', [ModalidadController::class, 'index']);
+    Route::get('/etapasContratacion', [EtapaContratacionController::class, 'index']);
 
     // Escritura de datos de negocio: Administrador o Gestor
     Route::middleware('can:editar-datos')->group(function () {
@@ -106,6 +108,9 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/activarTipoProceso', [ProyectoController::class, 'activarTipoProceso']);
         Route::post('/guardarModalidad', [ModalidadController::class, 'guardar']);
         Route::post('/activarModalidad', [ModalidadController::class, 'activar']);
+        Route::post('/guardarEtapaContratacion', [EtapaContratacionController::class, 'guardar']);
+        Route::post('/activarEtapaContratacion', [EtapaContratacionController::class, 'activar']);
+        Route::put('/etapasContratacion/orden', [EtapaContratacionController::class, 'ordenar']);
     });
 
     // Gestión de usuarios: solo Administrador
