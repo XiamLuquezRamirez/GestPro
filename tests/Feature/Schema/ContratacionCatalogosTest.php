@@ -363,7 +363,7 @@ class ContratacionCatalogosTest extends TestCase
         $this->assertTrue($proceso->usuarioCreo->is($usuario));
         $this->assertSame(['secop_ii', 'secop_i', 'tvec', 'ninguna'], ProcesoLicitacion::PLATAFORMAS);
         $this->assertSame(
-            ['preparacion', 'publicado', 'evaluacion', 'adjudicado', 'desierto', 'celebrado', 'cancelado'],
+            ['preparacion', 'publicado', 'evaluacion', 'adjudicado', 'desierto', 'celebrado', 'cancelado', 'revocado'],
             ProcesoLicitacion::ESTADOS
         );
     }
