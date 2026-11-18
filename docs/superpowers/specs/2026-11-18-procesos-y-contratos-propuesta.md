@@ -3,7 +3,7 @@
 **Fecha:** 2026-11-18
 **Rama:** `feature/contratacion`
 **Origen:** pedido del usuario del 2026-11-18 ("revisar qué es aplicable en nuestra plataforma y respetar la estructura que ya llevamos").
-**Estado:** aprobada por el usuario el 2026-11-18, con las 6 recomendaciones de la sección 12. La fase 2 se divide en las etapas 3A (datos y reglas) y 3B (módulo Contratos, SECOP II, "Registrar contrato" y ficha del proyecto). Además, un contrato puede no tener proyecto. La etapa 3A está implementada y verificada en copia, pendiente de validar y aplicar en `gest_pro`. Este documento no incluye código, migraciones ni cambios en bases de datos.
+**Estado:** aprobada por el usuario el 2026-11-18, con las 6 recomendaciones de la sección 12. La fase 2 se divide en las etapas 3A (datos y reglas) y 3B (módulo Contratos, SECOP II, "Registrar contrato" y ficha del proyecto). Además, un contrato puede no tener proyecto. La etapa 3A está validada y aplicada en `gest_pro` (2026-11-18). Este documento no incluye código, migraciones ni cambios en bases de datos.
 **Documentos que toca:** `2026-11-17-contratacion-revision-design.md` (sección 10 y etapas 2 a 7) y `2026-11-06-plantillas-checklist-design.md` (solo se consulta; el motor no cambia).
 
 ---
