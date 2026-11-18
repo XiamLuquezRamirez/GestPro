@@ -58,10 +58,12 @@ export const pedirProcesosProyecto = async (proyectoId) => {
  * - `recargar(id)`: vuelve a traer los contratos tras un cambio en las pestañas; resuelve el contrato `id` recargado o null.
  * - `onGuardado(contrato)`: tras guardar (con los avisos ya mostrados); quien lo pinta cierra el editor.
  * - `onCancelar()`: "Cancelar" o "Volver a la lista".
+ * - `onOcupado(ocupado)` (opcional): true al empezar a guardar y false al terminar (tras `onGuardado`,
+ *   si se guardó), para que quien lo pinta no lo cierre a medias.
  */
 const ContratoEditor = ({
     proyecto = null, contrato = null, procesoInicial = null, tiposContrato, procesosIniciales = null, proyectos, puedeEditar = true,
-    recargar, onGuardado, onCancelar,
+    recargar, onGuardado, onCancelar, onOcupado,
 }) => {
     const [editingContrato, setEditingContrato] = useState(contrato);
     const [contratoActiveTab, setContratoActiveTab] = useState('informacion');
@@ -526,10 +528,12 @@ const ContratoEditor = ({
     const handleSaveContrato = async () => {
         if (enviandoContrato.current) return;
         enviandoContrato.current = true;
+        onOcupado?.(true);
         try {
             await enviarContrato();
         } finally {
             enviandoContrato.current = false;
+            onOcupado?.(false);
         }
     };
 

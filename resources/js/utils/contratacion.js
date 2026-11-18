@@ -145,6 +145,22 @@ const TONOS_ESTADO = {
 
 export const MAXIMO_OBSERVACION = 2000;
 
+/** Estados en que un proceso admite contratos (ProcesoLicitacion::ADMITEN_CONTRATOS). */
+export const ESTADOS_ADMITEN_CONTRATOS = ['adjudicado', 'celebrado'];
+
+/** "Registrar contrato" desde un proceso: quien edita procesos, y solo si está adjudicado o celebrado. */
+export const puedeRegistrarContrato = (usuario, proceso) => (
+    puedeEditarProcesos(usuario) && ESTADOS_ADMITEN_CONTRATOS.includes(proceso?.estado)
+);
+
+/**
+ * El modo de la lista de procesos tras guardar el contrato del proceso `procesoId`: se cierra si
+ * sigue abierto ese contrato; cualquier otro modo abierto entretanto se conserva.
+ */
+export const modoTrasGuardarContrato = (modo, procesoId) => (
+    modo?.tipo === 'contrato' && String(modo.proceso?.id) === String(procesoId) ? null : modo
+);
+
 const etiqueta = (lista, valor) => lista.find(([v]) => v === valor)?.[1];
 
 export const etiquetaPlataforma = (valor) => etiqueta(PLATAFORMAS, valor) ?? '—';

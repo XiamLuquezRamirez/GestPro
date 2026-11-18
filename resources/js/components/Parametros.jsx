@@ -1753,6 +1753,7 @@ const Parametros = ({ user }) => {
                     proyecto={proyectoProcesos}
                     user={user}
                     onCerrar={() => setProyectoProcesos(null)}
+                    onCambio={listProyectos}
                 />
             )}
 

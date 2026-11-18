@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
     CAMPOS_PROCESO,
     CATALOGO_VACIO,
+    ESTADOS_ADMITEN_CONTRATOS,
     ESTADOS_CIERRE,
     ESTADOS_PROCESO,
     PLATAFORMAS,
@@ -33,6 +34,8 @@ import {
     opcionesEtapa,
     opcionesFuenteProceso,
     puedeEditarProcesos,
+    puedeRegistrarContrato,
+    modoTrasGuardarContrato,
     textoContratos,
     textoValor,
     tonoEstado,
@@ -186,6 +189,10 @@ describe('constantes contra PHP', () => {
         expect(ESTADOS_PROCESO.map(([v]) => v)).toEqual(lista('ESTADOS'));
         expect(ESTADOS_CIERRE.every((e) => lista('ESTADOS').includes(e))).toBe(true);
     });
+
+    it('los estados que admiten contratos coinciden con ADMITEN_CONTRATOS', () => {
+        expect(ESTADOS_ADMITEN_CONTRATOS).toEqual(lista('ADMITEN_CONTRATOS'));
+    });
 });
 
 describe('puedeEditarProcesos', () => {
@@ -194,6 +201,39 @@ describe('puedeEditarProcesos', () => {
         expect(puedeEditarProcesos({ rol: 'Gestor' })).toBe(true);
         expect(puedeEditarProcesos({ rol: 'Consulta' })).toBe(false);
         expect(puedeEditarProcesos(undefined)).toBe(false);
+    });
+});
+
+describe('modoTrasGuardarContrato', () => {
+    const proceso = { id: 4 };
+
+    it('cierra el contrato de ese proceso', () => {
+        expect(modoTrasGuardarContrato({ tipo: 'contrato', proceso }, 4)).toBeNull();
+    });
+
+    it('no cierra otro modo abierto entretanto', () => {
+        const estado = { tipo: 'estado', proceso };
+        const edicion = { tipo: 'proceso', proceso: null };
+        const otroContrato = { tipo: 'contrato', proceso: { id: 5 } };
+        expect(modoTrasGuardarContrato(estado, 4)).toBe(estado);
+        expect(modoTrasGuardarContrato(edicion, 4)).toBe(edicion);
+        expect(modoTrasGuardarContrato(otroContrato, 4)).toBe(otroContrato);
+        expect(modoTrasGuardarContrato(null, 4)).toBeNull();
+    });
+});
+
+describe('puedeRegistrarContrato', () => {
+    const gestor = { rol: 'Gestor' };
+
+    it('solo un proceso adjudicado o celebrado, y solo para quien puede editar', () => {
+        expect(puedeRegistrarContrato(gestor, { estado: 'adjudicado' })).toBe(true);
+        expect(puedeRegistrarContrato({ rol: 'Administrador' }, { estado: 'celebrado' })).toBe(true);
+        ['preparacion', 'publicado', 'evaluacion', 'desierto', 'cancelado', 'revocado'].forEach((estado) => {
+            expect(puedeRegistrarContrato(gestor, { estado })).toBe(false);
+        });
+        expect(puedeRegistrarContrato({ rol: 'Consulta' }, { estado: 'adjudicado' })).toBe(false);
+        expect(puedeRegistrarContrato(undefined, { estado: 'adjudicado' })).toBe(false);
+        expect(puedeRegistrarContrato(gestor, undefined)).toBe(false);
     });
 });
 

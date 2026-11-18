@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
-import { faArrowRightArrowLeft, faArrowUpRightFromSquare, faGavel, faPen, faPlus, faTrash, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRightArrowLeft, faArrowUpRightFromSquare, faFileSignature, faGavel, faPen, faPlus, faTrash, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
 import { avisarError } from '../utils/avisosPlantillas';
@@ -8,9 +8,10 @@ import { mensajeApi } from '../utils/plantillasChecklist';
 import {
     CAMPOS_PROCESO, ESTADOS_PROCESO, MAXIMO_OBSERVACION, MAXIMO_OBSERVACIONES_PROCESO, PLATAFORMAS, avisoCambioEstado, datosEstado, datosProceso,
     erroresPorCampo, esEdicionDesactualizada, etiquetaEstadoProceso, etiquetaPlataforma, formularioProceso,
-    indiceFocoAtrapado, numeroProceso, opcionesConActual, opcionesFuenteProceso, ordenarCatalogo, puedeEditarProcesos,
+    indiceFocoAtrapado, modoTrasGuardarContrato, numeroProceso, opcionesConActual, opcionesFuenteProceso, ordenarCatalogo, puedeEditarProcesos, puedeRegistrarContrato,
     textoContratos, textoFecha, textoValor, tonoEstado, validarProceso, valorEnEdicion,
 } from '../utils/contratacion';
+import ContratoEditor from './contratos/ContratoEditor';
 import useOcupado from './useOcupado';
 import '../../css/Plantillas.css';
 import '../../css/Contratacion.css';
@@ -24,26 +25,25 @@ const CATALOGOS = [
     { clave: 'responsables', ruta: '/responsables', guardar: (d, { setResponsables }) => setResponsables(comoLista(d)) },
 ];
 
+// Un contrato nuevo no tiene pestañas que recargar: el editor lo cierra quien lo abrió al guardar.
+const sinRecargar = async () => null;
+
 const ENFOCABLES = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
- * Diálogo modal accesible: el foco entra al abrir, Tab no sale de él, Escape llama a `onEscape`,
- * un clic en el fondo a `onFondo` y, al cerrar, el foco vuelve a donde estaba (el botón
- * "Procesos" de la fila).
+ * Comportamiento de un diálogo modal sobre `caja`: el foco entra al abrir, Tab no sale de él y,
+ * al cerrar, vuelve a donde estaba. Devuelve el `onKeyDown` de la caja: Escape llama a `onEscape`.
  */
-const Dialogo = ({ titulo, subtitulo, onCerrar, onEscape, onFondo, children }) => {
-    const caja = useRef(null);
-    const idTitulo = useId();
-
+const useDialogoModal = (caja, onEscape) => {
     useEffect(() => {
         const anterior = document.activeElement;
         caja.current?.focus();
         return () => {
             if (anterior instanceof HTMLElement && document.contains(anterior)) anterior.focus();
         };
-    }, []);
+    }, [caja]);
 
-    const alPulsar = (e) => {
+    return (e) => {
         if (e.key === 'Escape') {
             e.preventDefault();
             onEscape();
@@ -56,6 +56,16 @@ const Dialogo = ({ titulo, subtitulo, onCerrar, onEscape, onFondo, children }) =
         e.preventDefault();
         (focos[destino] ?? caja.current).focus();
     };
+};
+
+/**
+ * Diálogo modal accesible: Escape llama a `onEscape`, un clic en el fondo a `onFondo` y, al
+ * cerrar, el foco vuelve a donde estaba (el botón "Procesos" de la fila).
+ */
+const Dialogo = ({ titulo, subtitulo, onCerrar, onEscape, onFondo, children }) => {
+    const caja = useRef(null);
+    const idTitulo = useId();
+    const alPulsar = useDialogoModal(caja, onEscape);
 
     return (
         <div className="ct-dialogo-fondo" onMouseDown={(e) => { if (e.target === e.currentTarget) onFondo(); }}>
@@ -70,6 +80,39 @@ const Dialogo = ({ titulo, subtitulo, onCerrar, onEscape, onFondo, children }) =
                     </button>
                 </header>
                 <div className="ct-dialogo-cuerpo">{children}</div>
+            </div>
+        </div>
+    );
+};
+
+/**
+ * El editor de un contrato nuevo del proyecto, con ese proceso ya elegido (y su precarga), en un
+ * diálogo propio sobre el de procesos. Los controles de cerrar son los del editor (Cancelar) y la
+ * "×"; Escape cancela y un clic en el fondo no descarta lo escrito. Mientras el editor guarda,
+ * ni Escape ni la "×" lo cierran.
+ */
+const DialogoContrato = ({ proyecto, proceso, onGuardado, onCancelar }) => {
+    const caja = useRef(null);
+    const idTitulo = useId();
+    const [guardando, setGuardando] = useState(false);
+    const cancelar = () => { if (!guardando) onCancelar(); };
+    const alPulsar = useDialogoModal(caja, cancelar);
+
+    return (
+        <div className="modal-overlay">
+            <div ref={caja} className="modal-content contratos-modal" role="dialog" aria-modal="true" aria-labelledby={idTitulo} tabIndex={-1} onKeyDown={alPulsar}>
+                <div className="modal-header">
+                    <h2 id={idTitulo}><FontAwesomeIcon icon={faFileSignature} aria-hidden="true" /> Nuevo contrato - {proyecto.nombre}</h2>
+                    <button type="button" onClick={cancelar} className="btn-close" aria-label="Cerrar" disabled={guardando}>×</button>
+                </div>
+                <ContratoEditor
+                    proyecto={proyecto}
+                    procesoInicial={proceso.id}
+                    recargar={sinRecargar}
+                    onGuardado={onGuardado}
+                    onCancelar={cancelar}
+                    onOcupado={setGuardando}
+                />
             </div>
         </div>
     );
@@ -275,7 +318,7 @@ const NumeroProceso = ({ proceso }) => {
  * Parámetros → Proyectos. Un Administrador o Gestor los crea, edita, cambia de estado y elimina;
  * los demás solo los consultan. El backend aplica los mismos permisos y reglas.
  */
-const ProcesosProyecto = ({ proyecto, user, onCerrar }) => {
+const ProcesosProyecto = ({ proyecto, user, onCerrar, onCambio }) => {
     const [procesos, setProcesos] = useState(null);
     const [error, setError] = useState(null);
     const [modalidades, setModalidades] = useState(null);
@@ -283,7 +326,7 @@ const ProcesosProyecto = ({ proyecto, user, onCerrar }) => {
     const [fuentes, setFuentes] = useState(null);
     const [responsables, setResponsables] = useState(null);
     const [errorCatalogos, setErrorCatalogos] = useState(null);
-    // null; { tipo: 'proceso', proceso: null | proceso } o { tipo: 'estado', proceso }.
+    // null; { tipo: 'proceso', proceso: null | proceso }, { tipo: 'estado', proceso } o { tipo: 'contrato', proceso }.
     const [modo, setModo] = useState(null);
     const [ocupado, ejecutar] = useOcupado();
     const contenedor = useRef(null);
@@ -421,6 +464,15 @@ const ProcesosProyecto = ({ proyecto, user, onCerrar }) => {
         }
     });
 
+    // El contrato se guardó (el editor ya mostró sus avisos): se cierra (si sigue abierto) y se
+    // recarga la lista, que trae la cuenta de contratos y el estado, que pudo pasar a celebrado con
+    // la propuesta del editor. `onCambio` avisa a quien abrió el diálogo: sus contratos cambiaron.
+    const alGuardarContrato = (procesoId) => {
+        setModo((actual) => modoTrasGuardarContrato(actual, procesoId));
+        cargar();
+        onCambio?.();
+    };
+
     const eliminar = (proceso) => ejecutar(async () => {
         const { isConfirmed } = await Swal.fire({
             icon: 'warning',
@@ -445,108 +497,125 @@ const ProcesosProyecto = ({ proyecto, user, onCerrar }) => {
     const editandoProceso = modo?.tipo === 'proceso';
 
     return (
-        <Dialogo titulo={proyecto.nombre} subtitulo="Procesos de contratación" onCerrar={() => { if (!ocupado) onCerrar(); }} onEscape={alEscape} onFondo={alFondo}>
-            <div className="ct-seccion" ref={contenedor}>
-                {errorCatalogos && (
-                    <p className="pl-aviso-suave" role="status">
-                        {errorCatalogos} <button type="button" className="gp-boton" onClick={reintentarCatalogos}>Reintentar</button>
-                    </p>
-                )}
+        <>
+            <Dialogo titulo={proyecto.nombre} subtitulo="Procesos de contratación" onCerrar={() => { if (!ocupado) onCerrar(); }} onEscape={alEscape} onFondo={alFondo}>
+                <div className="ct-seccion" ref={contenedor}>
+                    {errorCatalogos && (
+                        <p className="pl-aviso-suave" role="status">
+                            {errorCatalogos} <button type="button" className="gp-boton" onClick={reintentarCatalogos}>Reintentar</button>
+                        </p>
+                    )}
 
-                {editandoProceso ? (
-                    <FormularioProceso
-                        proceso={modo.proceso}
-                        fuenteIds={proyecto.fuente_ids ?? []}
-                        modalidades={modalidades}
-                        entidades={entidades}
-                        fuentes={fuentes}
-                        responsables={responsables}
-                        guardando={ocupado}
-                        onGuardar={guardar}
-                        onCancelar={() => setModo(null)}
-                    />
-                ) : (
-                    <>
-                        <div className="ct-barra">
-                            <p className="pl-ayuda">
-                                {edita
-                                    ? 'Un proyecto puede tener varios procesos, por ejemplo la obra y la interventoría.'
-                                    : 'Solo un Administrador o Gestor puede registrar o cambiar procesos.'}
-                            </p>
-                            {edita && (
-                                <button
-                                    type="button"
-                                    className="gp-boton gp-boton-primario"
-                                    data-foco="nuevo"
-                                    disabled={ocupado || procesos === null || modalidades === null}
-                                    onClick={() => abrir({ tipo: 'proceso', proceso: null }, 'nuevo')}
-                                >
-                                    <FontAwesomeIcon icon={faPlus} /> Nuevo proceso
-                                </button>
+                    {editandoProceso ? (
+                        <FormularioProceso
+                            proceso={modo.proceso}
+                            fuenteIds={proyecto.fuente_ids ?? []}
+                            modalidades={modalidades}
+                            entidades={entidades}
+                            fuentes={fuentes}
+                            responsables={responsables}
+                            guardando={ocupado}
+                            onGuardar={guardar}
+                            onCancelar={() => setModo(null)}
+                        />
+                    ) : (
+                        <>
+                            <div className="ct-barra">
+                                <p className="pl-ayuda">
+                                    {edita
+                                        ? 'Un proyecto puede tener varios procesos, por ejemplo la obra y la interventoría.'
+                                        : 'Solo un Administrador o Gestor puede registrar o cambiar procesos.'}
+                                </p>
+                                {edita && (
+                                    <button
+                                        type="button"
+                                        className="gp-boton gp-boton-primario"
+                                        data-foco="nuevo"
+                                        disabled={ocupado || procesos === null || modalidades === null}
+                                        onClick={() => abrir({ tipo: 'proceso', proceso: null }, 'nuevo')}
+                                    >
+                                        <FontAwesomeIcon icon={faPlus} /> Nuevo proceso
+                                    </button>
+                                )}
+                            </div>
+
+                            {error && (
+                                <p className="pl-error" role="alert">
+                                    {error} <button type="button" className="gp-boton" onClick={cargar}>Reintentar</button>
+                                </p>
                             )}
-                        </div>
+                            {procesos === null && !error && <p className="gp-vacio" role="status">Cargando procesos…</p>}
+                            {procesos !== null && procesos.length === 0 && (
+                                <p className="gp-vacio">
+                                    <FontAwesomeIcon icon={faGavel} aria-hidden="true" /> Este proyecto aún no tiene procesos de contratación.
+                                </p>
+                            )}
 
-                        {error && (
-                            <p className="pl-error" role="alert">
-                                {error} <button type="button" className="gp-boton" onClick={cargar}>Reintentar</button>
-                            </p>
-                        )}
-                        {procesos === null && !error && <p className="gp-vacio" role="status">Cargando procesos…</p>}
-                        {procesos !== null && procesos.length === 0 && (
-                            <p className="gp-vacio">
-                                <FontAwesomeIcon icon={faGavel} aria-hidden="true" /> Este proyecto aún no tiene procesos de contratación.
-                            </p>
-                        )}
-
-                        {procesos !== null && procesos.length > 0 && (
-                            <ul className="pl-lista" aria-label="Procesos del proyecto">
-                                {procesos.map((p) => (
-                                    <li key={p.id} className="gp-panel ct-proceso">
-                                        <div className="ct-proceso-cabecera">
-                                            <p className="ct-proceso-objeto">{p.objeto || 'Sin objeto'}</p>
-                                            <span className={`ct-estado ct-estado-${tonoEstado(p.estado)}`}>{etiquetaEstadoProceso(p.estado)}</span>
-                                        </div>
-                                        <dl className="pl-datos">
-                                            <div>
-                                                <dt>Modalidad</dt>
-                                                <dd>{p.modalidad ? `${p.modalidad.nombre}${p.modalidad.activo ? '' : ' (inactiva)'}` : '—'}</dd>
+                            {procesos !== null && procesos.length > 0 && (
+                                <ul className="pl-lista" aria-label="Procesos del proyecto">
+                                    {procesos.map((p) => (
+                                        <li key={p.id} className="gp-panel ct-proceso">
+                                            <div className="ct-proceso-cabecera">
+                                                <p className="ct-proceso-objeto">{p.objeto || 'Sin objeto'}</p>
+                                                <span className={`ct-estado ct-estado-${tonoEstado(p.estado)}`}>{etiquetaEstadoProceso(p.estado)}</span>
                                             </div>
-                                            <div><dt>Plataforma</dt><dd>{etiquetaPlataforma(p.plataforma)}</dd></div>
-                                            <div><dt>Número</dt><dd><NumeroProceso proceso={p} /></dd></div>
-                                            <div><dt>Entidad contratante</dt><dd>{p.entidad_contratante?.nombre ?? '—'}</dd></div>
-                                            <div><dt>Valor</dt><dd className="ct-valor">{textoValor(p.monto)}</dd></div>
-                                            <div><dt>Fuente de financiación</dt><dd>{p.fuente?.nombre ?? '—'}</dd></div>
-                                            <div><dt>Responsable</dt><dd>{p.responsable?.nombre ?? '—'}</dd></div>
-                                            <div><dt>Apertura</dt><dd>{textoFecha(p.fecha_apertura)}</dd></div>
-                                            <div><dt>Cierre</dt><dd>{textoFecha(p.fecha_cierre)}</dd></div>
-                                            <div><dt>Contratos vinculados</dt><dd>{textoContratos(p.contratos)}</dd></div>
-                                        </dl>
-                                        {p.observaciones && <p className="pl-ayuda">{p.observaciones}</p>}
-                                        {modo?.tipo === 'estado' && modo.proceso.id === p.id ? (
-                                            <FormularioEstado proceso={p} guardando={ocupado} onGuardar={cambiarEstado} onCancelar={() => setModo(null)} />
-                                        ) : edita && (
-                                            <div className="pl-tarjeta-acciones">
-                                                <button type="button" className="gp-boton" data-foco={`editar:${p.id}`} disabled={ocupado || modo !== null || modalidades === null}
-                                                    onClick={() => abrir({ tipo: 'proceso', proceso: p }, `editar:${p.id}`)}>
-                                                    <FontAwesomeIcon icon={faPen} /> Editar
-                                                </button>
-                                                <button type="button" className="gp-boton" data-foco={`estado:${p.id}`} disabled={ocupado || modo !== null}
-                                                    onClick={() => abrir({ tipo: 'estado', proceso: p }, `estado:${p.id}`)}>
-                                                    <FontAwesomeIcon icon={faArrowRightArrowLeft} /> Cambiar estado
-                                                </button>
-                                                <button type="button" className="gp-boton" data-foco={`eliminar:${p.id}`} disabled={ocupado || modo !== null} onClick={() => eliminar(p)}>
-                                                    <FontAwesomeIcon icon={faTrash} /> Eliminar
-                                                </button>
-                                            </div>
-                                        )}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </>
-                )}
-            </div>
-        </Dialogo>
+                                            <dl className="pl-datos">
+                                                <div>
+                                                    <dt>Modalidad</dt>
+                                                    <dd>{p.modalidad ? `${p.modalidad.nombre}${p.modalidad.activo ? '' : ' (inactiva)'}` : '—'}</dd>
+                                                </div>
+                                                <div><dt>Plataforma</dt><dd>{etiquetaPlataforma(p.plataforma)}</dd></div>
+                                                <div><dt>Número</dt><dd><NumeroProceso proceso={p} /></dd></div>
+                                                <div><dt>Entidad contratante</dt><dd>{p.entidad_contratante?.nombre ?? '—'}</dd></div>
+                                                <div><dt>Valor</dt><dd className="ct-valor">{textoValor(p.monto)}</dd></div>
+                                                <div><dt>Fuente de financiación</dt><dd>{p.fuente?.nombre ?? '—'}</dd></div>
+                                                <div><dt>Responsable</dt><dd>{p.responsable?.nombre ?? '—'}</dd></div>
+                                                <div><dt>Apertura</dt><dd>{textoFecha(p.fecha_apertura)}</dd></div>
+                                                <div><dt>Cierre</dt><dd>{textoFecha(p.fecha_cierre)}</dd></div>
+                                                <div><dt>Contratos vinculados</dt><dd>{textoContratos(p.contratos)}</dd></div>
+                                            </dl>
+                                            {p.observaciones && <p className="pl-ayuda">{p.observaciones}</p>}
+                                            {modo?.tipo === 'estado' && modo.proceso.id === p.id ? (
+                                                <FormularioEstado proceso={p} guardando={ocupado} onGuardar={cambiarEstado} onCancelar={() => setModo(null)} />
+                                            ) : edita && (
+                                                <div className="pl-tarjeta-acciones">
+                                                    <button type="button" className="gp-boton" data-foco={`editar:${p.id}`} disabled={ocupado || modo !== null || modalidades === null}
+                                                        onClick={() => abrir({ tipo: 'proceso', proceso: p }, `editar:${p.id}`)}>
+                                                        <FontAwesomeIcon icon={faPen} /> Editar
+                                                    </button>
+                                                    <button type="button" className="gp-boton" data-foco={`estado:${p.id}`} disabled={ocupado || modo !== null}
+                                                        onClick={() => abrir({ tipo: 'estado', proceso: p }, `estado:${p.id}`)}>
+                                                        <FontAwesomeIcon icon={faArrowRightArrowLeft} /> Cambiar estado
+                                                    </button>
+                                                    {puedeRegistrarContrato(user, p) && (
+                                                        <button type="button" className="gp-boton" data-foco={`contrato:${p.id}`} disabled={ocupado || modo !== null}
+                                                            onClick={() => abrir({ tipo: 'contrato', proceso: p }, `contrato:${p.id}`)}>
+                                                            <FontAwesomeIcon icon={faFileSignature} /> Registrar contrato
+                                                        </button>
+                                                    )}
+                                                    <button type="button" className="gp-boton" data-foco={`eliminar:${p.id}`} disabled={ocupado || modo !== null} onClick={() => eliminar(p)}>
+                                                        <FontAwesomeIcon icon={faTrash} /> Eliminar
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </>
+                    )}
+                </div>
+            </Dialogo>
+            {/* Hermano y posterior al diálogo de procesos: queda por encima y su foco no lo atrapa aquel. */}
+            {modo?.tipo === 'contrato' && (
+                <DialogoContrato
+                    proyecto={proyecto}
+                    proceso={modo.proceso}
+                    onGuardado={() => alGuardarContrato(modo.proceso.id)}
+                    onCancelar={() => setModo(null)}
+                />
+            )}
+        </>
     );
 };
 
