@@ -1,5 +1,6 @@
 // Lógica de presentación del módulo Contratos (/contratos): filtros en la URL, filas de la lista,
-// opciones de los selectores de proyecto y rutas. Funciones puras, probadas en
+// opciones de los selectores de proyecto, rutas y la vista de los contratos de la empresa en
+// SECOP II (la vista en la URL, el NIT recordado y el estado de "Importar"). Funciones puras, probadas en
 // contratosModulo.test.js. Los filtros los valida también GET /contratos/buscar.
 
 import { ESTADOS_CONTRATO, etiquetaEstadoContrato } from './contratos';
@@ -146,4 +147,106 @@ export const rutaContrato = (id) => `${RUTA_CONTRATOS}/${id}`;
 export const rutaListaDesde = (estado) => {
     const lista = estado?.lista;
     return typeof lista === 'string' && lista.startsWith('?') ? `${RUTA_CONTRATOS}${lista}` : RUTA_CONTRATOS;
+};
+
+// ---------- Contratos de la empresa en SECOP II ----------
+
+/** Las vistas de /contratos: la lista y, para quien puede editar, la de SECOP II (`?vista=secop`). */
+export const VISTA_LISTA = 'lista';
+export const VISTA_SECOP = 'secop';
+
+/** La vista de la URL. Un lector no tiene la de SECOP II (sus rutas piden editar-datos): ve la lista. */
+export const vistaDeConsulta = (consulta, edita) => (
+    edita && String(consulta?.get?.('vista') ?? '').trim() === VISTA_SECOP ? VISTA_SECOP : VISTA_LISTA
+);
+
+// La forma del NIT que acepta GET /secop/contratos-empresa (SecopII::FORMA_NIT, máx. 20).
+const FORMA_NIT = /^[0-9][0-9. ]*(-[0-9])?$/;
+const MAXIMO_NIT = 20;
+
+export const esNitValido = (valor) => {
+    const nit = String(valor ?? '').trim();
+    return nit.length <= MAXIMO_NIT && FORMA_NIT.test(nit);
+};
+
+/** El error del campo NIT antes de consultar (los mensajes del servidor), o null si se puede consultar. */
+export const errorNit = (valor) => {
+    if (String(valor ?? '').trim() === '') return 'Escribe el NIT de la empresa.';
+    return esNitValido(valor) ? null : 'Escribe el NIT solo con números (puede llevar puntos y el dígito de verificación con guion).';
+};
+
+/** El NIT sin puntos ni espacios, con el dígito de verificación si lo trae; vacío si no es válido. */
+export const normalizarNit = (valor) => (esNitValido(valor) ? String(valor).trim().replace(/[. ]/g, '') : '');
+
+/** El NIT como se lee: los miles con puntos y el dígito de verificación con guion ("900.123.456-7"). */
+export const nitParaMostrar = (valor) => {
+    const nit = normalizarNit(valor);
+    if (!nit) return '';
+    const [numero, verificacion] = nit.split('-');
+    const agrupado = numero.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return verificacion === undefined ? agrupado : `${agrupado}-${verificacion}`;
+};
+
+/** El NIT consultado, en la URL (`?vista=secop&nit=`): así, al volver, se consulta de nuevo. */
+export const nitDeConsulta = (consulta) => normalizarNit(consulta?.get?.('nit'));
+
+export const consultaVistaSecop = (nit = '') => {
+    const normalizado = normalizarNit(nit);
+    return new URLSearchParams(normalizado ? { vista: VISTA_SECOP, nit: normalizado } : { vista: VISTA_SECOP });
+};
+
+export const rutaVistaSecop = () => `${RUTA_CONTRATOS}?${consultaVistaSecop()}`;
+
+/** La clave del NIT de la empresa en el almacenamiento del navegador. */
+export const CLAVE_NIT_EMPRESA = 'gestpro.secop.nitEmpresa';
+
+// `localStorage` puede no existir o lanzar al tocarlo (bloqueado o en modo privado).
+const almacenNavegador = () => globalThis.localStorage;
+
+/** El NIT de la empresa recordado en este navegador, normalizado, o vacío (si no hay o no se puede leer). */
+export const leerNitEmpresa = (almacen = undefined) => {
+    try {
+        const destino = almacen === undefined ? almacenNavegador() : almacen;
+        return normalizarNit(destino?.getItem(CLAVE_NIT_EMPRESA));
+    } catch {
+        return '';
+    }
+};
+
+/** Recuerda el NIT de la empresa (normalizado); uno no válido no se guarda. Sin almacenamiento no pasa nada. */
+export const guardarNitEmpresa = (nit, almacen = undefined) => {
+    const normalizado = normalizarNit(nit);
+    if (!normalizado) return;
+    try {
+        const destino = almacen === undefined ? almacenNavegador() : almacen;
+        destino?.setItem(CLAVE_NIT_EMPRESA, normalizado);
+    } catch {
+        // Solo es una comodidad: sin almacenamiento, el NIT se vuelve a escribir.
+    }
+};
+
+export const TEXTO_SECOP_VACIO = 'SECOP II no tiene contratos con ese NIT como proveedor.';
+
+/**
+ * "Importar": el estado de navegación de /contratos/nuevo, con la lista de la que se viene (para
+ * volver a ella) y el resultado de SECOP II con que se llena el formulario.
+ */
+export const estadoImportarSecop = (resultado, lista) => ({ lista, secop: resultado });
+
+const esObjeto = (valor) => valor !== null && typeof valor === 'object' && !Array.isArray(valor);
+
+/**
+ * El resultado de SECOP II del estado de navegación, o null. Sin estado (al abrir la dirección a
+ * mano) o con uno que no tiene la forma de un resultado, el formulario empieza vacío.
+ */
+export const resultadoSecopDeEstado = (estado) => {
+    const resultado = estado?.secop;
+    return esObjeto(resultado) && esObjeto(resultado.contrato) ? resultado : null;
+};
+
+/** El estado de navegación sin el resultado de SECOP II: lo que se lleva al contrato ya guardado. */
+export const estadoSinSecop = (estado) => {
+    if (!esObjeto(estado)) return {};
+    const { secop, ...resto } = estado;
+    return resto;
 };

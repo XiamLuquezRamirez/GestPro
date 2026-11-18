@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
     SIN_PROYECTO, consultaDeFiltros, esIdContrato, filaContrato, filtrosDeConsulta, hayFiltros, opcionesFiltroEstado, opcionesFiltroProyecto,
     opcionesProyecto, parametrosBusqueda, puedeEditarContratos, rutaContrato, rutaListaDesde, textoAvance, textoListaVacia,
-    tonoEstadoContrato,
+    tonoEstadoContrato, CLAVE_NIT_EMPRESA, TEXTO_SECOP_VACIO, VISTA_LISTA, VISTA_SECOP, consultaVistaSecop, esNitValido,
+    errorNit, estadoImportarSecop, estadoSinSecop, guardarNitEmpresa, leerNitEmpresa, nitDeConsulta, nitParaMostrar, normalizarNit,
+    resultadoSecopDeEstado, rutaVistaSecop, vistaDeConsulta,
 } from './contratosModulo';
 import { ESTADOS_CONTRATO } from './contratos';
 import { RUTA_CONTRATOS } from './navegacion';
@@ -222,5 +224,125 @@ describe('puedeEditarContratos', () => {
         expect(puedeEditarContratos({ rol: 'Gestor' })).toBe(true);
         expect(puedeEditarContratos({ rol: 'Consulta' })).toBe(false);
         expect(puedeEditarContratos(null)).toBe(false);
+    });
+});
+
+// ---------- Contratos de la empresa en SECOP II ----------
+
+describe('vistaDeConsulta', () => {
+    it('?vista=secop abre los contratos de la empresa en SECOP II para quien puede editar', () => {
+        expect(vistaDeConsulta(consulta('vista=secop'), true)).toBe(VISTA_SECOP);
+        expect(vistaDeConsulta(consulta('vista=secop&nit=900123456'), true)).toBe(VISTA_SECOP);
+    });
+
+    it('para un lector, o sin vista o con otra, es la lista', () => {
+        expect(vistaDeConsulta(consulta('vista=secop'), false)).toBe(VISTA_LISTA);
+        expect(vistaDeConsulta(consulta(''), true)).toBe(VISTA_LISTA);
+        expect(vistaDeConsulta(consulta('vista=otra'), true)).toBe(VISTA_LISTA);
+        expect(vistaDeConsulta(undefined, true)).toBe(VISTA_LISTA);
+    });
+
+    it('la consulta de cada vista', () => {
+        expect(consultaVistaSecop('').toString()).toBe('vista=secop');
+        expect(consultaVistaSecop('900.123.456-7').toString()).toBe('vista=secop&nit=900123456-7');
+        expect(rutaVistaSecop()).toBe('/contratos?vista=secop');
+    });
+});
+
+describe('NIT de la empresa', () => {
+    it('acepta lo que acepta el servidor: dígitos con puntos o espacios y el dígito de verificación', () => {
+        ['900123456', '900.123.456', '900 123 456', '900.123.456-7', '9'].forEach((v) => expect(esNitValido(v)).toBe(true));
+        expect(esNitValido(' 900123456 ')).toBe(true);
+    });
+
+    it('rechaza lo demás', () => {
+        ['', '  ', 'abc', '-900', '900-12', '900123456-', '.900', '900,123', '1'.repeat(21), null, undefined].forEach((v) => expect(esNitValido(v)).toBe(false));
+    });
+
+    it('normalizarNit quita puntos y espacios y conserva el dígito de verificación', () => {
+        expect(normalizarNit(' 900.123 456-7 ')).toBe('900123456-7');
+        expect(normalizarNit('900123456')).toBe('900123456');
+        expect(normalizarNit('abc')).toBe('');
+    });
+
+    it('nitParaMostrar agrupa los miles con puntos', () => {
+        expect(nitParaMostrar('900123456-7')).toBe('900.123.456-7');
+        expect(nitParaMostrar('900 123 456')).toBe('900.123.456');
+        expect(nitParaMostrar('12345')).toBe('12.345');
+        expect(nitParaMostrar('123')).toBe('123');
+        expect(nitParaMostrar('')).toBe('');
+        expect(nitParaMostrar('abc')).toBe('');
+    });
+
+    it('errorNit: el mensaje del campo antes de consultar, como los del servidor', () => {
+        expect(errorNit('  ')).toBe('Escribe el NIT de la empresa.');
+        expect(errorNit('abc')).toBe('Escribe el NIT solo con números (puede llevar puntos y el dígito de verificación con guion).');
+        expect(errorNit('900.123.456-7')).toBeNull();
+    });
+
+    it('nitDeConsulta toma el NIT de la URL solo si es válido, normalizado', () => {
+        expect(nitDeConsulta(consulta('vista=secop&nit=900.123.456-7'))).toBe('900123456-7');
+        expect(nitDeConsulta(consulta('vista=secop&nit=abc'))).toBe('');
+        expect(nitDeConsulta(consulta('vista=secop'))).toBe('');
+        expect(nitDeConsulta(undefined)).toBe('');
+    });
+});
+
+describe('NIT recordado', () => {
+    const almacen = (inicial = {}) => {
+        const datos = { ...inicial };
+        return {
+            datos,
+            getItem: (clave) => (clave in datos ? datos[clave] : null),
+            setItem: (clave, valor) => { datos[clave] = String(valor); },
+        };
+    };
+    const roto = { getItem: () => { throw new Error('bloqueado'); }, setItem: () => { throw new Error('bloqueado'); } };
+
+    it('se guarda normalizado con una clave propia y se lee igual', () => {
+        const a = almacen();
+        guardarNitEmpresa('900.123.456-7', a);
+        expect(a.datos).toEqual({ [CLAVE_NIT_EMPRESA]: '900123456-7' });
+        expect(CLAVE_NIT_EMPRESA).toBe('gestpro.secop.nitEmpresa');
+        expect(leerNitEmpresa(a)).toBe('900123456-7');
+    });
+
+    it('un NIT no válido no se guarda; uno guardado que no es válido se lee vacío', () => {
+        const a = almacen();
+        guardarNitEmpresa('abc', a);
+        expect(a.datos).toEqual({});
+        expect(leerNitEmpresa(almacen({ [CLAVE_NIT_EMPRESA]: '<script>' }))).toBe('');
+        expect(leerNitEmpresa(almacen())).toBe('');
+    });
+
+    it('sin almacenamiento (bloqueado o ausente) no falla', () => {
+        expect(leerNitEmpresa(roto)).toBe('');
+        expect(() => guardarNitEmpresa('900123456', roto)).not.toThrow();
+        expect(leerNitEmpresa(null)).toBe('');
+        expect(() => guardarNitEmpresa('900123456', null)).not.toThrow();
+    });
+});
+
+describe('importar de SECOP II', () => {
+    const resultado = { contrato: { n_contrato: 'C-1', secop_id_contrato: 'CO1.PCCNTR.1' }, secop: {}, registrado: null };
+
+    it('el estado de navegación lleva la lista de la que se viene y el resultado', () => {
+        expect(estadoImportarSecop(resultado, '?vista=secop&nit=900123456'))
+            .toEqual({ lista: '?vista=secop&nit=900123456', secop: resultado });
+    });
+
+    it('resultadoSecopDeEstado devuelve el resultado solo si tiene la forma de uno', () => {
+        expect(resultadoSecopDeEstado({ lista: '?vista=secop', secop: resultado })).toBe(resultado);
+        [null, undefined, {}, { secop: null }, { secop: 'x' }, { secop: {} }, { secop: { contrato: 'x' } }, { secop: { contrato: [] } }]
+            .forEach((estado) => expect(resultadoSecopDeEstado(estado)).toBeNull());
+    });
+
+    it('al guardar se conserva solo la lista, no el resultado', () => {
+        expect(estadoSinSecop({ lista: '?vista=secop', secop: resultado })).toEqual({ lista: '?vista=secop' });
+        expect(estadoSinSecop(null)).toEqual({});
+    });
+
+    it('el texto sin resultados', () => {
+        expect(TEXTO_SECOP_VACIO).toBe('SECOP II no tiene contratos con ese NIT como proveedor.');
     });
 });

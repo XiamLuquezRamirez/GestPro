@@ -90,6 +90,12 @@
 .ct-secop-mensaje { margin: 0; font-size: .85rem; color: var(--gp-verde-texto); }
 .ct-secop-avisos { display: grid; gap: .3rem; padding: .55rem .8rem .55rem 1.8rem; margin: 0; font-size: .85rem; color: var(--gp-texto); background: var(--gp-ambar-suave); border-left: 3px solid var(--gp-ambar); border-radius: var(--gp-radio); }
 .ct-secop-busqueda { padding: 0 0 1rem; }
+/* Contratos de la empresa en SECOP II (módulo Contratos, ?vista=secop). */
+.ct-secop-titulo { margin: 0 0 .3rem; font-size: 1.05rem; }
+.ct-secop-empresa { align-items: flex-start; justify-content: flex-start; margin-top: .9rem; }
+.ct-secop-empresa .pl-campo { flex: 1 1 16rem; max-width: 24rem; }
+.ct-secop-empresa > .gp-boton { margin-top: 1.45rem; }
+.ct-secop-conteo { margin-bottom: .6rem; }
 .ct-secop-resultados { display: grid; gap: .7rem; padding: 0; margin: 0; list-style: none; }
 .ct-secop-resultado { display: grid; gap: .55rem; padding: .8rem 1rem; background: var(--gp-superficie); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
 .ct-secop-resultado-cabecera { display: flex; flex-wrap: wrap; gap: .4rem 1rem; align-items: baseline; justify-content: space-between; overflow-wrap: anywhere; }

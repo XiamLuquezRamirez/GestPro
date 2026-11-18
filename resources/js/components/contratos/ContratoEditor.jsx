@@ -25,6 +25,7 @@ import { BuscarSecop, DiferenciasSecop } from './SecopContrato';
 import '../../../css/Parametros.css';
 import '../../../css/Contratacion.css';
 
+const MENSAJE_IMPORTADO_SECOP = 'Formulario lleno con los datos de SECOP II: revísalos y guarda el contrato.';
 const MENSAJE_COINCIDE_SECOP = 'Coincide con SECOP II: guarda el contrato para registrar la consulta.';
 const MENSAJE_VINCULADO_SECOP = 'Contrato vinculado a SECOP II: guárdalo para conservar el vínculo.';
 
@@ -58,6 +59,8 @@ export const pedirProcesosProyecto = async (proyectoId) => {
  * - `proyecto`: el proyecto del contrato nuevo ({id, nombre}) o null; sus procesos llenan el select.
  * - `contrato`: el que se edita (un elemento de GET /listarContratos o de /contratos/{id}/detalle), o null para uno nuevo.
  * - `procesoInicial`: en un contrato nuevo, el id del proceso ya elegido; se aplica su precarga.
+ * - `importacionSecop`: en un contrato nuevo, un resultado de SECOP II (de GET /secop/…) con que
+ *   el formulario empieza lleno, como con "Usar este", con sus avisos. Sin la prop empieza vacío.
  * - `tiposContrato`: el catálogo si quien lo pinta ya lo trae (null mientras carga o si falló); sin la prop, lo pide el editor.
  * - `procesosIniciales`: los procesos del proyecto que ya se tienen, mientras llegan los recién pedidos.
  * - `proyectos`: con la prop (la lista de GET /proyectos, o null mientras carga), el formulario
@@ -74,7 +77,7 @@ export const pedirProcesosProyecto = async (proyectoId) => {
  *   si se guardó), para que quien lo pinta no lo cierre a medias.
  */
 const ContratoEditor = ({
-    proyecto = null, contrato = null, procesoInicial = null, tiposContrato, procesosIniciales = null, proyectos, puedeEditar = true,
+    proyecto = null, contrato = null, procesoInicial = null, importacionSecop = null, tiposContrato, procesosIniciales = null, proyectos, puedeEditar = true,
     recargar, onGuardado, onCancelar, onOcupado,
 }) => {
     const [editingContrato, setEditingContrato] = useState(contrato);
@@ -83,8 +86,11 @@ const ContratoEditor = ({
     const [formContrato, setFormContrato] = useState(() => {
         if (contrato) return formularioContrato(contrato);
         const vacio = contratoVacio(proyecto?.id);
-        return procesoInicial ? { ...vacio, proceso_id: String(procesoInicial) } : vacio;
+        const inicial = procesoInicial ? { ...vacio, proceso_id: String(procesoInicial) } : vacio;
+        return importacionSecop ? importarSecop(inicial, importacionSecop) : inicial;
     });
+    // Un contrato nuevo importado de SECOP II empieza con los avisos y el mensaje de "Usar este".
+    const importadoDeSecop = !contrato && Boolean(importacionSecop);
     // Errores del formulario por campo, de la validación local o de un 422.
     const [erroresContrato, setErroresContrato] = useState({});
     const [guardandoContrato, setGuardandoContrato] = useState(false);
@@ -119,8 +125,8 @@ const ContratoEditor = ({
     // resultado, diferencias, avisos }), los avisos del último resultado usado y el mensaje de la
     // última acción. Turno de "Actualizar desde SECOP II": una respuesta atrasada se descarta.
     const [dialogoSecop, setDialogoSecop] = useState(null);
-    const [avisosDeSecop, setAvisosDeSecop] = useState([]);
-    const [mensajeDeSecop, setMensajeDeSecop] = useState(null);
+    const [avisosDeSecop, setAvisosDeSecop] = useState(() => (importadoDeSecop ? avisosSecop(importacionSecop, formContrato) : []));
+    const [mensajeDeSecop, setMensajeDeSecop] = useState(importadoDeSecop ? MENSAJE_IMPORTADO_SECOP : null);
     const [consultandoSecop, setConsultandoSecop] = useState(false);
     const turnoSecop = useRef(0);
     // El formulario del último render, para comparar con SECOP II cuando llega la respuesta.
@@ -246,8 +252,7 @@ const ContratoEditor = ({
             if (!isConfirmed) return;
         }
         const importado = importarSecop(formularioActual.current, resultado);
-        copiarAlFormulario(importado, avisosSecop(resultado, importado),
-            'Formulario lleno con los datos de SECOP II: revísalos y guarda el contrato.');
+        copiarAlFormulario(importado, avisosSecop(resultado, importado), MENSAJE_IMPORTADO_SECOP);
         setDialogoSecop(null);
     };
 

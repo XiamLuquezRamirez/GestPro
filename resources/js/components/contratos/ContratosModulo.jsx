@@ -1,15 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { faArrowLeft, faPlus } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faMagnifyingGlass, faPlus } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../../axios';
 import {
-    consultaDeFiltros, esIdContrato, filaContrato, filtrosDeConsulta, opcionesFiltroEstado, opcionesFiltroProyecto, parametrosBusqueda,
-    puedeEditarContratos, rutaContrato, rutaListaDesde, textoListaVacia,
+    TEXTO_SECOP_VACIO, VISTA_LISTA, VISTA_SECOP, consultaDeFiltros, consultaVistaSecop, errorNit, esIdContrato, estadoImportarSecop,
+    estadoSinSecop, filaContrato, filtrosDeConsulta, guardarNitEmpresa, leerNitEmpresa, nitDeConsulta, nitParaMostrar, normalizarNit,
+    opcionesFiltroEstado, opcionesFiltroProyecto, parametrosBusqueda, puedeEditarContratos, resultadoSecopDeEstado, rutaContrato,
+    rutaListaDesde, rutaVistaSecop, textoListaVacia, vistaDeConsulta,
 } from '../../utils/contratosModulo';
 import { RUTA_CONTRATOS } from '../../utils/navegacion';
 import { mensajeApi } from '../../utils/plantillasChecklist';
+import { mensajeSecop } from '../../utils/secop';
 import ContratoEditor from './ContratoEditor';
+import { ResultadosSecop } from './SecopContrato';
 import '../../../css/Plantillas.css';
 import '../../../css/Parametros.css';
 import '../../../css/Contratacion.css';
@@ -59,6 +63,20 @@ const AvisoProyectos = ({ proyectos }) => (proyectos.error ? (
 const Volver = ({ a }) => (
     <Link to={a} className="pl-volver"><FontAwesomeIcon icon={faArrowLeft} /> Contratos</Link>
 );
+
+/** Las vistas de /contratos para quien puede editar: la lista y los contratos de la empresa en SECOP II. */
+const PestanasVista = ({ vista }) => {
+    const pestana = (propia) => ({
+        className: `pl-pestana${vista === propia ? ' activa' : ''}`,
+        'aria-current': vista === propia ? 'page' : undefined,
+    });
+    return (
+        <nav className="pl-pestanas" aria-label="Vistas de contratos">
+            <Link to={RUTA_CONTRATOS} {...pestana(VISTA_LISTA)}>En GestPro</Link>
+            <Link to={rutaVistaSecop()} {...pestana(VISTA_SECOP)}>En SECOP II</Link>
+        </nav>
+    );
+};
 
 /** Lista de todos los contratos, con o sin proyecto. Los filtros viven en la URL. */
 const ListaContratos = ({ edita, proyectos }) => {
@@ -112,6 +130,7 @@ const ListaContratos = ({ edita, proyectos }) => {
                 <p>Todos los contratos, con o sin proyecto: su estado, su valor vigente y su avance.</p>
             </header>
 
+            {edita && <PestanasVista vista={VISTA_LISTA} />}
             <AvisoProyectos proyectos={proyectos} />
 
             <div className="pl-barra">
@@ -186,11 +205,147 @@ const ListaContratos = ({ edita, proyectos }) => {
     );
 };
 
-/** Un contrato nuevo, con proyecto opcional. Al guardarlo se abre, para seguir con sus pestañas. */
+/**
+ * Los contratos de la empresa en SECOP II (`?vista=secop`): aquellos en que la empresa es el
+ * proveedor (GET /secop/contratos-empresa). El NIT se recuerda en el navegador y el consultado va
+ * en la URL, así que al volver de un contrato o de importar se consulta de nuevo. Solo vale la
+ * última respuesta. "Importar" abre un contrato nuevo lleno con los datos del resultado.
+ */
+const ContratosSecop = () => {
+    const { search } = useLocation();
+    const navigate = useNavigate();
+    const [consulta, setConsulta] = useSearchParams();
+    const nitConsultado = nitDeConsulta(consulta);
+    const [nit, setNit] = useState(() => nitConsultado || leerNitEmpresa());
+    const [errorCampo, setErrorCampo] = useState(null);
+    // Los resultados del NIT consultado: null sin consulta o mientras carga.
+    const [consultado, setConsultado] = useState({ nit: '', resultados: null });
+    const [cargando, setCargando] = useState(false);
+    const [error, setError] = useState(null);
+    const turno = useRef(0);
+    const idAyuda = useId();
+    const idError = useId();
+
+    // Al salir de la vista, cualquier respuesta pendiente queda atrasada.
+    useEffect(() => () => { turno.current += 1; }, []);
+
+    const cargar = useCallback(async (nitBuscado) => {
+        const numero = ++turno.current;
+        setCargando(true);
+        setError(null);
+        setConsultado({ nit: nitBuscado, resultados: null });
+        try {
+            const { data } = await axios.get('/secop/contratos-empresa', { params: { nit: nitBuscado } });
+            if (numero !== turno.current) return;
+            setConsultado({ nit: nitBuscado, resultados: Array.isArray(data?.resultados) ? data.resultados : [] });
+        } catch (falla) {
+            if (numero !== turno.current) return;
+            setError(mensajeSecop(falla));
+        } finally {
+            if (numero === turno.current) setCargando(false);
+        }
+    }, []);
+
+    // El NIT de la URL manda: se consulta al llegar o al volver; sin NIT no hay resultados.
+    useEffect(() => {
+        if (nitConsultado) {
+            setNit((actual) => (normalizarNit(actual) === nitConsultado ? actual : nitConsultado));
+            setErrorCampo(null);
+            cargar(nitConsultado);
+            return;
+        }
+        turno.current += 1;
+        setCargando(false);
+        setError(null);
+        setConsultado({ nit: '', resultados: null });
+    }, [nitConsultado, cargar]);
+
+    const consultar = (e) => {
+        e.preventDefault();
+        const falla = errorNit(nit);
+        setErrorCampo(falla);
+        if (falla) return;
+        const normalizado = normalizarNit(nit);
+        guardarNitEmpresa(normalizado);
+        // Consultar no es una página nueva; el mismo NIT se consulta otra vez.
+        if (normalizado === nitConsultado) cargar(normalizado);
+        else setConsulta(consultaVistaSecop(normalizado), { replace: true });
+    };
+
+    // La vista (con su NIT) va en el estado: "Volver" y "Cancelar" regresan a ella.
+    const importar = (resultado) => navigate(RUTA_NUEVO, { state: estadoImportarSecop(resultado, search) });
+    const { resultados } = consultado;
+    const listos = !cargando && !error && resultados !== null;
+
+    return (
+        <div className="pl-pagina">
+            <header className="gp-cabecera">
+                <span className="gp-etiqueta">Trabajo diario</span>
+                <h1>Contratos</h1>
+                <p>Todos los contratos, con o sin proyecto: su estado, su valor vigente y su avance.</p>
+            </header>
+
+            <PestanasVista vista={VISTA_SECOP} />
+
+            <section aria-labelledby="secop-empresa-titulo">
+                <h2 id="secop-empresa-titulo" className="ct-secop-titulo">Contratos de la empresa en SECOP II</h2>
+                <p className="ct-secop-nota">
+                    Los contratos en que la empresa es el proveedor, según los datos abiertos de SECOP II. Importa los que aún no están en GestPro.
+                </p>
+
+                <form className="pl-barra ct-secop-empresa" onSubmit={consultar} noValidate aria-label="Consultar los contratos de la empresa en SECOP II">
+                    <label className="pl-campo">
+                        <span>NIT de la empresa</span>
+                        <input
+                            type="text"
+                            value={nit}
+                            onChange={(e) => { setNit(e.target.value); setErrorCampo(null); }}
+                            maxLength={20}
+                            inputMode="numeric"
+                            placeholder="900.123.456-7"
+                            aria-describedby={errorCampo ? `${idAyuda} ${idError}` : idAyuda}
+                            aria-invalid={Boolean(errorCampo)}
+                        />
+                        <small id={idAyuda} className="contrato-nota">Se recuerda en este navegador.</small>
+                    </label>
+                    <button type="submit" className="gp-boton gp-boton-primario" disabled={cargando}>
+                        <FontAwesomeIcon icon={faMagnifyingGlass} /> {cargando ? 'Consultando…' : 'Consultar'}
+                    </button>
+                </form>
+                {errorCampo && <p id={idError} className="pl-error" role="alert">{errorCampo}</p>}
+
+                {error && (
+                    <p className="pl-error" role="alert">
+                        {error} <button type="button" className="gp-boton" onClick={() => cargar(consultado.nit)}>Reintentar</button>
+                    </p>
+                )}
+                <div aria-live="polite">
+                    {cargando && <p className="gp-vacio" role="status">Consultando SECOP II…</p>}
+                    {listos && resultados.length === 0 && <p className="gp-vacio">{TEXTO_SECOP_VACIO}</p>}
+                    {listos && resultados.length > 0 && (
+                        <>
+                            <p className="ct-secop-nota ct-secop-conteo">
+                                {resultados.length === 1 ? '1 contrato' : `${resultados.length} contratos`} con el NIT {nitParaMostrar(consultado.nit)} como proveedor.
+                            </p>
+                            <ResultadosSecop resultados={resultados} textoAccion="Importar" onElegir={importar} estadoEnlace={{ lista: search }} />
+                        </>
+                    )}
+                </div>
+            </section>
+        </div>
+    );
+};
+
+/**
+ * Un contrato nuevo, con proyecto opcional. Si llega de "Importar" (con el resultado de SECOP II
+ * en el estado de navegación), el formulario empieza lleno; sin estado (al abrir la dirección a
+ * mano), vacío. Al guardarlo se abre, para seguir con sus pestañas.
+ */
 const NuevoContrato = ({ proyectos }) => {
-    const { state } = useLocation();
+    const { state, key } = useLocation();
     const navigate = useNavigate();
     const volver = rutaListaDesde(state);
+    const importacion = resultadoSecopDeEstado(state);
 
     return (
         <div className="pl-pagina">
@@ -202,9 +357,11 @@ const NuevoContrato = ({ proyectos }) => {
             <AvisoProyectos proyectos={proyectos} />
             <div className="gp-panel ct-editor">
                 <ContratoEditor
+                    key={key}
                     proyectos={proyectos.lista}
+                    importacionSecop={importacion}
                     recargar={recargarDetalle}
-                    onGuardado={(guardado) => navigate(guardado?.id ? rutaContrato(guardado.id) : volver, { replace: true, state })}
+                    onGuardado={(guardado) => navigate(guardado?.id ? rutaContrato(guardado.id) : volver, { replace: true, state: estadoSinSecop(state) })}
                     onCancelar={() => navigate(volver)}
                 />
             </div>
@@ -281,11 +438,13 @@ const ContratoAbierto = ({ contratoId, edita, proyectos }) => {
 };
 
 /**
- * El módulo Contratos: la lista (`/contratos`), un contrato nuevo (`/contratos/nuevo`, solo quien
- * puede editar) y uno abierto (`/contratos/:contratoId`).
+ * El módulo Contratos: la lista (`/contratos`), los contratos de la empresa en SECOP II
+ * (`/contratos?vista=secop`), un contrato nuevo (`/contratos/nuevo`; estos dos, solo quien puede
+ * editar) y uno abierto (`/contratos/:contratoId`).
  */
 const ContratosModulo = ({ user, nuevo = false }) => {
     const { contratoId } = useParams();
+    const [consulta] = useSearchParams();
     const edita = puedeEditarContratos(user);
     const proyectos = useProyectos();
 
@@ -304,6 +463,7 @@ const ContratosModulo = ({ user, nuevo = false }) => {
         }
         return <ContratoAbierto key={contratoId} contratoId={contratoId} edita={edita} proyectos={proyectos} />;
     }
+    if (vistaDeConsulta(consulta, edita) === VISTA_SECOP) return <ContratosSecop />;
     return <ListaContratos edita={edita} proyectos={proyectos} />;
 };
 

@@ -44,11 +44,11 @@ export const DialogoSecop = ({ titulo, onCerrar, children }) => {
 
 /**
  * Resultados de SECOP II (elementos de `resultados`): número, entidad, contratista, valor, fechas
- * y estado en SECOP II. Uno ya registrado enlaza a su contrato (con `enlaceEnOtraPestana`, en otra
- * pestaña, para no dejar el formulario que se está llenando); los demás llevan el botón
- * `textoAccion`, que llama a `onElegir(resultado)`.
+ * y estado en SECOP II. Uno ya registrado enlaza a su contrato (con `estadoEnlace` como estado de
+ * navegación, si viene; con `enlaceEnOtraPestana`, en otra pestaña, para no dejar el formulario
+ * que se está llenando); los demás llevan el botón `textoAccion`, que llama a `onElegir(resultado)`.
  */
-export const ResultadosSecop = ({ resultados, textoAccion = 'Usar este', onElegir, enlaceEnOtraPestana = false }) => (
+export const ResultadosSecop = ({ resultados, textoAccion = 'Usar este', onElegir, estadoEnlace, enlaceEnOtraPestana = false }) => (
     <ul className="ct-secop-resultados">
         {resultados.map((resultado) => {
             const fila = filaResultadoSecop(resultado);
@@ -78,7 +78,7 @@ export const ResultadosSecop = ({ resultados, textoAccion = 'Usar este', onElegi
                                         <span className="ct-oculto"> (se abre en otra pestaña)</span>
                                     </Link>
                                 ) : (
-                                    <Link to={fila.registrado.ruta} className="ct-enlace">contrato {fila.registrado.numero}</Link>
+                                    <Link to={fila.registrado.ruta} state={estadoEnlace} className="ct-enlace">contrato {fila.registrado.numero}</Link>
                                 )}
                             </span>
                         ) : (
