@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { DESTINOS, GRUPO, RUTA_PLANTILLAS, SECCIONES_PARAMETROS, buscarEnPaleta, destinoActivo, destinosPara, puedeVer, seccionDesdeSlug, tituloDeRuta } from './navegacion';
+import { DESTINOS, GRUPO, RUTA_CONTRATOS, RUTA_PLANTILLAS, SECCIONES_PARAMETROS, buscarEnPaleta, destinoActivo, destinosPara, puedeVer, seccionDesdeSlug, tituloDeRuta } from './navegacion';
 import { ICONOS } from './iconosNavegacion';
 
 const proyectos = [
@@ -54,6 +54,27 @@ describe('DESTINOS', () => {
         ['municipios', 'estados', 'fases', 'tipos-evento', 'prioridades', 'responsables', 'entidades', 'fuentes-financiacion', 'sectores', 'modalidades', 'etapas-contratacion', 'tipos-contrato'].forEach((slug) => {
             expect(rutas).toContain(`/parametros/${slug}`);
         });
+    });
+
+    it('Contratos es trabajo diario y su avance es análisis, con otro nombre', () => {
+        expect(DESTINOS.find((d) => d.id === 'contratos')).toMatchObject({ titulo: 'Contratos', ruta: '/contratos', grupo: GRUPO.TRABAJO });
+        expect(DESTINOS.find((d) => d.id === 'avance-contratos')).toMatchObject({ titulo: 'Avance de contratos', ruta: '/dashboard?vista=contratos', grupo: GRUPO.ANALISIS });
+        expect(DESTINOS.filter((d) => d.titulo === 'Contratos')).toHaveLength(1);
+    });
+
+    it('Contratos va después de Expedientes, antes del análisis', () => {
+        const ids = DESTINOS.map((d) => d.id);
+        expect(ids.indexOf('contratos')).toBe(ids.indexOf('expedientes') + 1);
+        expect(DESTINOS[ids.indexOf('contratos') + 1].grupo).toBe(GRUPO.ANALISIS);
+    });
+
+    it('cada destino tiene un icono registrado', () => {
+        DESTINOS.forEach((d) => expect(ICONOS[d.icono]).toBeDefined());
+    });
+
+    it('el avance de contratos no repite el icono de Contratos', () => {
+        const icono = (id) => DESTINOS.find((d) => d.id === id).icono;
+        expect(icono('avance-contratos')).not.toBe(icono('contratos'));
     });
 
     it('no repite identificadores ni rutas', () => {
@@ -123,6 +144,16 @@ describe('buscarEnPaleta', () => {
         expect(titulos('interventoria')).toContain('Tipos de contrato');
     });
 
+    it('"contratos" lleva al módulo y al avance; "contratista" o "avance", a cada uno', () => {
+        const claves = (q) => buscarEnPaleta(q, DESTINOS, []).map((r) => r.clave);
+
+        expect(claves('contratos')).toEqual(expect.arrayContaining(['contratos', 'avance-contratos']));
+        expect(claves('contratista')).toContain('contratos');
+        expect(claves('otrosí')).toContain('contratos');
+        expect(claves('desfase')).toEqual(['avance-contratos']);
+        expect(buscarEnPaleta('contratos', DESTINOS, []).find((r) => r.clave === 'contratos')).toMatchObject({ titulo: 'Contratos', ruta: '/contratos', detalle: GRUPO.TRABAJO });
+    });
+
     it('encuentra proyectos por nombre o municipio y los deja después de los destinos', () => {
         const porNombre = buscarEnPaleta('construccion', DESTINOS, proyectos);
         expect(porNombre.at(-1)).toMatchObject({ tipo: 'proyecto', titulo: 'Construcción sede educativa', ruta: '/dashboard?proyecto=1' });
@@ -149,8 +180,17 @@ describe('destinoActivo', () => {
     it('distingue las vistas analíticas del tablero', () => {
         expect(destinoActivo('/dashboard', '')).toBe('tablero');
         expect(destinoActivo('/dashboard', '?vista=formulacion')).toBe('tablero');
-        expect(destinoActivo('/dashboard', '?vista=contratos')).toBe('contratos');
+        expect(destinoActivo('/dashboard', '?vista=contratos')).toBe('avance-contratos');
         expect(destinoActivo('/dashboard', '?vista=expedientes')).toBe('expedientes');
+    });
+
+    it('la lista de contratos, uno nuevo y uno abierto marcan Contratos', () => {
+        expect(RUTA_CONTRATOS).toBe('/contratos');
+        expect(destinoActivo('/contratos', '')).toBe('contratos');
+        expect(destinoActivo('/contratos', '?estado=anulado')).toBe('contratos');
+        expect(destinoActivo('/contratos/nuevo', '')).toBe('contratos');
+        expect(destinoActivo('/contratos/12', '')).toBe('contratos');
+        expect(destinoActivo('/contratosx', '')).toBeNull();
     });
 
     it('un expediente pertenece a Expedientes', () => {
@@ -164,6 +204,8 @@ describe('tituloDeRuta', () => {
         expect(tituloDeRuta('/parametros/etapas-contratacion', '')).toBe('Etapas de contratación');
         expect(tituloDeRuta('/dashboard', '')).toBe('Tablero');
         expect(tituloDeRuta('/viabilizacion/4', '')).toBe('Expedientes');
+        expect(tituloDeRuta('/contratos/12', '')).toBe('Contratos');
+        expect(tituloDeRuta('/dashboard', '?vista=contratos')).toBe('Avance de contratos');
         expect(tituloDeRuta('/otra', '')).toBe('GestPro');
     });
 });

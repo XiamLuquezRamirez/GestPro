@@ -20,7 +20,7 @@ import { VISTA, filasEnSala, resolverVista, resumirFases, slugFase } from '../ut
 
 const VISTAS_ANALISIS = [
     { id: VISTA.ESTADISTICAS, titulo: 'Estadísticas', icono: faChartColumn },
-    { id: VISTA.CONTRATOS, titulo: 'Contratos', icono: faFileSignature },
+    { id: VISTA.CONTRATOS, titulo: 'Avance de contratos', icono: faFileSignature },
     { id: VISTA.EXPEDIENTES, titulo: 'Expedientes', icono: faClipboardCheck },
 ];
 

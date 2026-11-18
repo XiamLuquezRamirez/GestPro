@@ -29,11 +29,15 @@ export const SECCIONES_PARAMETROS = [
 // No usar /plantillas: bajo /GestPro chocaría con la API del mismo nombre.
 export const RUTA_PLANTILLAS = '/plantillas-checklist';
 
+// Todos los contratos, con o sin proyecto. Bajo /GestPro no es una ruta GET de la API.
+export const RUTA_CONTRATOS = '/contratos';
+
 export const DESTINOS = [
     { id: 'tablero', titulo: 'Tablero', ruta: '/dashboard', grupo: GRUPO.TRABAJO, icono: 'faGaugeHigh', palabras: 'inicio dashboard panel mapa' },
     ...SECCIONES_PARAMETROS.filter((s) => s.grupo === GRUPO.TRABAJO).map((s) => ({ ...s, id: s.slug, ruta: `/parametros/${s.slug}` })),
     { id: 'expedientes', titulo: 'Expedientes', ruta: '/dashboard?vista=expedientes', grupo: GRUPO.TRABAJO, icono: 'faClipboardCheck', palabras: 'sgr viabilizacion regalias requisitos checklist plantillas seguimiento' },
-    { id: 'contratos', titulo: 'Contratos', ruta: '/dashboard?vista=contratos', grupo: GRUPO.ANALISIS, icono: 'faFileSignature', palabras: 'avance fisico financiero desfase' },
+    { id: 'contratos', titulo: 'Contratos', ruta: RUTA_CONTRATOS, grupo: GRUPO.TRABAJO, icono: 'faFileSignature', palabras: 'contratista contratante obra interventoria actas anexos otrosi adiciones prorrogas modificaciones' },
+    { id: 'avance-contratos', titulo: 'Avance de contratos', ruta: '/dashboard?vista=contratos', grupo: GRUPO.ANALISIS, icono: 'faCircleHalfStroke', palabras: 'avance fisico financiero desfase' },
     { id: 'estadisticas', titulo: 'Estadísticas', ruta: '/dashboard?vista=estadisticas', grupo: GRUPO.ANALISIS, icono: 'faChartColumn', palabras: 'graficas filtros cadena presupuestal' },
     ...SECCIONES_PARAMETROS.filter((s) => s.grupo === GRUPO.CATALOGOS).map((s) => ({ ...s, id: s.slug, ruta: `/parametros/${s.slug}` })),
     { id: 'plantillas', titulo: 'Plantillas de checklist', ruta: RUTA_PLANTILLAS, grupo: GRUPO.CATALOGOS, icono: 'faListCheck', palabras: 'requisitos checklist fuentes sectores versiones catalogo', soloRol: 'Administrador' },
@@ -87,10 +91,12 @@ export const buscarEnPaleta = (consulta, destinos, proyectos) => {
 export const destinoActivo = (pathname, search) => {
     if (pathname.startsWith('/viabilizacion/')) return 'expedientes';
     if (pathname === RUTA_PLANTILLAS || pathname.startsWith(`${RUTA_PLANTILLAS}/`)) return 'plantillas';
+    if (pathname === RUTA_CONTRATOS || pathname.startsWith(`${RUTA_CONTRATOS}/`)) return 'contratos';
     if (pathname.startsWith('/parametros/')) return pathname.split('/')[2];
     if (pathname.startsWith('/dashboard')) {
         const vista = new URLSearchParams(search).get('vista');
-        return ['contratos', 'expedientes', 'estadisticas'].includes(vista) ? vista : 'tablero';
+        if (vista === 'contratos') return 'avance-contratos';
+        return ['expedientes', 'estadisticas'].includes(vista) ? vista : 'tablero';
     }
     return null;
 };

@@ -247,6 +247,33 @@ export const aplicarPrecarga = (formulario, precarga) => {
     return resultado;
 };
 
+// ---------- Proyecto del contrato ----------
+
+/**
+ * El formulario tras elegir otro proyecto en el selector del módulo Contratos. El proceso era del
+ * proyecto anterior y se quita; al volver al proyecto del contrato abierto (`contrato`), recupera
+ * el suyo. Elegir el mismo proyecto devuelve el formulario sin cambios.
+ */
+export const cambiarProyecto = (formulario, proyectoId, contrato = null) => {
+    const proyecto = comoTexto(proyectoId);
+    if (proyecto === comoTexto(formulario.proyecto)) return formulario;
+    const original = contrato ? formularioContrato(contrato) : null;
+    return {
+        ...formulario,
+        proyecto,
+        proceso_id: original && original.proyecto === proyecto ? original.proceso_id : '',
+    };
+};
+
+/**
+ * El proceso que el contrato abierto ya tiene (su resumen), mientras el formulario siga en el
+ * proyecto del contrato; si se eligió otro proyecto, ese proceso ya no se ofrece. null si no hay.
+ */
+export const procesoDelContrato = (contrato, formulario) => {
+    if (!contrato?.proceso) return null;
+    return comoTexto(contrato.proyecto) === comoTexto(formulario?.proyecto) ? contrato.proceso : null;
+};
+
 // ---------- Valores vigentes ----------
 
 /**

@@ -7,10 +7,12 @@ import { avisarError } from '../../utils/avisosPlantillas';
 import { datosEstado, esEdicionDesactualizada, textoValor, valorEnEdicion } from '../../utils/contratacion';
 import {
     ACTA_VACIA, ACTIVIDAD_VACIA, ANEXO_VACIO, AVANCE_VACIO, ESTADOS_CONTRATO, MODIFICACION_VACIA, actividadConAvance, anexosDelContrato,
-    anexosParaGuardar, aplicarPrecarga, avanceFinancieroDeActas, avanceFisicoDeActividades, calculoActa, contratoVacio, datosActa,
-    datosContrato, datosDelProceso, datosModificacion, erroresGuardarContrato, etiquetaTipoModificacion, formularioContrato, notaProceso,
-    opcionesProceso, opcionesTipoContrato, primerCampoConError, procesoElegido, sumaPesos, validarContrato, valorVigente, vigentesDistintos,
+    anexosParaGuardar, aplicarPrecarga, avanceFinancieroDeActas, avanceFisicoDeActividades, calculoActa, cambiarProyecto, contratoVacio,
+    datosActa, datosContrato, datosDelProceso, datosModificacion, erroresGuardarContrato, etiquetaTipoModificacion, formularioContrato,
+    notaProceso, opcionesProceso, opcionesTipoContrato, primerCampoConError, procesoDelContrato, procesoElegido, sumaPesos, validarContrato,
+    valorVigente, vigentesDistintos,
 } from '../../utils/contratos';
+import { opcionesProyecto } from '../../utils/contratosModulo';
 import { formatoMoneda, limpiarMoneda, monedaEnEdicion, numeroDeMoneda } from '../../utils/moneda';
 import { htmlErrores, mensajeApi } from '../../utils/plantillasChecklist';
 import '../../../css/Parametros.css';
@@ -48,13 +50,17 @@ export const pedirProcesosProyecto = async (proyectoId) => {
  * - `procesoInicial`: en un contrato nuevo, el id del proceso ya elegido; se aplica su precarga.
  * - `tiposContrato`: el catálogo si quien lo pinta ya lo trae (null mientras carga o si falló); sin la prop, lo pide el editor.
  * - `procesosIniciales`: los procesos del proyecto que ya se tienen, mientras llegan los recién pedidos.
+ * - `proyectos`: con la prop (la lista de GET /proyectos, o null mientras carga), el formulario
+ *   muestra un selector de proyecto: uno nuevo o sin proyecto puede quedar "Sin proyecto"; uno
+ *   con proyecto puede cambiarlo, pero no quitarlo. Al cambiarlo se cargan los procesos del
+ *   elegido. Sin la prop, el proyecto es el de `proyecto` o el del contrato, sin selector.
  * - `puedeEditar`: sin permiso, el contrato se ve sin controles para modificarlo.
  * - `recargar(id)`: vuelve a traer los contratos tras un cambio en las pestañas; resuelve el contrato `id` recargado o null.
  * - `onGuardado(contrato)`: tras guardar (con los avisos ya mostrados); quien lo pinta cierra el editor.
  * - `onCancelar()`: "Cancelar" o "Volver a la lista".
  */
 const ContratoEditor = ({
-    proyecto = null, contrato = null, procesoInicial = null, tiposContrato, procesosIniciales = null, puedeEditar = true,
+    proyecto = null, contrato = null, procesoInicial = null, tiposContrato, procesosIniciales = null, proyectos, puedeEditar = true,
     recargar, onGuardado, onCancelar,
 }) => {
     const [editingContrato, setEditingContrato] = useState(contrato);
@@ -106,6 +112,15 @@ const ContratoEditor = ({
     const handleContratoChange = (e) => {
         const { name, value, type, checked } = e.target;
         setErroresContrato(prev => (prev[name] ? { ...prev, [name]: undefined } : prev));
+        if (name === 'proyecto') {
+            // El proceso era del proyecto anterior: se quita y se cargan los del elegido.
+            setErroresContrato(prev => (prev.proceso_id ? { ...prev, proceso_id: undefined } : prev));
+            setFormContrato(prev => cambiarProyecto(prev, value, editingContrato));
+            // Mientras llegan los del elegido no se ofrecen los del proyecto anterior.
+            setProcesosContrato(null);
+            cargarProcesosContrato(value);
+            return;
+        }
         if (name === 'proceso_id') {
             setFormContrato(prev => ({ ...prev, proceso_id: value }));
             // R8: en un contrato nuevo, el proceso elegido llena los campos que siguen vacíos.
@@ -642,8 +657,10 @@ const ContratoEditor = ({
     };
 
     // Formulario de contrato: proceso elegido, nota R4 y vigentes que difieren de los iniciales.
-    const procesoDelContrato = procesoElegido(procesosContrato, editingContrato?.proceso ?? null, formContrato.proceso_id);
-    const datosProcesoContrato = procesoDelContrato ? datosDelProceso(procesoDelContrato) : null;
+    // El proceso que el contrato ya tiene solo se ofrece mientras siga en su proyecto.
+    const procesoActual = procesoDelContrato(editingContrato, formContrato);
+    const procesoFormulario = procesoElegido(procesosContrato, procesoActual, formContrato.proceso_id);
+    const datosProcesoContrato = procesoFormulario ? datosDelProceso(procesoFormulario) : null;
     const notaProcesoContrato = notaProceso(procesosContrato, formContrato.proceso_id);
     const vigentesContrato = vigentesDistintos(editingContrato);
 
@@ -726,10 +743,25 @@ const ContratoEditor = ({
                             Completa los datos del contrato. Los campos marcados con * son obligatorios.
                         </p>
                         <div className="contrato-form" ref={formularioContratoRef}>
+                            {proyectos !== undefined && campoContrato('proyecto', 'Proyecto', (
+                                // Los errores del proyecto llegan en un aviso (erroresGuardarContrato): aquí, solo la nota.
+                                <select {...controlContrato('proyecto')} aria-describedby={puedeEditar ? 'proyecto-nota' : undefined}>
+                                    {opcionesProyecto(proyectos, editingContrato).map(o => (
+                                        <option key={o.valor} value={o.valor}>{o.etiqueta}</option>
+                                    ))}
+                                </select>
+                            ))}
+                            {proyectos !== undefined && puedeEditar && (
+                                <p id="proyecto-nota" className="contrato-nota">
+                                    {editingContrato?.proyecto
+                                        ? 'Puedes pasar el contrato a otro proyecto, pero no dejarlo sin proyecto.'
+                                        : 'Opcional: un contrato puede no tener proyecto. Si lo eliges, puedes vincularlo a uno de sus procesos.'}
+                                </p>
+                            )}
                             <div className="form-row">
                                 {campoContrato('proceso_id', 'Proceso de contratación', (
                                     <select {...controlContrato('proceso_id')}>
-                                        {opcionesProceso(procesosContrato, editingContrato?.proceso ?? null).map(o => (
+                                        {opcionesProceso(procesosContrato, procesoActual).map(o => (
                                             <option key={o.valor} value={o.valor}>{o.etiqueta}</option>
                                         ))}
                                     </select>

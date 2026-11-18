@@ -19,6 +19,7 @@ import {
     primerCampoConError,
     ESTADOS_CONTRATO,
     aplicarPrecarga,
+    cambiarProyecto,
     contratoVacio,
     datosContrato,
     datosDelProceso,
@@ -28,6 +29,7 @@ import {
     opcionesProceso,
     opcionesTipoContrato,
     procesoElegido,
+    procesoDelContrato,
     validarContrato,
     valorVigente,
     vigentesDistintos,
@@ -351,6 +353,33 @@ describe('procesos del contrato', () => {
 
     it('nota R4: si ningún proceso admite contratos, lo dice', () => {
         expect(notaProceso([procesos[0]], '')).toBe('Este proyecto tiene procesos de contratación, pero ninguno adjudicado o celebrado: cuando lo esté, podrás vincularle el contrato.');
+    });
+});
+
+describe('proyecto del contrato', () => {
+    it('cambiar de proyecto quita el proceso, que era del anterior', () => {
+        const nuevo = { ...contratoVacio(), proceso_id: '4', objeto: 'Obra' };
+        expect(cambiarProyecto(nuevo, '9', null)).toEqual({ ...nuevo, proyecto: '9', proceso_id: '' });
+        expect(cambiarProyecto({ ...nuevo, proyecto: '9' }, '', null)).toMatchObject({ proyecto: '', proceso_id: '' });
+    });
+
+    it('volver al proyecto del contrato abierto le devuelve su proceso', () => {
+        const formulario = { ...formularioContrato(presentado), proyecto: '8', proceso_id: '' };
+        expect(cambiarProyecto(formulario, '3', presentado)).toMatchObject({ proyecto: '3', proceso_id: '5' });
+        expect(cambiarProyecto(formulario, 3, listado)).toMatchObject({ proyecto: '3', proceso_id: '5' });
+    });
+
+    it('elegir el mismo proyecto no cambia nada', () => {
+        const formulario = { ...formularioContrato(presentado), proceso_id: '6' };
+        expect(cambiarProyecto(formulario, '3', presentado)).toBe(formulario);
+    });
+
+    it('el proceso que el contrato ya tiene solo cuenta mientras siga en su proyecto', () => {
+        expect(procesoDelContrato(presentado, formularioContrato(presentado))).toBe(presentado.proceso);
+        expect(procesoDelContrato(listado, formularioContrato(listado))).toBe(listado.proceso);
+        expect(procesoDelContrato(presentado, { ...formularioContrato(presentado), proyecto: '8' })).toBeNull();
+        expect(procesoDelContrato(null, contratoVacio(3))).toBeNull();
+        expect(procesoDelContrato({ ...presentado, proceso: null }, formularioContrato(presentado))).toBeNull();
     });
 });
 

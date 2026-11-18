@@ -8,7 +8,8 @@ import Parametros from './components/Parametros';
 import ExpedienteViabilizacion from './components/ExpedienteViabilizacion';
 import PlantillasChecklist from './components/PlantillasChecklist';
 import PlantillaDetalle from './components/PlantillaDetalle';
-import { RUTA_PLANTILLAS, puedeVer } from './utils/navegacion';
+import ContratosModulo from './components/contratos/ContratosModulo';
+import { RUTA_CONTRATOS, RUTA_PLANTILLAS, puedeVer } from './utils/navegacion';
 import axios from './axios';
 import { EVENTO_SESION_EXPIRADA } from './utils/sesion';
 import '../css/app.css';
@@ -77,6 +78,10 @@ function App() {
           <Route path="/parametros/:seccion" element={<Parametros user={user} />} />
           {/* No usar /expedientes/...: bajo /GestPro chocaría con la API del mismo nombre. */}
           <Route path="/viabilizacion/:proyectoId" element={<ExpedienteViabilizacion user={user} />} />
+          {/* Lectura para todos; nuevo y modificar, solo quien edita (ContratosModulo lo decide). */}
+          <Route path={RUTA_CONTRATOS} element={<ContratosModulo user={user} />} />
+          <Route path={`${RUTA_CONTRATOS}/nuevo`} element={<ContratosModulo user={user} nuevo />} />
+          <Route path={`${RUTA_CONTRATOS}/:contratoId`} element={<ContratosModulo user={user} />} />
           {/* Solo Administrador: el backend también lo exige. */}
           <Route path={RUTA_PLANTILLAS} element={puedeVer(user, 'plantillas') ? <PlantillasChecklist /> : <Navigate to={INICIO} replace />} />
           <Route path={`${RUTA_PLANTILLAS}/:plantillaId`} element={puedeVer(user, 'plantillas') ? <PlantillaDetalle /> : <Navigate to={INICIO} replace />} />
