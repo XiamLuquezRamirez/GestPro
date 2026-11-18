@@ -1,0 +1,14 @@
+/* Ficha del proyecto (/proyectos/:id): bloques General, Formulación, Procesos y Contratos. */
+.fp-bloques { display: grid; gap: 1rem; }
+.fp-bloque { min-width: 0; padding: 1rem 1.1rem; }
+.fp-bloque-cabecera { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; justify-content: space-between; margin-bottom: .8rem; }
+.fp-bloque-cabecera h2 { font-size: 1.05rem; font-weight: 700; }
+.fp-acciones { display: flex; flex-wrap: wrap; gap: .5rem; }
+.fp-datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .85rem 1.25rem; margin: 0; }
+.fp-dato { min-width: 0; }
+.fp-dato.ancho { grid-column: 1 / -1; }
+.fp-dato dd { margin: .1rem 0 0; font-size: .93rem; overflow-wrap: anywhere; }
+.fp-progreso { display: block; height: .4rem; margin: .25rem 0 .3rem; overflow: hidden; background: var(--gp-superficie-3); border-radius: 999px; }
+.fp-progreso span { display: block; height: 100%; background: var(--gp-verde-texto); border-radius: inherit; }
+.fp-nota { margin-top: .8rem; font-size: .85rem; color: var(--gp-texto-3); }
+.fp-bloque .gp-vacio { padding: .75rem; }

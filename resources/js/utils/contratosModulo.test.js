@@ -3,8 +3,8 @@ import {
     SIN_PROYECTO, consultaDeFiltros, esIdContrato, filaContrato, filtrosDeConsulta, hayFiltros, opcionesFiltroEstado, opcionesFiltroProyecto,
     opcionesProyecto, parametrosBusqueda, puedeEditarContratos, rutaContrato, rutaListaDesde, textoAvance, textoListaVacia,
     tonoEstadoContrato, CLAVE_NIT_EMPRESA, TEXTO_SECOP_VACIO, VISTA_LISTA, VISTA_SECOP, consultaVistaSecop, esNitValido,
-    errorNit, estadoImportarSecop, estadoSinSecop, guardarNitEmpresa, leerNitEmpresa, nitDeConsulta, nitParaMostrar, normalizarNit,
-    resultadoSecopDeEstado, rutaVistaSecop, vistaDeConsulta,
+    errorNit, estadoDesdeFicha, estadoImportarSecop, estadoNuevoContratoDeProyecto, textoVolverDesde, estadoSinSecop, guardarNitEmpresa, leerNitEmpresa, nitDeConsulta, nitParaMostrar, normalizarNit,
+    proyectoDeEstado, resultadoSecopDeEstado, rutaVistaSecop, vistaDeConsulta,
 } from './contratosModulo';
 import { ESTADOS_CONTRATO } from './contratos';
 import { RUTA_CONTRATOS } from './navegacion';
@@ -201,6 +201,24 @@ describe('rutas', () => {
         expect(rutaListaDesde({ lista: 'https://otro' })).toBe('/contratos');
         expect(rutaListaDesde(null)).toBe('/contratos');
     });
+
+    it('desde la ficha de un proyecto, se vuelve a la ficha', () => {
+        expect(estadoDesdeFicha(7)).toEqual({ ficha: 7 });
+        expect(rutaListaDesde(estadoDesdeFicha(7))).toBe('/proyectos/7');
+        expect(rutaListaDesde({ ficha: '12' })).toBe('/proyectos/12');
+        expect(textoVolverDesde(estadoDesdeFicha(7))).toBe('Ficha del proyecto');
+        expect(textoVolverDesde({ lista: '?q=x' })).toBe('Contratos');
+        expect(textoVolverDesde(null)).toBe('Contratos');
+    });
+
+    it('una ficha que no es un id válido vuelve a la lista', () => {
+        ['abc', 0, -1, '7/../x', null, { id: 7 }].forEach((ficha) => {
+            expect(rutaListaDesde({ ficha }), String(ficha)).toBe('/contratos');
+            expect(textoVolverDesde({ ficha }), String(ficha)).toBe('Contratos');
+        });
+        // Si trae las dos, gana la ficha (no se llega a la ficha desde la lista con filtros).
+        expect(rutaListaDesde({ ficha: 3, lista: '?q=x' })).toBe('/proyectos/3');
+    });
 });
 
 describe('esIdContrato', () => {
@@ -344,5 +362,29 @@ describe('importar de SECOP II', () => {
 
     it('el texto sin resultados', () => {
         expect(TEXTO_SECOP_VACIO).toBe('SECOP II no tiene contratos con ese NIT como proveedor.');
+    });
+});
+
+describe('contrato nuevo de un proyecto', () => {
+    it('la ficha lleva el proyecto en el estado de navegación, y de dónde se viene', () => {
+        expect(estadoNuevoContratoDeProyecto({ id: 7, nombre: 'Acueducto', fuente_ids: [1] })).toEqual({ proyecto: { id: 7, nombre: 'Acueducto' }, ficha: 7 });
+        expect(rutaListaDesde(estadoNuevoContratoDeProyecto({ id: 7, nombre: 'Acueducto' }))).toBe('/proyectos/7');
+        // Al guardar, el contrato abierto conserva el origen: "Volver" sigue yendo a la ficha.
+        expect(rutaListaDesde(estadoSinSecop(estadoNuevoContratoDeProyecto({ id: 7, nombre: 'Acueducto' })))).toBe('/proyectos/7');
+    });
+
+    it('el editor recibe el proyecto del estado', () => {
+        expect(proyectoDeEstado({ proyecto: { id: 7, nombre: 'Acueducto' } })).toEqual({ id: 7, nombre: 'Acueducto' });
+        expect(proyectoDeEstado({ proyecto: { id: '7' } })).toEqual({ id: '7', nombre: '' });
+        expect(proyectoDeEstado(estadoNuevoContratoDeProyecto({ id: 3, nombre: 'Vía' }))).toEqual({ id: 3, nombre: 'Vía' });
+    });
+
+    it('sin estado o con uno sin un id válido, sin proyecto', () => {
+        expect(proyectoDeEstado(undefined)).toBeNull();
+        expect(proyectoDeEstado({})).toBeNull();
+        expect(proyectoDeEstado({ lista: '?q=x' })).toBeNull();
+        expect(proyectoDeEstado({ proyecto: { id: 'abc' } })).toBeNull();
+        expect(proyectoDeEstado({ proyecto: 7 })).toBeNull();
+        expect(proyectoDeEstado({ proyecto: { id: 0 } })).toBeNull();
     });
 });

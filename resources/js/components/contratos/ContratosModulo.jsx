@@ -6,8 +6,8 @@ import axios from '../../axios';
 import {
     TEXTO_SECOP_VACIO, VISTA_LISTA, VISTA_SECOP, consultaDeFiltros, consultaVistaSecop, errorNit, esIdContrato, estadoImportarSecop,
     estadoSinSecop, filaContrato, filtrosDeConsulta, guardarNitEmpresa, leerNitEmpresa, nitDeConsulta, nitParaMostrar, normalizarNit,
-    opcionesFiltroEstado, opcionesFiltroProyecto, parametrosBusqueda, puedeEditarContratos, resultadoSecopDeEstado, rutaContrato,
-    rutaListaDesde, rutaVistaSecop, textoListaVacia, vistaDeConsulta,
+    opcionesFiltroEstado, opcionesFiltroProyecto, parametrosBusqueda, proyectoDeEstado, puedeEditarContratos, resultadoSecopDeEstado, rutaContrato,
+    rutaListaDesde, rutaVistaSecop, textoListaVacia, textoVolverDesde, vistaDeConsulta,
 } from '../../utils/contratosModulo';
 import { RUTA_CONTRATOS } from '../../utils/navegacion';
 import { mensajeApi } from '../../utils/plantillasChecklist';
@@ -60,8 +60,8 @@ const AvisoProyectos = ({ proyectos }) => (proyectos.error ? (
     </p>
 ) : null);
 
-const Volver = ({ a }) => (
-    <Link to={a} className="pl-volver"><FontAwesomeIcon icon={faArrowLeft} /> Contratos</Link>
+const Volver = ({ a, texto = 'Contratos' }) => (
+    <Link to={a} className="pl-volver"><FontAwesomeIcon icon={faArrowLeft} /> {texto}</Link>
 );
 
 /** Las vistas de /contratos para quien puede editar: la lista y los contratos de la empresa en SECOP II. */
@@ -338,18 +338,20 @@ const ContratosSecop = () => {
 
 /**
  * Un contrato nuevo, con proyecto opcional. Si llega de "Importar" (con el resultado de SECOP II
- * en el estado de navegación), el formulario empieza lleno; sin estado (al abrir la dirección a
- * mano), vacío. Al guardarlo se abre, para seguir con sus pestañas.
+ * en el estado de navegación), el formulario empieza lleno; si llega de la ficha del proyecto,
+ * con ese proyecto ya elegido; sin estado (al abrir la dirección a mano), vacío. Al guardarlo se
+ * abre, para seguir con sus pestañas.
  */
 const NuevoContrato = ({ proyectos }) => {
     const { state, key } = useLocation();
     const navigate = useNavigate();
     const volver = rutaListaDesde(state);
     const importacion = resultadoSecopDeEstado(state);
+    const proyecto = proyectoDeEstado(state);
 
     return (
         <div className="pl-pagina">
-            <Volver a={volver} />
+            <Volver a={volver} texto={textoVolverDesde(state)} />
             <header className="gp-cabecera">
                 <span className="gp-etiqueta">Contratos</span>
                 <h1>Nuevo contrato</h1>
@@ -358,6 +360,7 @@ const NuevoContrato = ({ proyectos }) => {
             <div className="gp-panel ct-editor">
                 <ContratoEditor
                     key={key}
+                    proyecto={proyecto}
                     proyectos={proyectos.lista}
                     importacionSecop={importacion}
                     recargar={recargarDetalle}
@@ -403,7 +406,7 @@ const ContratoAbierto = ({ contratoId, edita, proyectos }) => {
     if (error) {
         return (
             <div className="pl-pagina">
-                <Volver a={volver} />
+                <Volver a={volver} texto={textoVolverDesde(state)} />
                 <p className="pl-error" role="alert">
                     {error.mensaje}{' '}
                     {error.reintentable && <button type="button" className="gp-boton" onClick={cargar}>Reintentar</button>}
@@ -415,7 +418,7 @@ const ContratoAbierto = ({ contratoId, edita, proyectos }) => {
 
     return (
         <div className="pl-pagina">
-            <Volver a={volver} />
+            <Volver a={volver} texto={textoVolverDesde(state)} />
             <header className="gp-cabecera">
                 <span className="gp-etiqueta">Contrato · {contrato.proyecto_nombre || 'Sin proyecto'}</span>
                 <h1>{contrato.n_contrato || 'Sin número'}</h1>

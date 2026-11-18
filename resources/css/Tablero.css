@@ -388,6 +388,7 @@ tr:hover > td > .tb-fila-enlace { color: var(--gp-azul-texto); }
 .tb-dato.ancho { grid-column: 1 / -1; }
 .tb-dato dd { margin-top: .1rem; font-size: .93rem; overflow-wrap: anywhere; }
 .tb-modal-accion { width: 100%; margin-top: 1.1rem; white-space: normal; }
+.tb-modal-accion + .tb-modal-accion { margin-top: .5rem; }
 
 /* ---------- Pantallas amplias: territorio, distribución y eventos en una fila ---------- */
 @media (min-width: 1320px) {

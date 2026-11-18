@@ -40,6 +40,8 @@ Route::middleware('auth:api')->group(function () {
 
     // Lectura: cualquier rol autenticado (Administrador, Gestor o Consulta)
     Route::get('/proyectos', [ProyectoController::class, 'proyectos']);
+    // Ficha del proyecto. Sin GET /proyectos/{id}: esa ruta es del SPA y no debe coincidir con la API.
+    Route::get('/proyectos/{proyecto}/ficha', [ProyectoController::class, 'ficha'])->whereNumber('proyecto');
     Route::get('/municipios', [ProyectoController::class, 'municipios']);
     Route::get('/estados', [ProyectoController::class, 'estados']);
     Route::get('/fases', [ProyectoController::class, 'fases']);

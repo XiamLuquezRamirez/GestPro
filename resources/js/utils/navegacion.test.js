@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { DESTINOS, GRUPO, RUTA_CONTRATOS, RUTA_PLANTILLAS, SECCIONES_PARAMETROS, buscarEnPaleta, destinoActivo, destinosPara, puedeVer, seccionDesdeSlug, tituloDeRuta } from './navegacion';
+import { DESTINOS, GRUPO, RUTA_CONTRATOS, RUTA_PLANTILLAS, SECCIONES_PARAMETROS, buscarEnPaleta, destinoActivo, destinosPara, puedeVer, rutaFichaProyecto, seccionDesdeSlug, tituloDeRuta } from './navegacion';
 import { ICONOS } from './iconosNavegacion';
 
 const proyectos = [
@@ -156,7 +156,7 @@ describe('buscarEnPaleta', () => {
 
     it('encuentra proyectos por nombre o municipio y los deja después de los destinos', () => {
         const porNombre = buscarEnPaleta('construccion', DESTINOS, proyectos);
-        expect(porNombre.at(-1)).toMatchObject({ tipo: 'proyecto', titulo: 'Construcción sede educativa', ruta: '/dashboard?proyecto=1' });
+        expect(porNombre.at(-1)).toMatchObject({ tipo: 'proyecto', titulo: 'Construcción sede educativa', ruta: '/proyectos/1' });
 
         expect(buscarEnPaleta('bello', DESTINOS, proyectos).map((r) => r.titulo)).toEqual(['Acueducto veredal']);
     });
@@ -195,6 +195,21 @@ describe('destinoActivo', () => {
 
     it('un expediente pertenece a Expedientes', () => {
         expect(destinoActivo('/viabilizacion/4', '')).toBe('expedientes');
+    });
+
+    it('la ficha de un proyecto pertenece a Proyectos', () => {
+        expect(destinoActivo('/proyectos/4', '')).toBe('proyectos');
+        expect(tituloDeRuta('/proyectos/4', '')).toBe('Proyectos');
+        // GET /proyectos es de la API: el SPA no tiene /proyectos sin id.
+        expect(destinoActivo('/proyectos', '')).toBeNull();
+        expect(destinoActivo('/proyectosx/4', '')).toBeNull();
+    });
+});
+
+describe('rutaFichaProyecto', () => {
+    it('la ficha del proyecto, nunca /proyectos sin id', () => {
+        expect(rutaFichaProyecto(7)).toBe('/proyectos/7');
+        expect(rutaFichaProyecto('12')).toBe('/proyectos/12');
     });
 });
 

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faClipboardCheck, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faClipboardCheck, faIdCard, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { COLOR_SEVERIDAD, construirSerieTemporal, severidadDesfase } from '../utils/avanceContratos';
 import { textoAvanceProyecto } from '../utils/expedientesResumen';
 import { etiquetaEstadoContrato } from '../utils/contratos';
+import { rutaFichaProyecto } from '../utils/navegacion';
 
 const moneda = (valor) => (valor || valor === 0 ? `$ ${Math.round(Number(valor)).toLocaleString('es-CO')}` : '—');
 
@@ -123,6 +124,9 @@ const ModalProyecto = ({ proyecto, resumenExpedientes, onCerrar }) => {
                         </dl>
                         <button type="button" className="gp-boton gp-boton-primario tb-modal-accion" onClick={() => navigate(`/viabilizacion/${proyecto.id}`)}>
                             <FontAwesomeIcon icon={faClipboardCheck} /> Abrir expediente
+                        </button>
+                        <button type="button" className="gp-boton tb-modal-accion" onClick={() => navigate(rutaFichaProyecto(proyecto.id))}>
+                            <FontAwesomeIcon icon={faIdCard} /> Ver ficha
                         </button>
                     </>
                 )}

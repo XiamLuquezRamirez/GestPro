@@ -32,6 +32,9 @@ export const RUTA_PLANTILLAS = '/plantillas-checklist';
 // Todos los contratos, con o sin proyecto. Bajo /GestPro no es una ruta GET de la API.
 export const RUTA_CONTRATOS = '/contratos';
 
+// La ficha de un proyecto. Siempre con id: GET /proyectos (sin id) es de la API.
+export const rutaFichaProyecto = (id) => `/proyectos/${id}`;
+
 export const DESTINOS = [
     { id: 'tablero', titulo: 'Tablero', ruta: '/dashboard', grupo: GRUPO.TRABAJO, icono: 'faGaugeHigh', palabras: 'inicio dashboard panel mapa' },
     ...SECCIONES_PARAMETROS.filter((s) => s.grupo === GRUPO.TRABAJO).map((s) => ({ ...s, id: s.slug, ruta: `/parametros/${s.slug}` })),
@@ -81,7 +84,7 @@ export const buscarEnPaleta = (consulta, destinos, proyectos) => {
             clave: `proyecto-${p.id}`,
             titulo: p.nombre,
             detalle: p.descripcion_municipio ?? '',
-            ruta: `/dashboard?proyecto=${p.id}`,
+            ruta: rutaFichaProyecto(p.id),
             icono: 'faFolderOpen',
         }));
 
@@ -90,6 +93,7 @@ export const buscarEnPaleta = (consulta, destinos, proyectos) => {
 
 export const destinoActivo = (pathname, search) => {
     if (pathname.startsWith('/viabilizacion/')) return 'expedientes';
+    if (pathname.startsWith('/proyectos/')) return 'proyectos';
     if (pathname === RUTA_PLANTILLAS || pathname.startsWith(`${RUTA_PLANTILLAS}/`)) return 'plantillas';
     if (pathname === RUTA_CONTRATOS || pathname.startsWith(`${RUTA_CONTRATOS}/`)) return 'contratos';
     if (pathname.startsWith('/parametros/')) return pathname.split('/')[2];

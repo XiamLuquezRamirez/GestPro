@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import axios from '../axios';
-import { faPlus, faTrash, faSave, faTimes, faFile, faEdit, faClipboardCheck, faGavel } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faTrash, faSave, faTimes, faFile, faEdit, faClipboardCheck, faGavel, faIdCard } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
 import EmojiPicker from 'emoji-picker-react';
@@ -9,7 +9,7 @@ import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../leafletIconFix';
 import '../../css/Parametros.css';
-import { seccionDesdeSlug } from '../utils/navegacion';
+import { rutaFichaProyecto, seccionDesdeSlug } from '../utils/navegacion';
 import { alternarFuente, datosFinanciacionDe, financiacionCompleta, fuentesDisponibles, mensajeDeError } from '../utils/fuentesProyecto';
 import { formatoMoneda, limpiarMoneda, monedaEnEdicion, numeroDeMoneda } from '../utils/moneda';
 import CatalogoModalidades from './CatalogoModalidades';
@@ -1020,6 +1020,16 @@ const Parametros = ({ user }) => {
                                                     className={`btn-toggle ${item.dashboard ? 'deactivate' : 'activate'}`}
                                                 >
                                                     {item.dashboard ? 'Desactivar en Dashboard' : 'Activar en Dashboard'}
+                                                </button>
+                                            )}
+
+                                            {type === 'proyectos' && (
+                                                <button
+                                                    onClick={() => navigate(rutaFichaProyecto(item.id))}
+                                                    className="btn-add-contrato-list"
+                                                    title="Ficha del proyecto"
+                                                >
+                                                    <FontAwesomeIcon icon={faIdCard} /> Ficha
                                                 </button>
                                             )}
 

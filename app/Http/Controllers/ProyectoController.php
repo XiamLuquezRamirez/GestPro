@@ -5,46 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\Contrato;
 use App\Models\Proyecto;
 use App\Services\Contratacion\ContratosService;
+use App\Services\Contratacion\ProcesosContratacion;
 use App\Services\Financiacion\FuentesProyecto;
 use App\Services\Viabilizacion\ExpedienteService;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ProyectoController extends Controller
 {
     public function proyectos()
     {
-        $proyectos = DB::table('proyectos')
-            ->leftJoin('municipios', 'proyectos.municipio', 'municipios.codigo')
-            ->leftJoin('entidades as entidad_presenta', 'proyectos.entidad_presenta', 'entidad_presenta.id')
-            ->leftJoin('entidades as entidad_financia', 'proyectos.entidad_financia', 'entidad_financia.id')
-            ->leftJoin('fases as fase', 'proyectos.fase', 'fase.id')
-            ->leftJoin('estados as estado', 'proyectos.estado', 'estado.id')
-            ->select(
-                'proyectos.id',
-                'proyectos.nombre',
-                'proyectos.descripcion',
-                'proyectos.municipio',
-                'proyectos.fecha_inicio',
-                'proyectos.estado',
-                'proyectos.fase',
-                'proyectos.presupuesto',
-                'proyectos.entidad_presenta',
-                'proyectos.entidad_financia',
-                'proyectos.fuente_financiacion',
-                'proyectos.financiacion_por_definir',
-                'proyectos.sector',
-                'fase.color as color_fase',
-                'fase.dashboard as dashboard_fase',
-                'estado.color as color_estado',
-                'proyectos.progreso',
-                DB::raw('municipios.nombre as descripcion_municipio'),
-                DB::raw('entidad_presenta.nombre as descripcion_entidad_presenta'),
-                DB::raw('entidad_financia.nombre as descripcion_entidad_financia'),
-                DB::raw('fase.nombre as descripcion_fase'),
-                DB::raw('estado.nombre as descripcion_estado')
-            )
-            ->get();
+        $proyectos = $this->consultaProyectos()->get();
 
         
 
@@ -56,10 +29,7 @@ class ProyectoController extends Controller
                 ->map(fn ($fila) => (int) $fila->fuente_id)
                 ->values();
 
-            $componentesPresupuesto = DB::table('presupuesto_proyecto')
-                ->select('componente', 'valor', 'id',)
-                ->where('proyecto', $proyecto->id)
-                ->get();
+            $componentesPresupuesto = $this->componentesPresupuesto($proyecto->id);
             $proyecto->componentesPresupuesto = $componentesPresupuesto;
             $totalPresupuesto = $componentesPresupuesto->sum('valor');
 
@@ -119,16 +89,93 @@ class ProyectoController extends Controller
 
             $proyecto->contratos = $contratos;
 
-            $proyecto->puntosUbicacion = DB::table('proyecto_ubicaciones')
-                ->select('id', 'lat', 'lng')
-                ->where('proyecto', $proyecto->id)
-                ->get();
+            $proyecto->puntosUbicacion = $this->puntosUbicacion($proyecto->id);
         }
 
         // El proceso de cada contrato, resumido: una sola consulta para todos los proyectos.
         app(ContratosService::class)->agregarProcesos($proyectos->flatMap(fn ($proyecto) => $proyecto->contratos));
 
         return response()->json($proyectos);
+    }
+
+    /**
+     * Ficha del proyecto: sus datos generales (la fila de GET /proyectos sin sus contratos), el
+     * resumen de su expediente (el de GET /expedientes, o null), sus procesos (los de
+     * GET /proyectos/{id}/procesos) y sus contratos (los de GET /contratos/buscar?proyecto=id).
+     * El id llega como texto: uno de más de 18 cifras no cabe en un entero y tampoco existe.
+     */
+    public function ficha(string $proyecto, ExpedienteService $expedientes, ProcesosContratacion $procesos, ContratosService $contratos)
+    {
+        $modelo = preg_match('/^[0-9]{1,18}$/', $proyecto) === 1 ? Proyecto::find((int) $proyecto) : null;
+        if ($modelo === null) {
+            return response()->json(['mensaje' => 'El proyecto no existe.'], 404);
+        }
+
+        $fila = $this->consultaProyectos()->where('proyectos.id', $modelo->id)->first();
+        $fila->fuente_ids = DB::table('proyecto_fuentes')->where('proyecto_id', $modelo->id)->pluck('fuente_id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+        $fila->componentesPresupuesto = $this->componentesPresupuesto($modelo->id);
+        $fila->totalPresupuesto = $fila->componentesPresupuesto->sum('valor');
+        $fila->puntosUbicacion = $this->puntosUbicacion($modelo->id);
+
+        return response()->json([
+            'proyecto' => $fila,
+            'expediente' => $expedientes->resumenPorProyecto($modelo->id)[0] ?? null,
+            'procesos' => $procesos->deProyecto($modelo),
+            'contratos' => $contratos->buscar(['proyecto' => (string) $modelo->id]),
+        ]);
+    }
+
+    /** Los proyectos con los nombres de su municipio, entidades, fase y estado: las columnas de GET /proyectos. */
+    private function consultaProyectos(): Builder
+    {
+        return DB::table('proyectos')
+            ->leftJoin('municipios', 'proyectos.municipio', 'municipios.codigo')
+            ->leftJoin('entidades as entidad_presenta', 'proyectos.entidad_presenta', 'entidad_presenta.id')
+            ->leftJoin('entidades as entidad_financia', 'proyectos.entidad_financia', 'entidad_financia.id')
+            ->leftJoin('fases as fase', 'proyectos.fase', 'fase.id')
+            ->leftJoin('estados as estado', 'proyectos.estado', 'estado.id')
+            ->select(
+                'proyectos.id',
+                'proyectos.nombre',
+                'proyectos.descripcion',
+                'proyectos.municipio',
+                'proyectos.fecha_inicio',
+                'proyectos.estado',
+                'proyectos.fase',
+                'proyectos.presupuesto',
+                'proyectos.entidad_presenta',
+                'proyectos.entidad_financia',
+                'proyectos.fuente_financiacion',
+                'proyectos.financiacion_por_definir',
+                'proyectos.sector',
+                'fase.color as color_fase',
+                'fase.dashboard as dashboard_fase',
+                'estado.color as color_estado',
+                'proyectos.progreso',
+                DB::raw('municipios.nombre as descripcion_municipio'),
+                DB::raw('entidad_presenta.nombre as descripcion_entidad_presenta'),
+                DB::raw('entidad_financia.nombre as descripcion_entidad_financia'),
+                DB::raw('fase.nombre as descripcion_fase'),
+                DB::raw('estado.nombre as descripcion_estado')
+            );
+    }
+
+    private function componentesPresupuesto(int $proyectoId): Collection
+    {
+        return DB::table('presupuesto_proyecto')
+            ->select('componente', 'valor', 'id',)
+            ->where('proyecto', $proyectoId)
+            ->get();
+    }
+
+    private function puntosUbicacion(int $proyectoId): Collection
+    {
+        return DB::table('proyecto_ubicaciones')
+            ->select('id', 'lat', 'lng')
+            ->where('proyecto', $proyectoId)
+            ->get();
     }
 
     public function eventos()

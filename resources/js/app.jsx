@@ -9,6 +9,7 @@ import ExpedienteViabilizacion from './components/ExpedienteViabilizacion';
 import PlantillasChecklist from './components/PlantillasChecklist';
 import PlantillaDetalle from './components/PlantillaDetalle';
 import ContratosModulo from './components/contratos/ContratosModulo';
+import FichaProyecto from './components/FichaProyecto';
 import { RUTA_CONTRATOS, RUTA_PLANTILLAS, puedeVer } from './utils/navegacion';
 import axios from './axios';
 import { EVENTO_SESION_EXPIRADA } from './utils/sesion';
@@ -78,6 +79,8 @@ function App() {
           <Route path="/parametros/:seccion" element={<Parametros user={user} />} />
           {/* No usar /expedientes/...: bajo /GestPro chocaría con la API del mismo nombre. */}
           <Route path="/viabilizacion/:proyectoId" element={<ExpedienteViabilizacion user={user} />} />
+          {/* Siempre con id: GET /proyectos (sin id) es de la API. */}
+          <Route path="/proyectos/:proyectoId" element={<FichaProyecto user={user} />} />
           {/* Lectura para todos; nuevo y modificar, solo quien edita (ContratosModulo lo decide). */}
           <Route path={RUTA_CONTRATOS} element={<ContratosModulo user={user} />} />
           <Route path={`${RUTA_CONTRATOS}/nuevo`} element={<ContratosModulo user={user} nuevo />} />

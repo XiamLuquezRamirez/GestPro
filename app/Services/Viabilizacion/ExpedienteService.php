@@ -705,11 +705,12 @@ final class ExpedienteService
      * Expediente más reciente de cada proyecto que tiene alguno, con su avance, sus
      * plantillas y los responsables con requisitos pendientes. Son cuatro consultas sin
      * importar cuántos proyectos haya: cantidades, plantillas, responsables y expedientes
-     * con su avance.
+     * con su avance. Con `$proyectoId`, solo el de ese proyecto (la ficha del proyecto).
      */
-    public function resumenPorProyecto(): array
+    public function resumenPorProyecto(?int $proyectoId = null): array
     {
         $cantidades = ProyectoExpediente::query()
+            ->when($proyectoId !== null, fn ($q) => $q->where('proyecto_id', $proyectoId))
             ->selectRaw('MAX(id) AS ultimo_id, COUNT(*) AS cantidad')
             ->groupBy('proyecto_id')
             ->pluck('cantidad', 'ultimo_id');

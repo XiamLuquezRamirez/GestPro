@@ -1,11 +1,12 @@
 // Lógica de presentación del módulo Contratos (/contratos): filtros en la URL, filas de la lista,
 // opciones de los selectores de proyecto, rutas y la vista de los contratos de la empresa en
-// SECOP II (la vista en la URL, el NIT recordado y el estado de "Importar"). Funciones puras, probadas en
+// SECOP II (la vista en la URL, el NIT recordado y el estado de "Importar") y el proyecto de un
+// contrato nuevo abierto desde la ficha del proyecto. Funciones puras, probadas en
 // contratosModulo.test.js. Los filtros los valida también GET /contratos/buscar.
 
 import { ESTADOS_CONTRATO, etiquetaEstadoContrato } from './contratos';
 import { formatoMoneda } from './moneda';
-import { RUTA_CONTRATOS } from './navegacion';
+import { RUTA_CONTRATOS, rutaFichaProyecto } from './navegacion';
 
 /** El valor del filtro de proyecto para los contratos sin proyecto (el `proyecto=sin` de la API). */
 export const SIN_PROYECTO = 'sin';
@@ -141,13 +142,28 @@ export const filaContrato = (contrato) => ({
 export const rutaContrato = (id) => `${RUTA_CONTRATOS}/${id}`;
 
 /**
- * La lista a la que se vuelve desde un contrato: la que se dejó, con sus filtros, si la
- * navegación la trae en su estado (`{ lista: '?q=…' }`); si no, la lista sin filtros.
+ * El estado de navegación de un enlace a un contrato desde la ficha de un proyecto: "Volver",
+ * "Cancelar" y el guardado regresan a esa ficha (rutaListaDesde).
+ */
+export const estadoDesdeFicha = (proyectoId) => ({ ficha: proyectoId });
+
+// El id de la ficha de la que se viene, si el estado lo trae y es un id válido.
+const fichaDeEstado = (estado) => (esIdContrato(estado?.ficha) ? estado.ficha : null);
+
+/**
+ * A dónde se vuelve desde un contrato: la ficha del proyecto, si se vino de ella
+ * (`{ ficha: id }`, estadoDesdeFicha); la lista que se dejó, con sus filtros, si la navegación la
+ * trae en su estado (`{ lista: '?q=…' }`); si no, la lista sin filtros.
  */
 export const rutaListaDesde = (estado) => {
+    const ficha = fichaDeEstado(estado);
+    if (ficha !== null) return rutaFichaProyecto(ficha);
     const lista = estado?.lista;
     return typeof lista === 'string' && lista.startsWith('?') ? `${RUTA_CONTRATOS}${lista}` : RUTA_CONTRATOS;
 };
+
+/** El texto del enlace "Volver" que va a rutaListaDesde(estado). */
+export const textoVolverDesde = (estado) => (fichaDeEstado(estado) !== null ? 'Ficha del proyecto' : 'Contratos');
 
 // ---------- Contratos de la empresa en SECOP II ----------
 
@@ -249,4 +265,25 @@ export const estadoSinSecop = (estado) => {
     if (!esObjeto(estado)) return {};
     const { secop, ...resto } = estado;
     return resto;
+};
+
+// ---------- Contrato nuevo de un proyecto ----------
+
+/**
+ * "Nuevo contrato" desde la ficha del proyecto: el estado de navegación de /contratos/nuevo con
+ * el proyecto ya elegido y la ficha de la que se viene (para volver a ella).
+ */
+export const estadoNuevoContratoDeProyecto = (proyecto) => ({
+    proyecto: { id: proyecto.id, nombre: proyecto.nombre },
+    ...estadoDesdeFicha(proyecto.id),
+});
+
+/**
+ * El proyecto del estado de navegación ({id, nombre}), o null. Sin estado (al abrir la dirección
+ * a mano) o con un id que no es válido, el contrato empieza sin proyecto.
+ */
+export const proyectoDeEstado = (estado) => {
+    const proyecto = estado?.proyecto;
+    if (!esObjeto(proyecto) || !esIdContrato(proyecto.id)) return null;
+    return { id: proyecto.id, nombre: String(proyecto.nombre ?? '') };
 };
