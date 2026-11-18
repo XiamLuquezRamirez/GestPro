@@ -1,6 +1,18 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
+    ACTA_VACIA,
+    MODIFICACION_VACIA,
+    actividadConAvance,
+    anexosDelContrato,
+    anexosParaGuardar,
+    avanceFinancieroDeActas,
+    avanceFisicoDeActividades,
+    calculoActa,
+    datosActa,
+    datosModificacion,
+    etiquetaTipoModificacion,
+    sumaPesos,
     CAMPOS_CONTRATO,
     CONTRATO_VACIO,
     erroresGuardarContrato,
@@ -461,5 +473,77 @@ describe('primerCampoConError', () => {
         expect(primerCampoConError({ estado: 'a', n_contrato: 'b', objeto: undefined })).toBe('n_contrato');
         expect(primerCampoConError({ objeto: undefined })).toBeNull();
         expect(primerCampoConError({})).toBeNull();
+    });
+});
+
+describe('pestañas del contrato', () => {
+    it('los anexos del listado se leen para la pestaña y se envían sin id', () => {
+        const contrato = { anexos: [{ id: 4, descripcion: 'Póliza', nombre_archivo: 'p.pdf', ruta_archivo: 'anexos_contratos/p.pdf', fecha: '2026-01-10' }] };
+        const anexos = anexosDelContrato(contrato);
+        expect(anexos).toEqual([{ id: 4, descripcion: 'Póliza', nombreArchivo: 'p.pdf', rutaArchivo: 'anexos_contratos/p.pdf', fecha: '2026-01-10' }]);
+        expect(anexosParaGuardar(anexos)).toEqual([{ descripcion: 'Póliza', nombreArchivo: 'p.pdf', rutaArchivo: 'anexos_contratos/p.pdf', fecha: '2026-01-10' }]);
+        expect(anexosDelContrato({ anexos: [] })).toEqual([]);
+        expect(anexosDelContrato(null)).toEqual([]);
+    });
+
+    it('el acta amortiza el anticipo y calcula el porcentaje sobre el vigente', () => {
+        const formulario = { valor_inicial: '1.000.000', anticipo: true, porcentaje_anticipo: '30' };
+        expect(calculoActa(200000, formulario, null)).toEqual({ amortizacion: 60000, valorPresente: 140000, porcentajeEjecutado: 20 });
+        // Con una adición de 1.000.000 el vigente es 2.000.000.
+        expect(calculoActa(200000, { ...formulario, anticipo: false }, { valor: '2000000.00', valor_inicial: '1000000.00' }))
+            .toEqual({ amortizacion: 0, valorPresente: 200000, porcentajeEjecutado: 10 });
+        expect(calculoActa(5000, { valor_inicial: '', anticipo: false }, null).porcentajeEjecutado).toBe(0);
+    });
+
+    it('lo que se envía de un acta', () => {
+        const formulario = {
+            ...ACTA_VACIA, descripcion: 'Acta 1', fecha_acta: '2026-02-01', valor_facturado: '$ 1.500,50',
+            amortizacion_50: 0, valor_presente_acta: 1500.5, porcentaje_ejecutado: 15,
+        };
+        expect(datosActa(7, formulario, 'actas/a.pdf')).toEqual({
+            contrato_id: 7, descripcion: 'Acta 1', fecha_acta: '2026-02-01', valor_facturado: 1500.5,
+            amortizacion_50: 0, valor_presente_acta: 1500.5, porcentaje_ejecutado: 15, anexo: 'actas/a.pdf',
+        });
+    });
+
+    it('el avance financiero suma lo facturado sobre el vigente; sin actas o sin vigente, vacío', () => {
+        expect(avanceFinancieroDeActas([{ valor_facturado: '250000.00' }, { valor_facturado: 83333 }], 1000000)).toBe(33.33);
+        expect(avanceFinancieroDeActas([], 1000000)).toBe('');
+        expect(avanceFinancieroDeActas([{ valor_facturado: 10 }], 0)).toBe('');
+    });
+
+    it('el avance físico pondera el último avance de cada actividad', () => {
+        const actividades = [{ peso: 60, ultimo_avance: 50 }, { peso: 40, ultimo_avance: null }, { peso: 0 }];
+        expect(sumaPesos(actividades)).toBe(100);
+        expect(avanceFisicoDeActividades(actividades)).toBe(30);
+        expect(avanceFisicoDeActividades([{ peso: 33, ultimo_avance: 50 }])).toBe(17);
+        expect(avanceFisicoDeActividades([])).toBe(0);
+    });
+
+    it('un avance solo pasa a ser el último si es igual o más reciente', () => {
+        const actividad = { id: 1, ultimo_avance: 40, fecha_ultimo_avance: '2026-03-10' };
+        expect(actividadConAvance(actividad, '2026-03-10', '55')).toEqual({ id: 1, ultimo_avance: 55, fecha_ultimo_avance: '2026-03-10' });
+        expect(actividadConAvance(actividad, '2026-03-01', '55')).toBe(actividad);
+        expect(actividadConAvance({ id: 2, ultimo_avance: null, fecha_ultimo_avance: null }, '2026-01-01', '10').ultimo_avance).toBe(10);
+    });
+
+    it('una prórroga no envía valor ni una adición días', () => {
+        const base = {
+            ...MODIFICACION_VACIA, numero_otrosi: 'Otrosí 1', valor_adicion: '$ 500.000,25', dias_prorroga: '30',
+            fecha_modificacion: '2026-04-01', justificacion: 'Lluvias',
+        };
+        expect(datosModificacion(7, base)).toEqual({
+            contrato_id: 7, numero_otrosi: 'Otrosí 1', tipo: 'adicion', valor_adicion: 500000.25,
+            dias_prorroga: null, fecha_modificacion: '2026-04-01', justificacion: 'Lluvias',
+        });
+        expect(datosModificacion(7, { ...base, tipo: 'prorroga' })).toMatchObject({ valor_adicion: null, dias_prorroga: '30' });
+        expect(datosModificacion(7, { ...base, tipo: 'adicion_prorroga', valor_adicion: '', dias_prorroga: '' }))
+            .toMatchObject({ valor_adicion: null, dias_prorroga: null });
+    });
+
+    it('la etiqueta del tipo de modificación', () => {
+        expect(etiquetaTipoModificacion('adicion')).toBe('Adición');
+        expect(etiquetaTipoModificacion('prorroga')).toBe('Prórroga');
+        expect(etiquetaTipoModificacion('adicion_prorroga')).toBe('Adición y Prórroga');
     });
 });

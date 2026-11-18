@@ -1,9 +1,11 @@
 // Lógica de presentación del formulario de contratos: estados, formulario, lo que se envía a
-// /guardarContrato, el proceso del contrato y su precarga, y los valores vigentes.
+// /guardarContrato, el proceso del contrato y su precarga, los valores vigentes y las pestañas
+// del contrato (anexos, actas, actividades y modificaciones).
 // Funciones puras, probadas en contratos.test.js. Las reglas las valida el backend
 // (ContratoController y ContratosService); aquí se adelantan los mismos mensajes.
 
 import { erroresPorCampo, etiquetaEstadoProceso, etiquetaPlataforma, numeroProceso, valorDesdeApi, valorParaApi } from './contratacion';
+import { numeroDeMoneda } from './moneda';
 
 // Los valores son las constantes de Contrato (contratos.test.js lo comprueba).
 export const ESTADOS_CONTRATO = [
@@ -287,4 +289,110 @@ export const opcionesTipoContrato = (tipos, contrato) => {
         opciones.push({ valor: String(id), etiqueta: enLista ? `${nombre} (inactivo)` : nombre });
     }
     return opciones;
+};
+
+// ---------- Pestañas del contrato ----------
+
+// Formularios vacíos de las pestañas.
+export const ANEXO_VACIO = { descripcion: '', archivo: null };
+export const ACTA_VACIA = {
+    descripcion: '', fecha_acta: '', valor_facturado: '', amortizacion_50: '',
+    valor_presente_acta: '', porcentaje_ejecutado: '', archivo: null,
+};
+export const ACTIVIDAD_VACIA = { nombre: '', peso: '' };
+export const AVANCE_VACIO = { fecha: '', porcentaje_ejecucion: '' };
+export const MODIFICACION_VACIA = {
+    numero_otrosi: '', tipo: 'adicion', valor_adicion: '',
+    dias_prorroga: '', fecha_modificacion: '', justificacion: '',
+};
+
+/** Los anexos del contrato del listado (`nombre_archivo`, `ruta_archivo`) como los usa la pestaña. */
+export const anexosDelContrato = (contrato) => (contrato?.anexos?.length
+    ? contrato.anexos.map((anexo) => ({
+        id: anexo.id,
+        descripcion: anexo.descripcion,
+        nombreArchivo: anexo.nombre_archivo,
+        rutaArchivo: anexo.ruta_archivo,
+        fecha: anexo.fecha,
+    }))
+    : []);
+
+/** Los anexos como los espera `anexos` de /guardarContrato. */
+export const anexosParaGuardar = (anexos) => anexos.map((anexo) => ({
+    descripcion: anexo.descripcion,
+    nombreArchivo: anexo.nombreArchivo,
+    rutaArchivo: anexo.rutaArchivo,
+    fecha: anexo.fecha,
+}));
+
+/**
+ * Lo que se calcula de un acta con su valor facturado: la amortización del anticipo (si el
+ * contrato lo lleva), el valor presente y el porcentaje ejecutado sobre el valor vigente.
+ */
+export const calculoActa = (valorFacturado, formulario, contrato) => {
+    const porcentajeAnticipo = parseInt(formulario.porcentaje_anticipo, 10) || 0;
+    const amortizacion = formulario.anticipo ? Math.round(valorFacturado * (porcentajeAnticipo / 100) * 100) / 100 : 0;
+    const valorPresente = Math.round((valorFacturado - amortizacion) * 100) / 100;
+    const vigente = valorVigente(formulario, contrato);
+    const porcentajeEjecutado = vigente ? Math.round((valorFacturado / vigente) * 100 * 100) / 100 : 0;
+    return { amortizacion, valorPresente, porcentajeEjecutado };
+};
+
+/** Lo que espera /guardarActaFinanciera. */
+export const datosActa = (contratoId, formulario, rutaAnexo) => ({
+    contrato_id: contratoId,
+    descripcion: formulario.descripcion,
+    fecha_acta: formulario.fecha_acta,
+    valor_facturado: numeroDeMoneda(formulario.valor_facturado),
+    amortizacion_50: formulario.amortizacion_50,
+    valor_presente_acta: formulario.valor_presente_acta,
+    porcentaje_ejecutado: formulario.porcentaje_ejecutado,
+    anexo: rutaAnexo,
+});
+
+/**
+ * Avance financiero: lo facturado en todas las actas sobre el valor vigente, con dos decimales;
+ * sin actas o sin valor vigente, vacío.
+ */
+export const avanceFinancieroDeActas = (actas, vigente) => {
+    if (actas.length === 0 || !vigente) return '';
+    const totalFacturado = actas.reduce((suma, acta) => suma + (parseFloat(acta.valor_facturado) || 0), 0);
+    return Math.round((totalFacturado / vigente) * 100 * 100) / 100;
+};
+
+/** La suma de los pesos de las actividades (deben sumar 100). */
+export const sumaPesos = (actividades) => actividades.reduce((suma, a) => suma + (a.peso || 0), 0);
+
+/** Avance físico: la suma ponderada (peso × último % de ejecución) de las actividades, redondeada. */
+export const avanceFisicoDeActividades = (actividades) => Math.round(
+    actividades.reduce((suma, a) => suma + ((a.peso || 0) / 100) * (a.ultimo_avance || 0), 0),
+);
+
+/**
+ * La actividad tras registrarle un avance: si es el más reciente (o el primero), pasa a ser su
+ * último avance; uno de una fecha anterior queda solo en el historial.
+ */
+export const actividadConAvance = (actividad, fecha, porcentaje) => {
+    const esMasReciente = !actividad.fecha_ultimo_avance || fecha >= actividad.fecha_ultimo_avance;
+    return esMasReciente
+        ? { ...actividad, ultimo_avance: parseInt(porcentaje, 10), fecha_ultimo_avance: fecha }
+        : actividad;
+};
+
+/** Lo que espera /guardarModificacionContrato: una prórroga no lleva valor, ni una adición días. */
+export const datosModificacion = (contratoId, formulario) => ({
+    contrato_id: contratoId,
+    numero_otrosi: formulario.numero_otrosi,
+    tipo: formulario.tipo,
+    valor_adicion: formulario.tipo === 'prorroga' ? null : numeroDeMoneda(formulario.valor_adicion) || null,
+    dias_prorroga: formulario.tipo === 'adicion' ? null : (formulario.dias_prorroga || null),
+    fecha_modificacion: formulario.fecha_modificacion,
+    justificacion: formulario.justificacion,
+});
+
+/** La etiqueta del tipo de modificación. */
+export const etiquetaTipoModificacion = (tipo) => {
+    if (tipo === 'adicion') return 'Adición';
+    if (tipo === 'prorroga') return 'Prórroga';
+    return 'Adición y Prórroga';
 };
