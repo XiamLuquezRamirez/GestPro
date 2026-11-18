@@ -107,6 +107,28 @@ export const formularioContrato = (contrato) => {
     };
 };
 
+// ---------- Referencia de SECOP II ----------
+
+/** Los campos de la referencia de SECOP II que guarda el contrato (sin control en el formulario). */
+export const CAMPOS_SECOP = ['secop_id_contrato', 'secop_proceso', 'url_secop'];
+
+/**
+ * La referencia de SECOP II para /guardarContrato. Solo va si el formulario usó SECOP II
+ * (`secop_consultado`, que marcan las utilidades de secop.js): entonces van los tres campos, vacío
+ * como null, y `secop_consultado`, para que el servidor anote la fecha de la consulta. Si no, no
+ * se envía nada y la referencia guardada no cambia, salvo que se haya desvinculado
+ * (`secop_desvincular`, de desvincularSecop): entonces van los tres como null, sin consulta.
+ */
+export const datosSecop = (formulario) => {
+    if (!formulario?.secop_consultado) {
+        return formulario?.secop_desvincular ? Object.fromEntries(CAMPOS_SECOP.map((campo) => [campo, null])) : {};
+    }
+    return {
+        ...Object.fromEntries(CAMPOS_SECOP.map((campo) => [campo, vacio(formulario[campo]) ? null : String(formulario[campo]).trim()])),
+        secop_consultado: true,
+    };
+};
+
 const avance = (valor) => {
     if (vacio(valor)) return null;
     const numero = Number(String(valor).replace(',', '.'));
@@ -117,7 +139,8 @@ const avance = (valor) => {
  * Lo que espera `formContrato` de /guardarContrato. Se envían todos los campos: un opcional vacío
  * va como null y así se borra al editar. El valor y la fecha fin vigentes no se envían: los
  * calcula el servidor. Al editar, `contrato` es el que se abrió: van su id y su `updated_at`,
- * para que el servidor rechace el cambio si otra persona lo modificó entretanto.
+ * para que el servidor rechace el cambio si otra persona lo modificó entretanto. La referencia de
+ * SECOP II va solo si el formulario la tomó de SECOP II (datosSecop).
  */
 export const datosContrato = (formulario, contrato = null) => {
     const texto = (campo) => (vacio(formulario[campo]) ? null : String(formulario[campo]).trim());
@@ -135,6 +158,7 @@ export const datosContrato = (formulario, contrato = null) => {
         porcentaje_anticipo: anticipo && texto('porcentaje_anticipo') !== null ? Number(texto('porcentaje_anticipo')) : null,
         avance_fisico: avance(formulario.avance_fisico),
         avance_financiero: avance(formulario.avance_financiero),
+        ...datosSecop(formulario),
         ...(contrato ? { actualizado: contrato.updated_at ?? null } : {}),
     };
 };

@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { faCalculator, faEye, faFile, faInfo, faPlus, faSave, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
+import {
+    faArrowUpRightFromSquare, faCalculator, faEye, faFile, faInfo, faLinkSlash, faMagnifyingGlass, faPlus, faRotate, faSave, faTimes, faTrash,
+} from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
 import axios from '../../axios';
 import { avisarError } from '../../utils/avisosPlantillas';
-import { datosEstado, esEdicionDesactualizada, textoValor, valorEnEdicion } from '../../utils/contratacion';
+import { datosEstado, esEdicionDesactualizada, textoFecha, textoValor, valorEnEdicion } from '../../utils/contratacion';
 import {
     ACTA_VACIA, ACTIVIDAD_VACIA, ANEXO_VACIO, AVANCE_VACIO, ESTADOS_CONTRATO, MODIFICACION_VACIA, actividadConAvance, anexosDelContrato,
     anexosParaGuardar, aplicarPrecarga, avanceFinancieroDeActas, avanceFisicoDeActividades, calculoActa, cambiarProyecto, contratoVacio,
@@ -15,8 +17,16 @@ import {
 import { opcionesProyecto } from '../../utils/contratosModulo';
 import { formatoMoneda, limpiarMoneda, monedaEnEdicion, numeroDeMoneda } from '../../utils/moneda';
 import { htmlErrores, mensajeApi } from '../../utils/plantillasChecklist';
+import {
+    TEXTO_REEMPLAZAR_CON_SECOP, aplicarDiferencias, avisosSecop, camposCambiados, desvincularSecop, diferenciasSecop, formularioTieneDatos, importarSecop,
+    mensajeSecop, referenciaSecop, vincularSecop,
+} from '../../utils/secop';
+import { BuscarSecop, DiferenciasSecop } from './SecopContrato';
 import '../../../css/Parametros.css';
 import '../../../css/Contratacion.css';
+
+const MENSAJE_COINCIDE_SECOP = 'Coincide con SECOP II: guarda el contrato para registrar la consulta.';
+const MENSAJE_VINCULADO_SECOP = 'Contrato vinculado a SECOP II: guárdalo para conservar el vínculo.';
 
 /** Catálogo de tipos de contrato (GET /tiposProcesos); null si no se pudo traer. */
 export const pedirTiposContrato = async () => {
@@ -55,6 +65,8 @@ export const pedirProcesosProyecto = async (proyectoId) => {
  *   con proyecto puede cambiarlo, pero no quitarlo. Al cambiarlo se cargan los procesos del
  *   elegido. Sin la prop, el proyecto es el de `proyecto` o el del contrato, sin selector.
  * - `puedeEditar`: sin permiso, el contrato se ve sin controles para modificarlo.
+ *   Con permiso, el formulario ofrece SECOP II: "Buscar en SECOP II" (contrato nuevo o sin ID de
+ *   SECOP II) y "Actualizar desde SECOP II" (con ID). Lo que se copia de SECOP II se guarda con el contrato.
  * - `recargar(id)`: vuelve a traer los contratos tras un cambio en las pestañas; resuelve el contrato `id` recargado o null.
  * - `onGuardado(contrato)`: tras guardar (con los avisos ya mostrados); quien lo pinta cierra el editor.
  * - `onCancelar()`: "Cancelar" o "Volver a la lista".
@@ -102,6 +114,18 @@ const ContratoEditor = ({
     const [modificaciones, setModificaciones] = useState(contrato?.modificaciones || []);
     const [formModificacion, setFormModificacion] = useState(MODIFICACION_VACIA);
     const [resumenModificacion, setResumenModificacion] = useState(null);
+
+    // SECOP II: el diálogo abierto (null, { tipo: 'buscar' } o { tipo: 'diferencias', titulo,
+    // resultado, diferencias, avisos }), los avisos del último resultado usado y el mensaje de la
+    // última acción. Turno de "Actualizar desde SECOP II": una respuesta atrasada se descarta.
+    const [dialogoSecop, setDialogoSecop] = useState(null);
+    const [avisosDeSecop, setAvisosDeSecop] = useState([]);
+    const [mensajeDeSecop, setMensajeDeSecop] = useState(null);
+    const [consultandoSecop, setConsultandoSecop] = useState(false);
+    const turnoSecop = useRef(0);
+    // El formulario del último render, para comparar con SECOP II cuando llega la respuesta.
+    const formularioActual = useRef(formContrato);
+    formularioActual.current = formContrato;
 
     useEffect(() => {
         // Los estados de los procesos pueden haber cambiado desde que se abrió la lista.
@@ -174,6 +198,106 @@ const ContratoEditor = ({
         if (numero === turnoProcesosContrato.current) setProcesosContrato(lista);
         return lista;
     };
+
+    // ---------- SECOP II ----------
+
+    // El formulario con lo copiado de SECOP II: los errores de los campos que cambiaron ya no aplican.
+    const copiarAlFormulario = (siguiente, avisos, mensaje) => {
+        const cambiados = camposCambiados(formularioActual.current, siguiente);
+        setErroresContrato(prev => (cambiados.some(c => prev[c])
+            ? { ...prev, ...Object.fromEntries(cambiados.map(c => [c, undefined])) }
+            : prev));
+        setFormContrato(siguiente);
+        setAvisosDeSecop(avisos);
+        setMensajeDeSecop(mensaje);
+    };
+
+    // Las diferencias con SECOP II en su diálogo o, si no hay, el formulario marcado como
+    // consultado (así "Última consulta" se actualiza al guardar) y `mensajeSinDiferencias`.
+    const mostrarDiferencias = (formulario, resultado, titulo, mensajeSinDiferencias = MENSAJE_COINCIDE_SECOP) => {
+        const diferencias = diferenciasSecop(formulario, resultado, { tipos, contrato: editingContrato });
+        if (!diferencias.length) {
+            const consultado = aplicarDiferencias(formulario, resultado, [], editingContrato);
+            setDialogoSecop(null);
+            copiarAlFormulario(consultado, avisosSecop(resultado, consultado), mensajeSinDiferencias);
+            return;
+        }
+        setDialogoSecop({ tipo: 'diferencias', titulo, resultado, diferencias, avisos: avisosSecop(resultado, formulario) });
+    };
+
+    // "Usar este": un contrato nuevo se llena con lo de SECOP II (si ya tenía datos, se confirma);
+    // uno existente se vincula y luego se ofrecen sus diferencias para copiar los demás campos.
+    const usarResultadoSecop = async (resultado) => {
+        if (editingContrato) {
+            const vinculado = vincularSecop(formularioActual.current, resultado);
+            copiarAlFormulario(vinculado, avisosSecop(resultado, vinculado), MENSAJE_VINCULADO_SECOP);
+            mostrarDiferencias(vinculado, resultado, '¿Copiar también los demás datos?', MENSAJE_VINCULADO_SECOP);
+            return;
+        }
+        if (formularioTieneDatos(formularioActual.current)) {
+            const { isConfirmed } = await Swal.fire({
+                icon: 'question',
+                titleText: '¿Reemplazar lo que escribiste?',
+                text: TEXTO_REEMPLAZAR_CON_SECOP,
+                showCancelButton: true,
+                confirmButtonText: 'Sí, usar SECOP II',
+                cancelButtonText: 'Cancelar',
+            });
+            if (!isConfirmed) return;
+        }
+        const importado = importarSecop(formularioActual.current, resultado);
+        copiarAlFormulario(importado, avisosSecop(resultado, importado),
+            'Formulario lleno con los datos de SECOP II: revísalos y guarda el contrato.');
+        setDialogoSecop(null);
+    };
+
+    // "Actualizar desde SECOP II" (GET /secop/contratos/{id}): las diferencias con el formulario.
+    const actualizarDesdeSecop = async () => {
+        const numero = ++turnoSecop.current;
+        setConsultandoSecop(true);
+        setMensajeDeSecop(null);
+        try {
+            const { data } = await axios.get(`/secop/contratos/${encodeURIComponent(editingContrato.secop_id_contrato)}`);
+            if (numero !== turnoSecop.current) return;
+            mostrarDiferencias(formularioActual.current, data?.resultado, 'Actualizar desde SECOP II');
+        } catch (error) {
+            if (numero !== turnoSecop.current) return;
+            Swal.fire({ icon: error?.response?.status === 404 ? 'warning' : 'error', titleText: 'No se pudo actualizar desde SECOP II', text: mensajeSecop(error) });
+        } finally {
+            if (numero === turnoSecop.current) setConsultandoSecop(false);
+        }
+    };
+
+    const copiarDiferencias = (elegidos) => {
+        const { resultado } = dialogoSecop;
+        const aplicado = aplicarDiferencias(formularioActual.current, resultado, elegidos, editingContrato);
+        copiarAlFormulario(aplicado, avisosSecop(resultado, aplicado),
+            'Datos de SECOP II copiados al formulario: guarda el contrato para conservarlos.');
+        setDialogoSecop(null);
+    };
+
+    // "Desvincular de SECOP II" (un ID equivocado): con confirmación, el formulario queda sin la
+    // referencia y, al guardar, el servidor la borra. Una consulta pendiente queda atrasada.
+    const desvincularDeSecop = async () => {
+        const { isConfirmed } = await Swal.fire({
+            icon: 'question',
+            titleText: '¿Desvincular de SECOP II?',
+            text: 'Al guardar el contrato se borran el ID, el proceso y el enlace de SECOP II. Los demás datos no cambian. Después podrás buscarlo de nuevo.',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, desvincular',
+            cancelButtonText: 'Cancelar',
+        });
+        if (!isConfirmed) return;
+        turnoSecop.current += 1;
+        setConsultandoSecop(false);
+        setDialogoSecop(null);
+        setFormContrato(prev => desvincularSecop(prev));
+        setAvisosDeSecop([]);
+        setMensajeDeSecop('Contrato desvinculado de SECOP II: guárdalo para quitar el vínculo.');
+    };
+
+    // Al desmontar el editor, una consulta pendiente queda atrasada.
+    useEffect(() => () => { turnoSecop.current += 1; }, []);
 
     useEffect(() => {
         if (!focoErrorContrato) return;
@@ -667,6 +791,10 @@ const ContratoEditor = ({
     const datosProcesoContrato = procesoFormulario ? datosDelProceso(procesoFormulario) : null;
     const notaProcesoContrato = notaProceso(procesosContrato, formContrato.proceso_id);
     const vigentesContrato = vigentesDistintos(editingContrato);
+    // SECOP II: la referencia que se muestra y qué se ofrece según tenga o no ID guardado.
+    const referenciaContratoSecop = referenciaSecop(formContrato, editingContrato);
+    const puedeBuscarSecop = puedeEditar && !editingContrato?.secop_id_contrato;
+    const puedeActualizarSecop = puedeEditar && Boolean(editingContrato?.secop_id_contrato) && !referenciaContratoSecop.desvinculado;
 
     // Propiedades comunes de un control del formulario de contrato: valor, cambio y aviso de error.
     // Sin permiso para editar, el control queda deshabilitado.
@@ -746,6 +874,60 @@ const ContratoEditor = ({
                         <p className="contratos-info">
                             Completa los datos del contrato. Los campos marcados con * son obligatorios.
                         </p>
+                        {(puedeEditar || referenciaContratoSecop.id) && (
+                            <section className="ct-secop" aria-labelledby="secop-titulo">
+                                <div className="ct-secop-cabecera">
+                                    <h4 id="secop-titulo">SECOP II</h4>
+                                    {puedeBuscarSecop && (
+                                        <button type="button" className="gp-boton" onClick={() => setDialogoSecop({ tipo: 'buscar' })}>
+                                            <FontAwesomeIcon icon={faMagnifyingGlass} /> Buscar en SECOP II
+                                        </button>
+                                    )}
+                                    {puedeActualizarSecop && (
+                                        <button type="button" className="gp-boton" onClick={actualizarDesdeSecop} disabled={consultandoSecop}>
+                                            <FontAwesomeIcon icon={faRotate} /> {consultandoSecop ? 'Consultando…' : 'Actualizar desde SECOP II'}
+                                        </button>
+                                    )}
+                                    {puedeActualizarSecop && (
+                                        <button type="button" className="gp-boton" onClick={desvincularDeSecop}>
+                                            <FontAwesomeIcon icon={faLinkSlash} /> Desvincular de SECOP II
+                                        </button>
+                                    )}
+                                </div>
+                                {referenciaContratoSecop.id ? (
+                                    <p className="ct-secop-referencia">
+                                        <span>
+                                            ID del contrato:{' '}
+                                            {referenciaContratoSecop.enlace ? (
+                                                <a className="ct-enlace" href={referenciaContratoSecop.enlace} target="_blank" rel="noopener noreferrer">
+                                                    {referenciaContratoSecop.id} <FontAwesomeIcon icon={faArrowUpRightFromSquare} aria-hidden="true" />
+                                                    <span className="ct-oculto"> (se abre en otra pestaña)</span>
+                                                </a>
+                                            ) : <span className="ct-clave">{referenciaContratoSecop.id}</span>}
+                                        </span>
+                                        <span className="ct-secop-nota">
+                                            {referenciaContratoSecop.pendiente
+                                                ? 'Se guarda con el contrato.'
+                                                : (referenciaContratoSecop.consultado
+                                                    ? `Última consulta: ${textoFecha(referenciaContratoSecop.consultado)}`
+                                                    : 'Sin consultas a SECOP II registradas.')}
+                                        </span>
+                                    </p>
+                                ) : referenciaContratoSecop.desvinculado ? (
+                                    <p className="ct-secop-nota">Al guardar, el contrato queda sin vínculo con SECOP II. Después podrás buscarlo de nuevo.</p>
+                                ) : (
+                                    <p className="ct-secop-nota">Si el contrato está en SECOP II, búscalo para llenar el formulario con sus datos; si no, llénalo a mano.</p>
+                                )}
+                                <div aria-live="polite">
+                                    {mensajeDeSecop && <p className="ct-secop-mensaje">{mensajeDeSecop}</p>}
+                                    {avisosDeSecop.length > 0 && (
+                                        <ul className="ct-secop-avisos">
+                                            {avisosDeSecop.map(aviso => <li key={aviso}>{aviso}</li>)}
+                                        </ul>
+                                    )}
+                                </div>
+                            </section>
+                        )}
                         <div className="contrato-form" ref={formularioContratoRef}>
                             {proyectos !== undefined && campoContrato('proyecto', 'Proyecto', (
                                 // Los errores del proyecto llegan en un aviso (erroresGuardarContrato): aquí, solo la nota.
@@ -1422,6 +1604,19 @@ const ContratoEditor = ({
                     </div>
                 )}
             </div>
+
+            {dialogoSecop?.tipo === 'buscar' && (
+                <BuscarSecop onElegir={usarResultadoSecop} onCerrar={() => setDialogoSecop(null)} />
+            )}
+            {dialogoSecop?.tipo === 'diferencias' && (
+                <DiferenciasSecop
+                    titulo={dialogoSecop.titulo}
+                    diferencias={dialogoSecop.diferencias}
+                    avisos={dialogoSecop.avisos}
+                    onCopiar={copiarDiferencias}
+                    onCerrar={() => setDialogoSecop(null)}
+                />
+            )}
 
             <div className="modal-actions">
                 <button type="button" onClick={onCancelar} className="btn-cancel">

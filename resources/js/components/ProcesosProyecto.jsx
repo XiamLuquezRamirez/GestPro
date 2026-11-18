@@ -8,10 +8,11 @@ import { mensajeApi } from '../utils/plantillasChecklist';
 import {
     CAMPOS_PROCESO, ESTADOS_PROCESO, MAXIMO_OBSERVACION, MAXIMO_OBSERVACIONES_PROCESO, PLATAFORMAS, avisoCambioEstado, datosEstado, datosProceso,
     erroresPorCampo, esEdicionDesactualizada, etiquetaEstadoProceso, etiquetaPlataforma, formularioProceso,
-    indiceFocoAtrapado, modoTrasGuardarContrato, numeroProceso, opcionesConActual, opcionesFuenteProceso, ordenarCatalogo, puedeEditarProcesos, puedeRegistrarContrato,
+    modoTrasGuardarContrato, numeroProceso, opcionesConActual, opcionesFuenteProceso, ordenarCatalogo, puedeEditarProcesos, puedeRegistrarContrato,
     textoContratos, textoFecha, textoValor, tonoEstado, validarProceso, valorEnEdicion,
 } from '../utils/contratacion';
 import ContratoEditor from './contratos/ContratoEditor';
+import useDialogoModal from './useDialogoModal';
 import useOcupado from './useOcupado';
 import '../../css/Plantillas.css';
 import '../../css/Contratacion.css';
@@ -27,36 +28,6 @@ const CATALOGOS = [
 
 // Un contrato nuevo no tiene pestañas que recargar: el editor lo cierra quien lo abrió al guardar.
 const sinRecargar = async () => null;
-
-const ENFOCABLES = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-/**
- * Comportamiento de un diálogo modal sobre `caja`: el foco entra al abrir, Tab no sale de él y,
- * al cerrar, vuelve a donde estaba. Devuelve el `onKeyDown` de la caja: Escape llama a `onEscape`.
- */
-const useDialogoModal = (caja, onEscape) => {
-    useEffect(() => {
-        const anterior = document.activeElement;
-        caja.current?.focus();
-        return () => {
-            if (anterior instanceof HTMLElement && document.contains(anterior)) anterior.focus();
-        };
-    }, [caja]);
-
-    return (e) => {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            onEscape();
-            return;
-        }
-        if (e.key !== 'Tab') return;
-        const focos = [...caja.current.querySelectorAll(ENFOCABLES)].filter((el) => el.getClientRects().length > 0);
-        const destino = indiceFocoAtrapado(focos.indexOf(document.activeElement), focos.length, e.shiftKey);
-        if (destino === null) return;
-        e.preventDefault();
-        (focos[destino] ?? caja.current).focus();
-    };
-};
 
 /**
  * Diálogo modal accesible: Escape llama a `onEscape`, un clic en el fondo a `onFondo` y, al
