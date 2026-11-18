@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-11-17
 **Origen:** pedido del usuario: "hoy no hay una revisión como tal de los proyectos en licitación". La guía de Colombia Compra para SECOP II sirve de punto de partida, y el seguimiento debe ser parametrizable para procesos que no van por SECOP.
-**Estado:** aprobado por el usuario el 2026-11-17. Etapa 1 (catálogos y procesos) validada y aplicada en `gest_pro`. Etapa 2 (plantillas de contratación) implementada y verificada en copia; pendiente de validar y aplicar en `gest_pro`. **Actualización del 2026-11-18:** la unificación de la sección 10 queda **anulada**. Proceso y contrato son dos registros vinculados, según `docs/superpowers/specs/2026-11-18-procesos-y-contratos-propuesta.md`, cuyas 6 decisiones aprobó el usuario el 2026-11-18. Esa propuesta manda sobre este documento en el modelo de proceso y contrato, los estados, la ponderación, las fechas y el orden de las fases.
+**Estado:** aprobado por el usuario el 2026-11-17. Etapa 1 (catálogos y procesos) validada y aplicada en `gest_pro`. Etapa 2 (plantillas de contratación) validada y aplicada en `gest_pro`, con la plantilla de licitación pública sembrada en borrador. **Actualización del 2026-11-18:** la unificación de la sección 10 queda **anulada**. Proceso y contrato son dos registros vinculados, según `docs/superpowers/specs/2026-11-18-procesos-y-contratos-propuesta.md`, cuyas 6 decisiones aprobó el usuario el 2026-11-18. Esa propuesta manda sobre este documento en el modelo de proceso y contrato, los estados, la ponderación, las fechas y el orden de las fases.
 
 ## Objetivo
 
