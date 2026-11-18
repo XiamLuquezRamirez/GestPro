@@ -6,6 +6,7 @@ use App\Http\Controllers\FuenteFinanciacionController;
 use App\Http\Controllers\ModalidadController;
 use App\Http\Controllers\ProyectoController;
 use App\Http\Controllers\SectorController;
+use App\Http\Controllers\TipoContratoController;
 use App\Http\Controllers\AuthController;
 
 // 🔓 Rutas públicas
@@ -51,7 +52,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/listarContratos', [ProyectoController::class, 'listarContratos']);
     Route::get('/sectores', [ProyectoController::class, 'sectores']);
     Route::get('/fuentesFinanciacion', [FuenteFinanciacionController::class, 'index']);
-    Route::get('/tiposProcesos', [ProyectoController::class, 'tiposProcesos']);
+    Route::get('/tiposProcesos', [TipoContratoController::class, 'index']);
     Route::get('/modalidades', [ModalidadController::class, 'index']);
     Route::get('/etapasContratacion', [EtapaContratacionController::class, 'index']);
 
@@ -103,9 +104,9 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/activarFuenteFinanciacion', [FuenteFinanciacionController::class, 'activar']);
         Route::post('/guardarSector', [SectorController::class, 'guardar']);
         Route::post('/activarSector', [SectorController::class, 'activar']);
-        Route::post('/guardarTipoProceso', [ProyectoController::class, 'guardarTipoProceso']);
+        Route::post('/guardarTipoProceso', [TipoContratoController::class, 'guardar']);
         Route::post('/eliminarTipoProceso', [ProyectoController::class, 'eliminarTipoProceso']);
-        Route::post('/activarTipoProceso', [ProyectoController::class, 'activarTipoProceso']);
+        Route::post('/activarTipoProceso', [TipoContratoController::class, 'activar']);
         Route::post('/guardarModalidad', [ModalidadController::class, 'guardar']);
         Route::post('/activarModalidad', [ModalidadController::class, 'activar']);
         Route::post('/guardarEtapaContratacion', [EtapaContratacionController::class, 'guardar']);
