@@ -8,6 +8,7 @@
 
 use App\Http\Controllers\ContratoController;
 use App\Http\Controllers\ProcesoContratacionController;
+use App\Http\Controllers\SecopController;
 use Illuminate\Support\Facades\Route;
 
 // Lectura: cualquier usuario autenticado.
@@ -34,4 +35,15 @@ Route::middleware('can:editar-datos')->group(function () {
         ->name('procesos.estado');
     Route::delete('/procesos/{proceso}', [ProcesoContratacionController::class, 'destroy'])
         ->name('procesos.destroy');
+});
+
+// SECOP II (datos abiertos): consultar para importar contratos. Administrador o Gestor, con
+// límite de consultas: cada una llama a datos.gov.co.
+Route::middleware(['can:editar-datos', 'throttle:30,1'])->prefix('secop')->group(function () {
+    Route::get('/contratos', [SecopController::class, 'buscar'])
+        ->name('secop.buscar');
+    Route::get('/contratos-empresa', [SecopController::class, 'deEmpresa'])
+        ->name('secop.empresa');
+    Route::get('/contratos/{idContrato}', [SecopController::class, 'porId'])
+        ->name('secop.contrato');
 });

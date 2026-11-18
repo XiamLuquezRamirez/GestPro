@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    // SECOP II, contratos electrónicos (datos abiertos, API Socrata pública). El token es opcional:
+    // sin él, datos.gov.co limita más las consultas por dirección IP.
+    'secop' => [
+        'url' => env('SECOP_URL', 'https://www.datos.gov.co/resource/jbjy-vk9h.json'),
+        'token' => env('SECOP_TOKEN'),
+        'timeout' => (int) env('SECOP_TIMEOUT', 15),
+        'ca_bundle' => env('SECOP_CA_BUNDLE'),
+    ],
+
 ];
