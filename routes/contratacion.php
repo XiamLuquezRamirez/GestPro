@@ -6,6 +6,7 @@
  * estas rutas exigen JWT; aquí solo se agrega el permiso de escritura.
  */
 
+use App\Http\Controllers\ContratoController;
 use App\Http\Controllers\ProcesoContratacionController;
 use Illuminate\Support\Facades\Route;
 
@@ -14,6 +15,14 @@ Route::get('/proyectos/{proyecto}/procesos', [ProcesoContratacionController::cla
     ->name('procesos.index');
 Route::get('/procesos/{proceso}/precarga-contrato', [ProcesoContratacionController::class, 'precargaContrato'])
     ->name('procesos.precarga-contrato');
+
+// Contratos de todos los proyectos (y los que no tienen proyecto). Sin GET /contratos ni
+// GET /contratos/{id}: esas rutas son del SPA y no deben coincidir con la API.
+Route::get('/contratos/buscar', [ContratoController::class, 'buscar'])
+    ->name('contratos.buscar');
+Route::get('/contratos/{contrato}/detalle', [ContratoController::class, 'detalle'])
+    ->whereNumber('contrato')
+    ->name('contratos.detalle');
 
 // Procesos de contratación: Administrador o Gestor.
 Route::middleware('can:editar-datos')->group(function () {

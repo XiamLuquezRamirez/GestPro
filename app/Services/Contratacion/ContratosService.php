@@ -355,6 +355,138 @@ final class ContratosService
         }
     }
 
+    /**
+     * Completa las filas de contratos de los listados (consultas con DB::table) con sus anexos, actas
+     * financieras, modificaciones y actividades (cada una con su último avance y su historial).
+     *
+     * @param iterable<object> $filas
+     */
+    public function agregarDetalle(iterable $filas): void
+    {
+        foreach ($filas as $contrato) {
+            $contrato->anexos = DB::table('anexos_contratos')->where('contrato_id', $contrato->id)->get();
+
+            $contrato->avancesFinancieros = DB::table('avance_financiero')
+                ->where('contrato_id', $contrato->id)
+                ->orderBy('fecha_acta', 'desc')
+                ->get();
+
+            $contrato->modificaciones = DB::table('modificaciones_contrato')
+                ->where('contrato_id', $contrato->id)
+                ->orderBy('fecha_modificacion', 'asc')
+                ->orderBy('id', 'asc')
+                ->get();
+
+            $actividades = DB::table('actividades_contrato')->where('contrato_id', $contrato->id)->get();
+            foreach ($actividades as $actividad) {
+                $ultimoAvance = DB::table('actividad_avances')
+                    ->where('actividad_id', $actividad->id)
+                    ->orderBy('fecha', 'desc')
+                    ->orderBy('id', 'desc')
+                    ->first();
+                $actividad->ultimo_avance = $ultimoAvance->porcentaje_ejecucion ?? null;
+                $actividad->fecha_ultimo_avance = $ultimoAvance->fecha ?? null;
+                $actividad->avances = DB::table('actividad_avances')
+                    ->select('id', 'fecha', 'porcentaje_ejecucion')
+                    ->where('actividad_id', $actividad->id)
+                    ->orderBy('fecha', 'asc')
+                    ->orderBy('id', 'asc')
+                    ->get();
+            }
+            $contrato->actividades = $actividades;
+        }
+    }
+
+    /**
+     * Todos los contratos, con o sin proyecto, del más reciente al más antiguo. Filtros opcionales:
+     * `q` (texto en número, objeto, contratista, contratante, NIT e identificación), `estado`,
+     * `proyecto` (id o 'sin') y `proceso` (id).
+     *
+     * @param array{q?: ?string, estado?: ?string, proyecto?: int|string|null, proceso?: int|string|null} $filtros
+     * @return list<array<string, mixed>>
+     */
+    public function buscar(array $filtros): array
+    {
+        $consulta = DB::table('contratos')
+            ->leftJoin('proyectos', 'proyectos.id', '=', 'contratos.proyecto')
+            ->leftJoin('tipos_procesos', 'tipos_procesos.id', '=', 'contratos.tipo_contrato_id')
+            ->select([
+                'contratos.id', 'contratos.n_contrato', 'contratos.objeto', 'contratos.contratista', 'contratos.contratante',
+                'contratos.estado', 'contratos.valor', 'contratos.valor_inicial', 'contratos.fecha_inicio', 'contratos.fecha_fin',
+                'contratos.avance_fisico', 'contratos.avance_financiero', 'contratos.secop_id_contrato', 'contratos.updated_at',
+                'contratos.proceso_licitacion',
+                'contratos.proyecto as proyecto_id', 'proyectos.nombre as proyecto_nombre',
+                'contratos.tipo_contrato_id', 'tipos_procesos.nombre as tipo_nombre',
+            ])
+            ->orderByDesc('contratos.id');
+
+        $texto = trim((string) ($filtros['q'] ?? ''));
+        if ($texto !== '') {
+            // Sin comodines: el % y el _ que escribe la persona se buscan tal cual.
+            $patron = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $texto) . '%';
+            $consulta->where(function ($q) use ($patron) {
+                foreach (['n_contrato', 'objeto', 'contratista', 'contratante', 'contratante_nit', 'contratista_identificacion'] as $columna) {
+                    $q->orWhereRaw("contratos.{$columna} LIKE ? ESCAPE '!'", [$patron]);
+                }
+            });
+        }
+        if (($filtros['estado'] ?? null) !== null) {
+            $consulta->where('contratos.estado', $filtros['estado']);
+        }
+        if (($filtros['proyecto'] ?? null) !== null) {
+            $filtros['proyecto'] === 'sin'
+                ? $consulta->whereNull('contratos.proyecto')
+                : $consulta->where('contratos.proyecto', (int) $filtros['proyecto']);
+        }
+        if (($filtros['proceso'] ?? null) !== null) {
+            $consulta->where('contratos.proceso_licitacion', (int) $filtros['proceso']);
+        }
+
+        $filas = $consulta->get();
+        $this->agregarProcesos($filas);
+
+        return $filas->map(fn ($f) => [
+            'id' => (int) $f->id,
+            'n_contrato' => $f->n_contrato,
+            'objeto' => $f->objeto,
+            'contratista' => $f->contratista,
+            'contratante' => $f->contratante,
+            'estado' => $f->estado,
+            'valor' => $f->valor,
+            'valor_inicial' => $f->valor_inicial,
+            'fecha_inicio' => $f->fecha_inicio,
+            'fecha_fin' => $f->fecha_fin,
+            'avance_fisico' => $this->entero($f->avance_fisico),
+            'avance_financiero' => $this->entero($f->avance_financiero),
+            'tipo_contrato' => $f->tipo_contrato_id !== null ? ['id' => (int) $f->tipo_contrato_id, 'nombre' => $f->tipo_nombre] : null,
+            'proyecto' => $f->proyecto_id !== null ? ['id' => (int) $f->proyecto_id, 'nombre' => $f->proyecto_nombre] : null,
+            'proceso' => $f->proceso,
+            'secop_id_contrato' => $f->secop_id_contrato,
+            'updated_at' => $f->updated_at,
+        ])->all();
+    }
+
+    /**
+     * El contrato con la misma forma que un elemento de GET /listarContratos, más `proyecto_nombre`,
+     * o null si no existe.
+     */
+    public function detalle(int $id): ?object
+    {
+        $fila = DB::table('contratos')
+            ->leftJoin('proyectos', 'proyectos.id', '=', 'contratos.proyecto')
+            ->where('contratos.id', $id)
+            ->select(['contratos.*', 'proyectos.nombre as proyecto_nombre'])
+            ->first();
+        if ($fila === null) {
+            return null;
+        }
+        $filas = [$fila];
+        $this->agregarProcesos($filas);
+        $this->agregarDetalle($filas);
+
+        return $fila;
+    }
+
     /** @return array{id: int, codigo_proceso: ?string, objeto: ?string, estado: string, modalidad: ?array, plataforma: ?string, url_proceso: ?string} */
     private function resumenProceso(ProcesoLicitacion $proceso): array
     {

@@ -1065,40 +1065,7 @@ class ProyectoController extends Controller
         $proyecto = $request->all();
         $contratos = DB::table('contratos')->where('proyecto', $proyecto['proyecto'])->get();
         app(ContratosService::class)->agregarProcesos($contratos);
-
-        foreach ($contratos as $contrato) {
-            $anexos = DB::table('anexos_contratos')->where('contrato_id', $contrato->id)->get();
-            $contrato->anexos = $anexos;
-
-            $contrato->avancesFinancieros = DB::table('avance_financiero')
-                ->where('contrato_id', $contrato->id)
-                ->orderBy('fecha_acta', 'desc')
-                ->get();
-
-            $contrato->modificaciones = DB::table('modificaciones_contrato')
-                ->where('contrato_id', $contrato->id)
-                ->orderBy('fecha_modificacion', 'asc')
-                ->orderBy('id', 'asc')
-                ->get();
-
-            $actividades = DB::table('actividades_contrato')->where('contrato_id', $contrato->id)->get();
-            foreach ($actividades as $actividad) {
-                $ultimoAvance = DB::table('actividad_avances')
-                    ->where('actividad_id', $actividad->id)
-                    ->orderBy('fecha', 'desc')
-                    ->orderBy('id', 'desc')
-                    ->first();
-                $actividad->ultimo_avance = $ultimoAvance->porcentaje_ejecucion ?? null;
-                $actividad->fecha_ultimo_avance = $ultimoAvance->fecha ?? null;
-                $actividad->avances = DB::table('actividad_avances')
-                    ->select('id', 'fecha', 'porcentaje_ejecucion')
-                    ->where('actividad_id', $actividad->id)
-                    ->orderBy('fecha', 'asc')
-                    ->orderBy('id', 'asc')
-                    ->get();
-            }
-            $contrato->actividades = $actividades;
-        }
+        app(ContratosService::class)->agregarDetalle($contratos);
 
         return response()->json($contratos);
     }

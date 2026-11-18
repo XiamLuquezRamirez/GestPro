@@ -12,8 +12,9 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Guardar y eliminar contratos (can:editar-datos). La lectura sigue en ProyectoController
- * (GET /proyectos y GET /listarContratos).
+ * Guardar y eliminar contratos (can:editar-datos). Lectura: buscar y detalle (cualquier usuario
+ * autenticado); los listados por proyecto siguen en ProyectoController (GET /proyectos y
+ * GET /listarContratos).
  */
 class ContratoController extends Controller
 {
@@ -51,11 +52,15 @@ class ContratoController extends Controller
         'anexos.*.rutaArchivo.required' => 'El anexo no es válido: vuelve a subirlo.',
         'anexos.*.fecha.required' => 'Falta la fecha del anexo.',
         'id.required' => 'Falta el contrato que quieres eliminar.',
+        'q.max' => 'En la búsqueda caben hasta 100 caracteres.',
+        'q.string' => 'Revisa la búsqueda: debe ser un texto.',
     ];
 
     private const ATRIBUTOS = [
         'id' => 'el contrato',
+        'q' => 'la búsqueda',
         'proyecto' => 'el proyecto',
+        'proceso' => 'el proceso',
         'proceso_id' => 'el proceso',
         'tipo_contrato_id' => 'el tipo de contrato',
         'n_contrato' => 'el número del contrato',
@@ -138,6 +143,38 @@ class ContratoController extends Controller
             'avisos' => $guardado->avisos,
             'proponer_celebrado' => $guardado->proponerCelebrado,
         ]);
+    }
+
+    /**
+     * Todos los contratos, con o sin proyecto. Filtros opcionales: `q`, `estado`, `proyecto`
+     * (un id o `sin`) y `proceso`. Un filtro inválido responde 422.
+     */
+    public function buscar(Request $request): JsonResponse
+    {
+        $filtros = $request->validate([
+            'q' => ['sometimes', 'nullable', 'bail', 'string', 'max:100'],
+            'estado' => ['sometimes', 'nullable', 'bail', 'string', Rule::in(Contrato::ESTADOS)],
+            'proyecto' => ['sometimes', 'nullable', 'bail', fn (string $atributo, mixed $valor, Closure $falla) => $valor === 'sin'
+                || (is_string($valor) && preg_match('/^\d+$/', $valor) === 1)
+                || $falla('Elige un proyecto de la lista o "sin".')],
+            'proceso' => ['sometimes', 'nullable', 'bail', $this->entero()],
+        ], self::MENSAJES, self::ATRIBUTOS);
+
+        return response()->json($this->contratos->buscar($filtros));
+    }
+
+    /**
+     * El contrato completo, con la forma de un elemento de GET /listarContratos más `proyecto_nombre`.
+     * El id llega como texto: uno de más de 18 cifras no cabe en un entero y tampoco existe.
+     */
+    public function detalle(string $contrato): JsonResponse
+    {
+        $fila = preg_match('/^[0-9]{1,18}$/', $contrato) === 1 ? $this->contratos->detalle((int) $contrato) : null;
+        if ($fila === null) {
+            return response()->json(['mensaje' => 'El contrato no existe.'], 404);
+        }
+
+        return response()->json($fila);
     }
 
     public function eliminar(Request $request): JsonResponse
