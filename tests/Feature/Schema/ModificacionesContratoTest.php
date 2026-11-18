@@ -100,9 +100,10 @@ class ModificacionesContratoTest extends TestCase
                 'formContrato' => [
                     'n_contrato' => 'C-100',
                     'objeto' => 'Construcción',
-                    'valor' => 200000000,
-                    'fecha_fin' => '2027-06-30',
-                    'estado' => 'En ejecución',
+                    // El pedido trae los iniciales (etapa 3A): el valor y la fecha fin vigentes se derivan.
+                    'valor_inicial' => 200000000,
+                    'fecha_fin_inicial' => '2027-06-30',
+                    'estado' => 'en_ejecucion',
                     'proyecto' => $proyecto->id,
                 ],
                 'anexos' => [],

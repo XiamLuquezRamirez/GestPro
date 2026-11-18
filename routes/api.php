@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\ContratoController;
 use App\Http\Controllers\EtapaContratacionController;
 use App\Http\Controllers\FuenteFinanciacionController;
 use App\Http\Controllers\ModalidadController;
@@ -62,11 +63,11 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/eliminarProyecto', [ProyectoController::class, 'eliminarProyecto']);
         Route::post('/guardarEvento', [ProyectoController::class, 'guardarEvento']);
         Route::post('/eliminarEvento', [ProyectoController::class, 'eliminarEvento']);
-        Route::post('/guardarContrato', [ProyectoController::class, 'guardarContrato']);
+        Route::post('/guardarContrato', [ContratoController::class, 'guardar']);
         Route::post('/subirAnexo', [ProyectoController::class, 'subirAnexo']);
         Route::post('/subirActa', [ProyectoController::class, 'subirActa']);
         Route::post('/eliminarAnexo', [ProyectoController::class, 'eliminarAnexo']);
-        Route::post('/eliminarContrato', [ProyectoController::class, 'eliminarContrato']);
+        Route::post('/eliminarContrato', [ContratoController::class, 'eliminar']);
         Route::post('/guardarActaFinanciera', [ProyectoController::class, 'guardarActaFinanciera']);
         Route::post('/eliminarActaFinanciera', [ProyectoController::class, 'eliminarActaFinanciera']);
         Route::post('/guardarActividad', [ProyectoController::class, 'guardarActividad']);

@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Contrato;
 use App\Models\Proyecto;
+use App\Services\Contratacion\ContratosService;
 use App\Services\Financiacion\FuentesProyecto;
 use App\Services\Viabilizacion\ExpedienteService;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -65,7 +66,14 @@ class ProyectoController extends Controller
             $proyecto->totalPresupuesto = $totalPresupuesto;
 
             $contratos = DB::table('contratos')
-                ->select('id', 'n_contrato', 'objeto', 'valor', 'estado', 'contratante', 'contratista', 'fecha_inicio', 'fecha_fin', 'interventoria', 'avance_financiero', 'avance_fisico', 'anticipo', 'porcentaje_anticipo')
+                ->select(
+                    'id', 'n_contrato', 'objeto', 'valor', 'estado', 'contratante', 'contratista', 'fecha_inicio', 'fecha_fin', 'interventoria', 'avance_financiero', 'avance_fisico', 'anticipo', 'porcentaje_anticipo',
+                    // Para que editar desde aquí no borre datos: los iniciales, la versión y lo nuevo de la etapa 3A.
+                    'proyecto', 'proceso_licitacion', 'valor_inicial', 'fecha_fin_inicial',
+                    'tipo_contrato_id', 'contratista_identificacion', 'fecha_suscripcion', 'supervisor', 'numero_rp', 'fecha_rp',
+                    'fecha_acta_inicio', 'estado_original', 'usuario_creo_id', 'created_at', 'updated_at',
+                    'contratante_nit', 'secop_id_contrato', 'secop_proceso', 'url_secop', 'secop_consultado_at'
+                )
                 ->where('proyecto', $proyecto->id)
                 ->get();
                 
@@ -116,6 +124,9 @@ class ProyectoController extends Controller
                 ->where('proyecto', $proyecto->id)
                 ->get();
         }
+
+        // El proceso de cada contrato, resumido: una sola consulta para todos los proyectos.
+        app(ContratosService::class)->agregarProcesos($proyectos->flatMap(fn ($proyecto) => $proyecto->contratos));
 
         return response()->json($proyectos);
     }
@@ -413,73 +424,6 @@ class ProyectoController extends Controller
         }
 
         return response()->json($respuesta);
-    }
-
-    public function guardarContrato(Request $request)
-    {
-        $data = $request->all();
-        $formContrato = $data['formContrato'] ?? $data;
-        $anexos = $data['anexos'] ?? [];
-
-        $nullableDate = fn ($value) => ($value === '' || $value === null) ? null : $value;
-        $nullableInt = fn ($value) => ($value === '' || $value === null) ? null : (int) $value;
-        $nullableString = fn ($value) => ($value === '' || $value === null) ? null : $value;
-
-        $contratoPayload = [
-            'n_contrato' => $formContrato['n_contrato'],
-            'objeto' => $formContrato['objeto'],
-            'contratante' => $nullableString($formContrato['contratante'] ?? null),
-            'contratista' => $nullableString($formContrato['contratista'] ?? null),
-            'valor' => $formContrato['valor'],
-            'fecha_inicio' => $nullableDate($formContrato['fecha_inicio'] ?? null),
-            'fecha_fin' => $nullableDate($formContrato['fecha_fin'] ?? null),
-            'interventoria' => $nullableString($formContrato['interventoria'] ?? null),
-            'avance_financiero' => $nullableInt($formContrato['avance_financiero'] ?? null),
-            'avance_fisico' => $nullableInt($formContrato['avance_fisico'] ?? null),
-            'estado' => $formContrato['estado'],
-            'anticipo' => (bool) ($formContrato['anticipo'] ?? false),
-            'porcentaje_anticipo' => $nullableInt($formContrato['porcentaje_anticipo'] ?? null),
-        ];
-        
-        DB::beginTransaction();
-        try {
-            $contratoId = null;
-            
-            if (isset($formContrato['id']) && $formContrato['id']) {
-                // Actualizar contrato existente
-                DB::table('contratos')->where('id', $formContrato['id'])->update($contratoPayload);
-                $contratoId = $formContrato['id'];
-                
-                // Eliminar anexos existentes del contrato
-                DB::table('anexos_contratos')->where('contrato_id', $contratoId)->delete();
-            } else {
-                // Insertar nuevo contrato: fijar la base inmutable para adiciones/prórrogas.
-                $contratoId = DB::table('contratos')->insertGetId(array_merge($contratoPayload, [
-                    'proyecto' => $formContrato['proyecto'] ?? null,
-                    'valor_inicial' => $contratoPayload['valor'],
-                    'fecha_fin_inicial' => $contratoPayload['fecha_fin'],
-                ]));
-            }
-            
-            // Guardar anexos
-            if (!empty($anexos) && $contratoId) {
-                foreach ($anexos as $anexo) {
-                    DB::table('anexos_contratos')->insert([
-                        'contrato_id' => $contratoId,
-                        'descripcion' => $anexo['descripcion'],
-                        'nombre_archivo' => $anexo['nombreArchivo'],
-                        'ruta_archivo' => $anexo['rutaArchivo'],
-                        'fecha' => $anexo['fecha']
-                    ]);
-                }
-            }
-            
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-        DB::commit();
-        return response()->json(['success' => 'Contrato guardado correctamente']);
     }
 
     public function eliminarProyecto(Request $request)
@@ -1110,52 +1054,17 @@ class ProyectoController extends Controller
         ]);
     }
 
-    /**
-     * Recalcula valor y fecha_fin vigentes del contrato desde valor_inicial /
-     * fecha_fin_inicial + suma del historial de modificaciones. Devuelve el
-     * resumen (valores vigentes, % adicionado y bandera de límite 50%).
-     */
+    /** Recalcula el valor y la fecha fin vigentes del contrato: ContratosService::recalcular(). */
     private function recalcularContrato($contratoId): array
     {
-        $contrato = DB::table('contratos')->where('id', $contratoId)->first();
-
-        $valorInicial = (float) ($contrato->valor_inicial ?? $contrato->valor ?? 0);
-        $fechaFinInicial = $contrato->fecha_fin_inicial ?? $contrato->fecha_fin;
-
-        $sumaAdiciones = (float) DB::table('modificaciones_contrato')
-            ->where('contrato_id', $contratoId)
-            ->sum('valor_adicion');
-
-        $sumaDias = (int) DB::table('modificaciones_contrato')
-            ->where('contrato_id', $contratoId)
-            ->sum('dias_prorroga');
-
-        $valorVigente = $valorInicial + $sumaAdiciones;
-        $fechaFinVigente = $fechaFinInicial
-            ? Carbon::parse($fechaFinInicial)->addDays($sumaDias)->toDateString()
-            : null;
-
-        DB::table('contratos')->where('id', $contratoId)->update([
-            'valor' => $valorVigente,
-            'fecha_fin' => $fechaFinVigente,
-        ]);
-
-        $porcentaje = $valorInicial > 0 ? ($sumaAdiciones / $valorInicial) * 100 : 0.0;
-
-        return [
-            'valor_inicial' => $valorInicial,
-            'valor_vigente' => $valorVigente,
-            'fecha_fin_inicial' => $fechaFinInicial,
-            'fecha_fin_vigente' => $fechaFinVigente,
-            'porcentaje_adicionado' => round($porcentaje, 2),
-            'supera_limite' => $porcentaje > 50,
-        ];
+        return app(ContratosService::class)->recalcular(Contrato::findOrFail($contratoId));
     }
 
     public function listarContratos(Request $request)
     {
         $proyecto = $request->all();
         $contratos = DB::table('contratos')->where('proyecto', $proyecto['proyecto'])->get();
+        app(ContratosService::class)->agregarProcesos($contratos);
 
         foreach ($contratos as $contrato) {
             $anexos = DB::table('anexos_contratos')->where('contrato_id', $contrato->id)->get();

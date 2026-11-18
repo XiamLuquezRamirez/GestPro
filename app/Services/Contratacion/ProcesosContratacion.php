@@ -2,7 +2,6 @@
 
 namespace App\Services\Contratacion;
 
-use App\Exceptions\EdicionDesactualizadaException;
 use App\Exceptions\ReglaNegocioException;
 use App\Models\Contrato;
 use App\Models\Entidad;
@@ -16,7 +15,6 @@ use App\Services\Viabilizacion\HistorialChecklist;
 use Brick\Math\BigDecimal;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -45,6 +43,8 @@ use Illuminate\Validation\ValidationException;
  */
 final class ProcesosContratacion
 {
+    use ControlDeVersion;
+
     /** Campo de la API => columna del proceso. */
     private const CAMPOS = [
         'objeto' => 'objeto',
@@ -268,31 +268,13 @@ final class ProcesosContratacion
         return ProcesoLicitacion::query()->whereKey($proceso->id)->lockForUpdate()->firstOrFail();
     }
 
-    /**
-     * La fila bloqueada, si sigue siendo la versión que tenía el formulario: `$actualizado` cae en
-     * el mismo segundo que updated_at, o ambos son null (un proceso anterior a las fechas).
-     */
+    /** La fila bloqueada, si sigue siendo la versión que tenía el formulario (ControlDeVersion). */
     private function bloquearVigente(ProcesoLicitacion $proceso, ?string $actualizado): ProcesoLicitacion
     {
         $actual = $this->bloquear($proceso);
-        $esperado = $actualizado === null ? null : Carbon::parse($actualizado)->getTimestamp();
-        if ($esperado !== $actual->updated_at?->getTimestamp()) {
-            throw new EdicionDesactualizadaException(self::DESACTUALIZADO);
-        }
+        $this->exigirVersion($actual, $actualizado, self::DESACTUALIZADO);
 
         return $actual;
-    }
-
-    /**
-     * updated_at se guarda sin fracciones de segundo: si un cambio cae en el mismo segundo que el
-     * anterior, se adelanta uno para que `actualizado` cambie siempre y el control de versión no
-     * deje pasar un formulario viejo.
-     */
-    private function adelantarActualizado(ProcesoLicitacion $proceso): void
-    {
-        $ahora = Carbon::now();
-        $siguiente = $proceso->updated_at?->copy()->startOfSecond()->addSecond();
-        $proceso->updated_at = $siguiente !== null && $siguiente->greaterThan($ahora) ? $siguiente : $ahora;
     }
 
     /**
