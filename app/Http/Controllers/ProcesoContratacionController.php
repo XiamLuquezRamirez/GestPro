@@ -33,6 +33,9 @@ class ProcesoContratacionController extends Controller
         'monto.numeric' => 'Escribe el valor como un número.',
         'monto.min' => 'El valor no puede ser negativo.',
         'monto.decimal' => 'El valor admite hasta 2 decimales.',
+        'fecha_apertura.date_format' => 'Escribe :attribute como año-mes-día.',
+        'fecha_cierre.date_format' => 'Escribe :attribute como año-mes-día.',
+        'observaciones.max' => 'Las observaciones admiten hasta 5000 caracteres.',
         'estado.required' => 'Elige el estado del proceso.',
         'estado.in' => 'Elige un estado de la lista.',
         'observacion.max' => 'La observación admite hasta 2000 caracteres.',
@@ -48,6 +51,11 @@ class ProcesoContratacionController extends Controller
         'url_proceso' => 'el enlace',
         'entidad_contratante_id' => 'la entidad contratante',
         'monto' => 'el valor',
+        'fuente_id' => 'la fuente de financiación',
+        'responsable_id' => 'el responsable',
+        'fecha_apertura' => 'la fecha de apertura',
+        'fecha_cierre' => 'la fecha de cierre',
+        'observaciones' => 'las observaciones',
         'estado' => 'el estado',
         'observacion' => 'la observación',
         'actualizado' => 'la versión del proceso',
@@ -70,6 +78,12 @@ class ProcesoContratacionController extends Controller
             'proyecto' => ['id' => $proyecto->id, 'nombre' => $proyecto->nombre],
             'procesos' => $this->procesos->deProyecto($proyecto),
         ]);
+    }
+
+    /** Lo que precarga el formulario de un contrato nuevo del proceso. */
+    public function precargaContrato(ProcesoLicitacion $proceso): JsonResponse
+    {
+        return response()->json($this->procesos->precargaContrato($proceso));
     }
 
     public function store(Request $request, Proyecto $proyecto): JsonResponse
@@ -129,6 +143,11 @@ class ProcesoContratacionController extends Controller
             'url_proceso' => ['sometimes', 'nullable', 'bail', 'string', 'url:http,https', 'max:500'],
             'entidad_contratante_id' => ['sometimes', 'nullable', 'bail', 'integer', $entero],
             'monto' => ['sometimes', 'nullable', 'bail', 'numeric', 'min:0', 'decimal:0,2', $cifras],
+            'fuente_id' => ['sometimes', 'nullable', 'bail', 'integer', $entero],
+            'responsable_id' => ['sometimes', 'nullable', 'bail', 'integer', $entero],
+            'fecha_apertura' => ['sometimes', 'nullable', 'bail', 'string', 'date_format:Y-m-d'],
+            'fecha_cierre' => ['sometimes', 'nullable', 'bail', 'string', 'date_format:Y-m-d'],
+            'observaciones' => ['sometimes', 'nullable', 'bail', 'string', 'max:5000'],
             ...$mas,
         ], self::MENSAJES, self::ATRIBUTOS);
     }

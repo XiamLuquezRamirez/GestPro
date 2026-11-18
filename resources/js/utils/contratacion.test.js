@@ -203,7 +203,7 @@ describe('etiquetas de plataforma y estado', () => {
     });
 
     it('cada estado tiene un tono para su insignia', () => {
-        expect(ESTADOS_PROCESO.map(([v]) => tonoEstado(v))).toEqual(['neutro', 'azul', 'ambar', 'verde', 'coral', 'verde-pleno', 'coral']);
+        expect(ESTADOS_PROCESO.map(([v]) => tonoEstado(v))).toEqual(['neutro', 'azul', 'ambar', 'verde', 'coral', 'verde-pleno', 'coral', 'coral']);
         expect(tonoEstado('otro')).toBe('neutro');
     });
 });

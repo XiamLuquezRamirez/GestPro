@@ -113,10 +113,11 @@ export const ESTADOS_PROCESO = [
     ['desierto', 'Desierto'],
     ['celebrado', 'Celebrado'],
     ['cancelado', 'Cancelado'],
+    ['revocado', 'Revocado'],
 ];
 
 /** Estados que cierran un proceso: salir de ellos es inusual. */
-export const ESTADOS_CIERRE = ['desierto', 'celebrado', 'cancelado'];
+export const ESTADOS_CIERRE = ['desierto', 'celebrado', 'cancelado', 'revocado'];
 
 // Paso de cada estado en el flujo preparación → publicado → evaluación → adjudicado o desierto →
 // celebrado. Cancelado no tiene paso: se puede cancelar desde cualquier estado.
@@ -130,6 +131,7 @@ const TONOS_ESTADO = {
     celebrado: 'verde-pleno',
     desierto: 'coral',
     cancelado: 'coral',
+    revocado: 'coral',
 };
 
 export const MAXIMO_OBSERVACION = 2000;

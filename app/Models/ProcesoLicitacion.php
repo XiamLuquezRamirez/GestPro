@@ -27,6 +27,9 @@ class ProcesoLicitacion extends Model
         self::DESIERTO, self::CELEBRADO, self::CANCELADO, self::REVOCADO,
     ];
 
+    /** Estados en los que se puede registrar un contrato del proceso. */
+    public const ADMITEN_CONTRATOS = [self::ADJUDICADO, self::CELEBRADO];
+
     protected $table = 'procesos_licitacion';
     protected $fillable = [
         'proyecto', 'objeto', 'codigo_proceso', 'tipo_proceso', 'modalidad', 'plataforma', 'url_proceso',

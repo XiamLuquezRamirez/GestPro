@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Route;
 // Lectura: cualquier usuario autenticado.
 Route::get('/proyectos/{proyecto}/procesos', [ProcesoContratacionController::class, 'index'])
     ->name('procesos.index');
+Route::get('/procesos/{proceso}/precarga-contrato', [ProcesoContratacionController::class, 'precargaContrato'])
+    ->name('procesos.precarga-contrato');
 
 // Procesos de contratación: Administrador o Gestor.
 Route::middleware('can:editar-datos')->group(function () {

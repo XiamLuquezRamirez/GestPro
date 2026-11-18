@@ -9,6 +9,7 @@ use App\Models\FuenteFinanciacion;
 use App\Models\Modalidad;
 use App\Models\ProcesoLicitacion;
 use App\Models\Proyecto;
+use App\Models\Responsable;
 use App\Models\User;
 use App\Services\Viabilizacion\ExpedienteService;
 use Database\Seeders\CatalogoRequisitosSgrSeeder;
@@ -127,6 +128,11 @@ class ProcesosContratacionApiTest extends TestCase
             'url_proceso' => 'https://community.secop.gov.co/Public/Tendering/OpportunityDetail/Index?noticeUID=CO1.NTC.1',
             'entidad_contratante' => ['id' => $this->entidad->id, 'nombre' => 'Gobernación del Cesar'],
             'monto' => '1500000.50',
+            'fuente' => null,
+            'responsable' => null,
+            'fecha_apertura' => null,
+            'fecha_cierre' => null,
+            'observaciones' => null,
             'estado' => 'preparacion',
             'contratos' => 0,
             'creado' => $r->json('creado'),
@@ -150,6 +156,11 @@ class ProcesosContratacionApiTest extends TestCase
             'url_proceso' => 'https://community.secop.gov.co/Public/Tendering/OpportunityDetail/Index?noticeUID=CO1.NTC.1',
             'entidad_contratante_id' => $this->entidad->id,
             'monto' => '1500000.50',
+            'fuente_id' => null,
+            'responsable_id' => null,
+            'fecha_apertura' => null,
+            'fecha_cierre' => null,
+            'observaciones' => null,
             'estado' => 'preparacion',
         ]]], $this->eventos($proceso));
         $this->assertNull(DB::table('checklist_historial')->where('entidad_tipo', 'proceso')->value('expediente_id'));
@@ -478,6 +489,14 @@ class ProcesosContratacionApiTest extends TestCase
             'enlace largo' => [['url_proceso' => 'https://secop.gov.co/' . str_repeat('a', 480)], 'url_proceso', 'El enlace admite hasta 500 caracteres.'],
             'entidad texto' => [['entidad_contratante_id' => '1'], 'entidad_contratante_id', 'Revisa la entidad contratante: debe ser un número entero.'],
             'monto no numérico' => [['monto' => 'mil'], 'monto', 'Escribe el valor como un número.'],
+            'fuente texto' => [['fuente_id' => '1'], 'fuente_id', 'Revisa la fuente de financiación: debe ser un número entero.'],
+            'responsable texto' => [['responsable_id' => '1'], 'responsable_id', 'Revisa el responsable: debe ser un número entero.'],
+            'apertura sin formato' => [['fecha_apertura' => '15/03/2026'], 'fecha_apertura', 'Escribe la fecha de apertura como año-mes-día.'],
+            'apertura imposible' => [['fecha_apertura' => '2026-02-30'], 'fecha_apertura', 'Escribe la fecha de apertura como año-mes-día.'],
+            'cierre sin formato' => [['fecha_cierre' => 'mañana'], 'fecha_cierre', 'Escribe la fecha de cierre como año-mes-día.'],
+            'observaciones no texto' => [['observaciones' => ['a']], 'observaciones', 'Revisa las observaciones: debe ser un texto.'],
+            'observaciones largas' => [['observaciones' => str_repeat('a', 5001)], 'observaciones', 'Las observaciones admiten hasta 5000 caracteres.'],
+            'cierre antes de la apertura' => [['fecha_apertura' => '2026-03-10', 'fecha_cierre' => '2026-03-09'], 'fecha_cierre', 'La fecha de cierre no puede ser anterior a la de apertura.'],
             'monto negativo' => [['monto' => -1], 'monto', 'El valor no puede ser negativo.'],
             'monto con tres decimales' => [['monto' => '10.555'], 'monto', 'El valor admite hasta 2 decimales.'],
             'monto enorme' => [['monto' => '10000000000000'], 'monto', 'El valor admite hasta 13 cifras enteras y 2 decimales.'],
@@ -584,6 +603,13 @@ class ProcesosContratacionApiTest extends TestCase
             'entidad_contratante_id' => $this->entidad->id,
             'entidad_contratante' => 'Gobernación del Cesar',
             'monto' => '800.00',
+            'fuente_id' => null,
+            'fuente' => null,
+            'responsable_id' => null,
+            'responsable' => null,
+            'fecha_apertura' => null,
+            'fecha_cierre' => null,
+            'observaciones' => null,
             'estado' => 'cancelado',
         ], null], $this->eventos($proceso)[2]);
     }
@@ -667,5 +693,323 @@ class ProcesosContratacionApiTest extends TestCase
         $this->como()->deleteJson($this->urlProceso(9999))->assertNotFound();
 
         $this->assertSame(0, DB::table('checklist_historial')->count());
+    }
+
+    // ----------------------------------------- fuente, responsable, fechas, observaciones
+
+    private function fuente(string $nombre = 'Fuente de prueba', bool $activo = true): FuenteFinanciacion
+    {
+        return FuenteFinanciacion::create(['clave' => 'f_' . uniqid(), 'nombre' => $nombre, 'orden' => 99, 'activo' => $activo]);
+    }
+
+    private function responsable(string $nombre = 'Marta Ríos', bool $activo = true): Responsable
+    {
+        return Responsable::create(['nombre' => $nombre, 'activo' => $activo]);
+    }
+
+    public function test_crea_con_fuente_responsable_fechas_y_observaciones(): void
+    {
+        $fuente = $this->fuente();
+        $responsable = $this->responsable();
+
+        $r = $this->crear([
+            'fuente_id' => $fuente->id,
+            'responsable_id' => $responsable->id,
+            'fecha_apertura' => '2026-03-10',
+            'fecha_cierre' => '2026-03-24',
+            'observaciones' => '  Pliegos publicados el 9 de marzo.  ',
+        ])->assertCreated()
+            ->assertJsonPath('fuente', ['id' => $fuente->id, 'nombre' => 'Fuente de prueba'])
+            ->assertJsonPath('responsable', ['id' => $responsable->id, 'nombre' => 'Marta Ríos'])
+            ->assertJsonPath('fecha_apertura', '2026-03-10')
+            ->assertJsonPath('fecha_cierre', '2026-03-24')
+            ->assertJsonPath('observaciones', 'Pliegos publicados el 9 de marzo.');
+
+        $proceso = ProcesoLicitacion::findOrFail($r->json('id'));
+        $this->assertSame($fuente->id, $proceso->fuente_id);
+        $this->assertSame($responsable->id, $proceso->responsable_id);
+        $despues = $this->eventos($proceso)[0][2];
+        $this->assertSame($fuente->id, $despues['fuente_id']);
+        $this->assertSame($responsable->id, $despues['responsable_id']);
+        $this->assertSame('2026-03-10', $despues['fecha_apertura']);
+        $this->assertSame('2026-03-24', $despues['fecha_cierre']);
+        $this->assertSame('Pliegos publicados el 9 de marzo.', $despues['observaciones']);
+    }
+
+    public function test_el_listado_trae_fuente_y_responsable_sin_consultas_por_proceso(): void
+    {
+        $this->proceso(['fuente_id' => $this->fuente()->id, 'responsable_id' => $this->responsable()->id]);
+        $consultas = function (): int {
+            $peticion = $this->como(Rol::Consulta);
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $peticion->getJson($this->urlProyecto())->assertOk();
+            DB::disableQueryLog();
+
+            return count(DB::getQueryLog());
+        };
+        $conUno = $consultas();
+        $this->proceso(['fuente_id' => $this->fuente('Otra fuente')->id, 'responsable_id' => $this->responsable('Luis Paz')->id]);
+
+        $this->assertSame($conUno, $consultas());
+        $this->como(Rol::Consulta)->getJson($this->urlProyecto())
+            ->assertJsonPath('procesos.0.fuente.nombre', 'Fuente de prueba')
+            ->assertJsonPath('procesos.1.responsable.nombre', 'Luis Paz');
+    }
+
+    public function test_edita_los_campos_nuevos_y_registra_solo_lo_que_cambio(): void
+    {
+        $fuente = $this->fuente();
+        $otraFuente = $this->fuente('Otra fuente');
+        $responsable = $this->responsable();
+        $proceso = $this->proceso(['fuente_id' => $fuente->id, 'fecha_apertura' => '2026-03-10', 'observaciones' => 'Uno']);
+
+        $this->editar($proceso, $this->datos([
+            'fuente_id' => $otraFuente->id,
+            'responsable_id' => $responsable->id,
+            'fecha_apertura' => '2026-03-10',
+            'fecha_cierre' => '2026-03-20',
+            'observaciones' => 'Uno',
+        ]))->assertOk()
+            ->assertJsonPath('fuente.id', $otraFuente->id)
+            ->assertJsonPath('responsable.id', $responsable->id)
+            ->assertJsonPath('fecha_cierre', '2026-03-20');
+
+        $this->assertSame(['proceso_editado', [
+            'fuente_id' => $fuente->id,
+            'responsable_id' => null,
+            'fecha_cierre' => null,
+        ], [
+            'fuente_id' => $otraFuente->id,
+            'responsable_id' => $responsable->id,
+            'fecha_cierre' => '2026-03-20',
+        ]], $this->eventos($proceso)[1]);
+    }
+
+    public function test_los_campos_nuevos_que_no_vienen_no_cambian_y_con_null_se_borran(): void
+    {
+        $proceso = $this->proceso([
+            'fuente_id' => $this->fuente()->id, 'responsable_id' => $this->responsable()->id,
+            'fecha_apertura' => '2026-03-10', 'fecha_cierre' => '2026-03-20', 'observaciones' => 'Nota',
+        ]);
+
+        $this->editar($proceso, $this->datos(['fuente_id' => null, 'fecha_cierre' => null, 'observaciones' => '   ']))
+            ->assertOk()
+            ->assertJsonPath('fuente', null)
+            ->assertJsonPath('fecha_cierre', null)
+            ->assertJsonPath('observaciones', null)
+            ->assertJsonPath('fecha_apertura', '2026-03-10')
+            ->assertJsonPath('responsable.nombre', 'Marta Ríos');
+
+        $this->assertSame(['fuente_id', 'fecha_cierre', 'observaciones'], array_keys($this->eventos($proceso)[1][2]));
+    }
+
+    public function test_editar_los_campos_nuevos_sin_cambios_no_registra_nada(): void
+    {
+        $proceso = $this->proceso(['fecha_apertura' => '2026-03-10', 'fuente_id' => $this->fuente()->id]);
+
+        $this->editar($proceso, $this->datos(['fecha_apertura' => '2026-03-10', 'fuente_id' => $proceso->fuente_id]))->assertOk();
+
+        $this->assertCount(1, $this->eventos($proceso));
+    }
+
+    public function test_al_crear_la_fuente_y_el_responsable_deben_estar_activos(): void
+    {
+        $this->crear([
+            'fuente_id' => $this->fuente('Inactiva', false)->id,
+            'responsable_id' => $this->responsable('Inactivo', false)->id,
+        ])->assertStatus(422)->assertJsonValidationErrors([
+            'fuente_id' => 'La fuente elegida está inactiva: elige otra.',
+            'responsable_id' => 'El responsable elegido está inactivo: elige otro.',
+        ]);
+
+        $this->assertSame(0, ProcesoLicitacion::count());
+    }
+
+    public function test_fuente_o_responsable_inexistente(): void
+    {
+        $this->crear(['fuente_id' => 9999, 'responsable_id' => 9999])->assertStatus(422)
+            ->assertJsonValidationErrors([
+                'fuente_id' => 'Elige una fuente de la lista.',
+                'responsable_id' => 'Elige un responsable de la lista.',
+            ]);
+    }
+
+    public function test_al_editar_se_conservan_la_fuente_y_el_responsable_inactivos_que_ya_tiene(): void
+    {
+        $fuente = $this->fuente();
+        $responsable = $this->responsable();
+        $proceso = $this->proceso(['fuente_id' => $fuente->id, 'responsable_id' => $responsable->id]);
+        $fuente->update(['activo' => false]);
+        $responsable->update(['activo' => false]);
+
+        $this->editar($proceso, $this->datos([
+            'objeto' => 'Otro objeto', 'fuente_id' => $fuente->id, 'responsable_id' => $responsable->id,
+        ]))->assertOk()->assertJsonPath('fuente.id', $fuente->id)->assertJsonPath('responsable.id', $responsable->id);
+    }
+
+    public function test_al_editar_no_se_cambia_a_una_fuente_o_responsable_inactivo(): void
+    {
+        $proceso = $this->proceso();
+
+        $this->editar($proceso, $this->datos([
+            'fuente_id' => $this->fuente('Inactiva', false)->id,
+            'responsable_id' => $this->responsable('Inactivo', false)->id,
+        ]))->assertStatus(422)->assertJsonValidationErrors([
+            'fuente_id' => 'La fuente elegida está inactiva: elige otra.',
+            'responsable_id' => 'El responsable elegido está inactivo: elige otro.',
+        ]);
+
+        $this->assertNull($proceso->refresh()->fuente_id);
+        $this->assertCount(1, $this->eventos($proceso));
+    }
+
+    public function test_el_cierre_puede_ser_el_mismo_dia_de_la_apertura_o_faltar_la_otra_fecha(): void
+    {
+        $this->crear(['fecha_apertura' => '2026-03-10', 'fecha_cierre' => '2026-03-10'])->assertCreated();
+        $this->crear(['fecha_cierre' => '2026-03-01'])->assertCreated();
+        $this->crear(['fecha_apertura' => '2026-03-10'])->assertCreated();
+    }
+
+    public function test_al_editar_el_cierre_se_compara_con_la_apertura_guardada(): void
+    {
+        $proceso = $this->proceso(['fecha_apertura' => '2026-03-10']);
+
+        $this->editar($proceso, $this->datos(['fecha_cierre' => '2026-03-01']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['fecha_cierre' => 'La fecha de cierre no puede ser anterior a la de apertura.']);
+        $this->editar($proceso, $this->datos(['fecha_cierre' => '2026-03-10']))->assertOk();
+
+        // Adelantar la apertura más allá del cierre guardado también se rechaza.
+        $this->editar($proceso, $this->datos(['fecha_apertura' => '2026-04-01']))
+            ->assertStatus(422)->assertJsonValidationErrors(['fecha_cierre']);
+        $this->assertSame('2026-03-10', $proceso->refresh()->fecha_apertura->toDateString());
+    }
+
+    public function test_el_estado_revocado_se_admite(): void
+    {
+        $proceso = $this->proceso();
+
+        $this->cambiarEstado($proceso, ['estado' => 'revocado', 'observacion' => 'Se revocó el acto'])
+            ->assertOk()->assertJsonPath('estado', 'revocado');
+
+        $this->assertSame('revocado', $proceso->refresh()->estado);
+    }
+
+    // ------------------------------------------------------ precarga de un contrato
+
+    private function urlPrecarga(ProcesoLicitacion|int $proceso): string
+    {
+        return $this->urlProceso($proceso, '/precarga-contrato');
+    }
+
+    private function pasarA(ProcesoLicitacion $proceso, string $estado): void
+    {
+        $this->cambiarEstado($proceso, ['estado' => $estado])->assertOk();
+    }
+
+    public function test_la_precarga_resume_el_proceso_y_sugiere_el_valor(): void
+    {
+        $proceso = $this->proceso([
+            'codigo_proceso' => 'LP-001-2026',
+            'url_proceso' => 'https://secop.gov.co/p/1',
+            'entidad_contratante_id' => $this->entidad->id,
+            'monto' => 1000000,
+        ]);
+        $this->pasarA($proceso, 'adjudicado');
+
+        $this->como(Rol::Consulta)->getJson($this->urlPrecarga($proceso))->assertOk()->assertExactJson([
+            'proceso' => [
+                'id' => $proceso->id,
+                'codigo_proceso' => 'LP-001-2026',
+                'objeto' => 'Construcción del acueducto veredal',
+                'estado' => 'adjudicado',
+                'modalidad' => ['id' => $this->modalidad('licitacion_publica')->id, 'nombre' => 'Licitación pública'],
+                'plataforma' => 'secop_ii',
+                'url_proceso' => 'https://secop.gov.co/p/1',
+                'monto' => '1000000.00',
+            ],
+            'admite_contratos' => true,
+            'precarga' => [
+                'objeto' => 'Construcción del acueducto veredal',
+                'contratante' => 'Gobernación del Cesar',
+                'valor_inicial' => '1000000.00',
+            ],
+        ]);
+    }
+
+    public function test_el_valor_sugerido_descuenta_los_contratos_no_anulados(): void
+    {
+        $proceso = $this->proceso(['monto' => 1000]);
+        $this->pasarA($proceso, 'adjudicado');
+        $nuevo = fn (array $mas) => Contrato::create(['proyecto' => $this->proyecto->id, 'proceso_licitacion' => $proceso->id, ...$mas]);
+        $nuevo(['valor_inicial' => 300.25, 'estado' => 'en_ejecucion']);
+        $nuevo(['valor_inicial' => 200, 'estado' => 'anulado']);
+        $nuevo(['valor_inicial' => null]);
+        $nuevo(['valor_inicial' => 100.10, 'estado' => 'liquidado']);
+        // De otro proceso: no cuenta.
+        Contrato::create(['proyecto' => $this->proyecto->id, 'valor_inicial' => 999]);
+
+        $this->como()->getJson($this->urlPrecarga($proceso))->assertOk()
+            ->assertJsonPath('precarga.valor_inicial', '599.65');
+    }
+
+    public function test_el_valor_sugerido_nunca_es_negativo_ni_existe_sin_monto(): void
+    {
+        $proceso = $this->proceso(['monto' => 100]);
+        Contrato::create(['proyecto' => $this->proyecto->id, 'proceso_licitacion' => $proceso->id, 'valor_inicial' => 150, 'estado' => 'celebrado']);
+        $this->como()->getJson($this->urlPrecarga($proceso))->assertOk()->assertJsonPath('precarga.valor_inicial', '0.00');
+
+        $sinMonto = $this->proceso();
+        $this->como()->getJson($this->urlPrecarga($sinMonto))->assertOk()
+            ->assertJsonPath('proceso.monto', null)
+            ->assertJsonPath('precarga.valor_inicial', null)
+            ->assertJsonPath('precarga.contratante', null);
+    }
+
+    public static function admiten(): array
+    {
+        return [
+            'preparación' => ['preparacion', false],
+            'publicado' => ['publicado', false],
+            'evaluación' => ['evaluacion', false],
+            'adjudicado' => ['adjudicado', true],
+            'celebrado' => ['celebrado', true],
+            'desierto' => ['desierto', false],
+            'cancelado' => ['cancelado', false],
+            'revocado' => ['revocado', false],
+        ];
+    }
+
+    #[DataProvider('admiten')]
+    public function test_solo_adjudicado_o_celebrado_admiten_contratos(string $estado, bool $admite): void
+    {
+        $proceso = $this->proceso();
+        if ($estado !== 'preparacion') {
+            $this->pasarA($proceso, $estado);
+        }
+
+        $this->como(Rol::Consulta)->getJson($this->urlPrecarga($proceso))->assertOk()
+            ->assertJsonPath('admite_contratos', $admite)
+            ->assertJsonPath('proceso.estado', $estado);
+    }
+
+    public function test_la_precarga_sin_sesion_no_tiene_acceso(): void
+    {
+        $proceso = ProcesoLicitacion::create(['proyecto' => $this->proyecto->id, 'objeto' => 'Obra']);
+
+        $this->getJson($this->urlPrecarga($proceso))->assertUnauthorized();
+    }
+
+    public function test_la_precarga_es_de_lectura(): void
+    {
+        $proceso = $this->proceso();
+
+        $this->como(Rol::Consulta)->getJson($this->urlPrecarga($proceso))->assertOk();
+        $this->como()->getJson($this->urlPrecarga(999999))->assertNotFound();
+        $this->assertSame(
+            '/GestPro/procesos/' . $proceso->id . '/precarga-contrato',
+            parse_url(route('procesos.precarga-contrato', $proceso), PHP_URL_PATH)
+        );
     }
 }
