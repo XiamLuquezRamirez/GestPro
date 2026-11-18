@@ -20,10 +20,11 @@ describe('seccionDesdeSlug', () => {
         expect(seccionDesdeSlug(undefined)).toBeNull();
     });
 
-    it('modalidades y etapas de contratación son catálogos con componente propio', () => {
+    it('modalidades, etapas y tipos de contrato son catálogos con componente propio', () => {
         expect(seccionDesdeSlug('modalidades')).toMatchObject({ tab: 'modalidades', titulo: 'Modalidades', grupo: GRUPO.CATALOGOS, propia: true });
         expect(seccionDesdeSlug('etapas-contratacion')).toMatchObject({ tab: 'etapas-contratacion', titulo: 'Etapas de contratación', grupo: GRUPO.CATALOGOS, propia: true });
-        expect(SECCIONES_PARAMETROS.filter((s) => s.propia).map((s) => s.slug)).toEqual(['modalidades', 'etapas-contratacion']);
+        expect(SECCIONES_PARAMETROS.filter((s) => s.propia).map((s) => s.slug)).toEqual(['modalidades', 'etapas-contratacion', 'tipos-contrato']);
+        expect(seccionDesdeSlug('tipos-contrato')).toMatchObject({ tab: 'tipos-contrato', titulo: 'Tipos de contrato', grupo: GRUPO.CATALOGOS, propia: true });
     });
 
     it('cada sección tiene un icono registrado', () => {
@@ -50,7 +51,7 @@ describe('DESTINOS', () => {
     it('lleva a cada catálogo con una sola ruta directa', () => {
         const rutas = DESTINOS.map((d) => d.ruta);
 
-        ['municipios', 'estados', 'fases', 'tipos-evento', 'prioridades', 'responsables', 'entidades', 'fuentes-financiacion', 'sectores', 'modalidades', 'etapas-contratacion'].forEach((slug) => {
+        ['municipios', 'estados', 'fases', 'tipos-evento', 'prioridades', 'responsables', 'entidades', 'fuentes-financiacion', 'sectores', 'modalidades', 'etapas-contratacion', 'tipos-contrato'].forEach((slug) => {
             expect(rutas).toContain(`/parametros/${slug}`);
         });
     });
@@ -119,6 +120,7 @@ describe('buscarEnPaleta', () => {
         expect(titulos('secop')).toEqual(expect.arrayContaining(['Modalidades', 'Etapas de contratación']));
         expect(titulos('licitación')).toEqual(expect.arrayContaining(['Modalidades', 'Etapas de contratación']));
         expect(titulos('minima cuantia')).toContain('Modalidades');
+        expect(titulos('interventoria')).toContain('Tipos de contrato');
     });
 
     it('encuentra proyectos por nombre o municipio y los deja después de los destinos', () => {

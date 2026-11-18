@@ -23,6 +23,12 @@ export const REGLAS_ETAPA = {
     repetido: 'Ya existe una etapa con ese nombre.',
 };
 
+export const REGLAS_TIPO_CONTRATO = {
+    maximoNombre: 120,
+    faltaNombre: 'Escribe el nombre del tipo de contrato.',
+    repetido: 'Ya existe un tipo de contrato con ese nombre.',
+};
+
 export const CATALOGO_VACIO = { nombre: '', descripcion: '' };
 
 export const formularioCatalogo = (item) => ({
@@ -89,8 +95,11 @@ export const erroresPorCampo = (error, campos) => {
     return { campos: enCampos, otros };
 };
 
-/** Modalidades y etapas son femeninas: "Activa" o "Inactiva". */
-export const textoEstadoCatalogo = (activo) => (activo ? 'Activa' : 'Inactiva');
+/** Modalidades y etapas son femeninas: "Activa" o "Inactiva"; los tipos de contrato, masculinos. */
+export const textoEstadoCatalogo = (activo, masculino = false) => {
+    if (masculino) return activo ? 'Activo' : 'Inactivo';
+    return activo ? 'Activa' : 'Inactiva';
+};
 
 // ---------- Procesos de contratación ----------
 
@@ -231,6 +240,12 @@ export const textoValor = (monto) => {
     return (Number.isInteger(numero) ? PESOS : PESOS_CON_CENTAVOS).format(numero);
 };
 
+/** Una fecha año-mes-día de la API como día/mes/año; sin fecha, "—". */
+export const textoFecha = (fecha) => {
+    const partes = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(fecha ?? ''));
+    return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : '—';
+};
+
 export const textoContratos = (cantidad) => {
     const n = Number(cantidad) || 0;
     if (n === 0) return 'Sin contratos';
@@ -294,7 +309,14 @@ export const PROCESO_VACIO = {
     url_proceso: '',
     entidad_contratante_id: '',
     monto: '',
+    fuente_id: '',
+    responsable_id: '',
+    fecha_apertura: '',
+    fecha_cierre: '',
+    observaciones: '',
 };
+
+export const MAXIMO_OBSERVACIONES_PROCESO = 5000;
 
 /** Los campos del formulario, en su orden: también son los nombres de la API. */
 export const CAMPOS_PROCESO = Object.keys(PROCESO_VACIO);
@@ -311,7 +333,33 @@ export const formularioProceso = (proceso) => {
         url_proceso: proceso.url_proceso ?? '',
         entidad_contratante_id: id(proceso.entidad_contratante),
         monto: valorDesdeApi(proceso.monto),
+        fuente_id: id(proceso.fuente),
+        responsable_id: id(proceso.responsable),
+        fecha_apertura: proceso.fecha_apertura ?? '',
+        fecha_cierre: proceso.fecha_cierre ?? '',
+        observaciones: proceso.observaciones ?? '',
     };
+};
+
+/** Año-mes-día de un calendario real: "2026-02-30" no existe. */
+const esFechaValida = (texto) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) return false;
+    const fecha = new Date(`${texto}T00:00:00Z`);
+    return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === texto;
+};
+
+/**
+ * Opciones del select de fuente de un proceso, en dos grupos: las fuentes del proyecto
+ * (`fuenteIds`) y las demás. Se ofrecen las activas y la que el proceso ya tiene (`actual`), marcada
+ * si está inactiva; una fuente inactiva del proyecto que el proceso no tiene no se ofrece.
+ */
+export const opcionesFuenteProceso = (fuentes, actual, fuenteIds = []) => {
+    const delProyecto = [];
+    const otras = [];
+    opcionesConActual(fuentes, actual).forEach((o) => {
+        (fuenteIds.some((id) => String(id) === o.valor) ? delProyecto : otras).push(o);
+    });
+    return { delProyecto, otras };
 };
 
 /** Errores del formulario por campo, con los mensajes del servidor; {} si se puede enviar. */
@@ -331,6 +379,16 @@ export const validarProceso = (formulario) => {
     const monto = valorParaApi(formulario.monto);
     if (monto !== null && monto.split('.')[0].length > CIFRAS_ENTERAS) {
         errores.monto = `El valor admite hasta ${CIFRAS_ENTERAS} cifras enteras y 2 decimales.`;
+    }
+    const apertura = texto('fecha_apertura');
+    const cierre = texto('fecha_cierre');
+    if (apertura && !esFechaValida(apertura)) errores.fecha_apertura = 'Escribe la fecha de apertura como año-mes-día.';
+    if (cierre && !esFechaValida(cierre)) errores.fecha_cierre = 'Escribe la fecha de cierre como año-mes-día.';
+    else if (apertura && cierre && !errores.fecha_apertura && cierre < apertura) {
+        errores.fecha_cierre = 'La fecha de cierre no puede ser anterior a la de apertura.';
+    }
+    if (texto('observaciones').length > MAXIMO_OBSERVACIONES_PROCESO) {
+        errores.observaciones = `Las observaciones admiten hasta ${MAXIMO_OBSERVACIONES_PROCESO} caracteres.`;
     }
     return errores;
 };
@@ -352,6 +410,11 @@ export const datosProceso = (formulario, proceso = null) => {
         url_proceso: texto('url_proceso'),
         entidad_contratante_id: id('entidad_contratante_id'),
         monto: valorParaApi(formulario.monto),
+        fuente_id: id('fuente_id'),
+        responsable_id: id('responsable_id'),
+        fecha_apertura: texto('fecha_apertura'),
+        fecha_cierre: texto('fecha_cierre'),
+        observaciones: texto('observaciones'),
         ...(proceso ? { actualizado: proceso.actualizado ?? null } : {}),
     };
 };

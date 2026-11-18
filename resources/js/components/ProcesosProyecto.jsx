@@ -6,14 +6,23 @@ import axios from '../axios';
 import { avisarError } from '../utils/avisosPlantillas';
 import { mensajeApi } from '../utils/plantillasChecklist';
 import {
-    CAMPOS_PROCESO, ESTADOS_PROCESO, MAXIMO_OBSERVACION, PLATAFORMAS, avisoCambioEstado, datosEstado, datosProceso,
+    CAMPOS_PROCESO, ESTADOS_PROCESO, MAXIMO_OBSERVACION, MAXIMO_OBSERVACIONES_PROCESO, PLATAFORMAS, avisoCambioEstado, datosEstado, datosProceso,
     erroresPorCampo, esEdicionDesactualizada, etiquetaEstadoProceso, etiquetaPlataforma, formularioProceso,
-    indiceFocoAtrapado, numeroProceso, opcionesConActual, ordenarCatalogo, puedeEditarProcesos, textoContratos, textoValor,
-    tonoEstado, validarProceso, valorEnEdicion,
+    indiceFocoAtrapado, numeroProceso, opcionesConActual, opcionesFuenteProceso, ordenarCatalogo, puedeEditarProcesos,
+    textoContratos, textoFecha, textoValor, tonoEstado, validarProceso, valorEnEdicion,
 } from '../utils/contratacion';
 import useOcupado from './useOcupado';
 import '../../css/Plantillas.css';
 import '../../css/Contratacion.css';
+
+// Catálogos del formulario: su ruta y cómo se guarda cada respuesta.
+const comoLista = (datos) => (Array.isArray(datos) ? datos : []);
+const CATALOGOS = [
+    { clave: 'modalidades', ruta: '/modalidades', guardar: (d, { setModalidades }) => setModalidades(ordenarCatalogo(d)) },
+    { clave: 'entidades', ruta: '/entidades', guardar: (d, { setEntidades }) => setEntidades(comoLista(d)) },
+    { clave: 'fuentes', ruta: '/fuentesFinanciacion', guardar: (d, { setFuentes }) => setFuentes(comoLista(d)) },
+    { clave: 'responsables', ruta: '/responsables', guardar: (d, { setResponsables }) => setResponsables(comoLista(d)) },
+];
 
 const ENFOCABLES = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -78,7 +87,7 @@ const Campo = ({ etiqueta, error, idError, ancho, children }) => (
  * Formulario de un proceso. Valida antes de enviar con las reglas del servidor; `onGuardar`
  * devuelve los errores por campo del servidor, o null. Escape cancela sin cerrar el diálogo.
  */
-const FormularioProceso = ({ proceso, modalidades, entidades, guardando, onGuardar, onCancelar }) => {
+const FormularioProceso = ({ proceso, fuenteIds, modalidades, entidades, fuentes, responsables, guardando, onGuardar, onCancelar }) => {
     const [f, setF] = useState(() => formularioProceso(proceso));
     const [errores, setErrores] = useState({});
     const formulario = useRef(null);
@@ -114,6 +123,8 @@ const FormularioProceso = ({ proceso, modalidades, entidades, guardando, onGuard
         e.stopPropagation();
         if (!guardando) onCancelar();
     };
+
+    const fuentesProceso = opcionesFuenteProceso(fuentes, proceso?.fuente, fuenteIds);
 
     // Propiedades comunes de cada control: nombre, valor, aviso de error y su descripción.
     const control = (campo) => ({
@@ -156,6 +167,32 @@ const FormularioProceso = ({ proceso, modalidades, entidades, guardando, onGuard
             {campo('monto', 'Valor en pesos (opcional)', (
                 <input inputMode="decimal" placeholder="0" {...control('monto')} onChange={(e) => cambiar('monto', valorEnEdicion(e.target.value, f.monto))} />
             ))}
+            {campo('fuente_id', 'Fuente de financiación (opcional)', (
+                <select {...control('fuente_id')}>
+                    <option value="">Sin fuente</option>
+                    {fuentesProceso.delProyecto.length > 0 && (
+                        <optgroup label="Fuentes del proyecto">
+                            {fuentesProceso.delProyecto.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+                        </optgroup>
+                    )}
+                    {fuentesProceso.delProyecto.length > 0 && fuentesProceso.otras.length > 0 ? (
+                        <optgroup label="Otras fuentes">
+                            {fuentesProceso.otras.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+                        </optgroup>
+                    ) : fuentesProceso.otras.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+                </select>
+            ))}
+            {campo('responsable_id', 'Responsable (opcional)', (
+                <select {...control('responsable_id')}>
+                    <option value="">Sin responsable</option>
+                    {opcionesConActual(responsables, proceso?.responsable).map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+                </select>
+            ))}
+            {campo('fecha_apertura', 'Fecha de apertura (opcional)', <input type="date" {...control('fecha_apertura')} />)}
+            {campo('fecha_cierre', 'Fecha de cierre (opcional)', <input type="date" {...control('fecha_cierre')} />)}
+            {campo('observaciones', 'Observaciones (opcional)', (
+                <textarea rows={3} maxLength={MAXIMO_OBSERVACIONES_PROCESO} {...control('observaciones')} />
+            ), true)}
             <div className="pl-formulario-acciones">
                 <button type="button" className="gp-boton" onClick={onCancelar} disabled={guardando}>Cancelar</button>
                 <button type="submit" className="gp-boton gp-boton-primario" disabled={guardando}>Guardar proceso</button>
@@ -243,6 +280,8 @@ const ProcesosProyecto = ({ proyecto, user, onCerrar }) => {
     const [error, setError] = useState(null);
     const [modalidades, setModalidades] = useState(null);
     const [entidades, setEntidades] = useState(null);
+    const [fuentes, setFuentes] = useState(null);
+    const [responsables, setResponsables] = useState(null);
     const [errorCatalogos, setErrorCatalogos] = useState(null);
     // null; { tipo: 'proceso', proceso: null | proceso } o { tipo: 'estado', proceso }.
     const [modo, setModo] = useState(null);
@@ -275,19 +314,18 @@ const ProcesosProyecto = ({ proyecto, user, onCerrar }) => {
     }, [cargar]);
 
     // Los catálogos se cargan al abrir y, con "Reintentar", se piden otra vez los que fallaron. Sin
-    // modalidades no se crea ni edita; sin entidades el formulario conserva la que el proceso tiene.
-    const cargarCatalogos = useCallback(async ({ conModalidades = true, conEntidades = true } = {}) => {
+    // modalidades no se crea ni edita; sin los demás el formulario conserva lo que el proceso tiene.
+    const cargarCatalogos = useCallback(async (pendientes = CATALOGOS.map((c) => c.clave)) => {
         const numero = ++turnoCatalogos.current;
         setErrorCatalogos(null);
-        const [m, e] = await Promise.allSettled([
-            conModalidades ? axios.get('/modalidades') : null,
-            conEntidades ? axios.get('/entidades') : null,
-        ]);
+        const pedidos = CATALOGOS.filter((c) => pendientes.includes(c.clave));
+        const respuestas = await Promise.allSettled(pedidos.map((c) => axios.get(c.ruta)));
         if (numero !== turnoCatalogos.current) return;
-        if (conModalidades && m.status === 'fulfilled') setModalidades(ordenarCatalogo(m.value.data));
-        if (conEntidades && e.status === 'fulfilled') setEntidades(Array.isArray(e.value.data) ? e.value.data : []);
-        const fallo = [m, e].find((r) => r.status === 'rejected');
-        if (fallo) setErrorCatalogos(`No se pudieron cargar las modalidades o las entidades: ${mensajeApi(fallo.reason)}`);
+        pedidos.forEach((c, i) => {
+            if (respuestas[i].status === 'fulfilled') c.guardar(respuestas[i].value.data, { setModalidades, setEntidades, setFuentes, setResponsables });
+        });
+        const fallo = respuestas.find((r) => r.status === 'rejected');
+        if (fallo) setErrorCatalogos(`No se pudieron cargar las modalidades, entidades, fuentes o responsables: ${mensajeApi(fallo.reason)}`);
     }, []);
 
     useEffect(() => {
@@ -298,7 +336,8 @@ const ProcesosProyecto = ({ proyecto, user, onCerrar }) => {
     // El botón desaparece mientras se reintenta: el foco pasa al diálogo para no perderse.
     const reintentarCatalogos = () => {
         contenedor.current?.closest('[role="dialog"]')?.focus();
-        cargarCatalogos({ conModalidades: modalidades === null, conEntidades: entidades === null });
+        const cargados = { modalidades, entidades, fuentes, responsables };
+        cargarCatalogos(CATALOGOS.map((c) => c.clave).filter((clave) => cargados[clave] === null));
     };
 
     // Al volver a la lista, el foco regresa al botón que abrió el formulario (o al diálogo).
@@ -417,8 +456,11 @@ const ProcesosProyecto = ({ proyecto, user, onCerrar }) => {
                 {editandoProceso ? (
                     <FormularioProceso
                         proceso={modo.proceso}
+                        fuenteIds={proyecto.fuente_ids ?? []}
                         modalidades={modalidades}
                         entidades={entidades}
+                        fuentes={fuentes}
+                        responsables={responsables}
                         guardando={ocupado}
                         onGuardar={guardar}
                         onCancelar={() => setModo(null)}
@@ -473,8 +515,13 @@ const ProcesosProyecto = ({ proyecto, user, onCerrar }) => {
                                             <div><dt>Número</dt><dd><NumeroProceso proceso={p} /></dd></div>
                                             <div><dt>Entidad contratante</dt><dd>{p.entidad_contratante?.nombre ?? '—'}</dd></div>
                                             <div><dt>Valor</dt><dd className="ct-valor">{textoValor(p.monto)}</dd></div>
+                                            <div><dt>Fuente de financiación</dt><dd>{p.fuente?.nombre ?? '—'}</dd></div>
+                                            <div><dt>Responsable</dt><dd>{p.responsable?.nombre ?? '—'}</dd></div>
+                                            <div><dt>Apertura</dt><dd>{textoFecha(p.fecha_apertura)}</dd></div>
+                                            <div><dt>Cierre</dt><dd>{textoFecha(p.fecha_cierre)}</dd></div>
                                             <div><dt>Contratos vinculados</dt><dd>{textoContratos(p.contratos)}</dd></div>
                                         </dl>
+                                        {p.observaciones && <p className="pl-ayuda">{p.observaciones}</p>}
                                         {modo?.tipo === 'estado' && modo.proceso.id === p.id ? (
                                             <FormularioEstado proceso={p} guardando={ocupado} onGuardar={cambiarEstado} onCancelar={() => setModo(null)} />
                                         ) : edita && (

@@ -9,6 +9,7 @@ import {
     PROCESO_VACIO,
     REGLAS_ETAPA,
     REGLAS_MODALIDAD,
+    REGLAS_TIPO_CONTRATO,
     datosCatalogo,
     erroresPorCampo,
     formularioCatalogo,
@@ -16,6 +17,7 @@ import {
     ordenarCatalogo,
     puedeAdministrarCatalogos,
     textoEstadoCatalogo,
+    textoFecha,
     validarCatalogo,
     avisoCambioEstado,
     datosEstado,
@@ -29,6 +31,7 @@ import {
     numeroProceso,
     opcionesConActual,
     opcionesEtapa,
+    opcionesFuenteProceso,
     puedeEditarProcesos,
     textoContratos,
     textoValor,
@@ -82,6 +85,14 @@ describe('validarCatalogo', () => {
         expect(validarCatalogo({ nombre: 'Etapa', descripcion: 'd'.repeat(2001) }, [], undefined, REGLAS_ETAPA))
             .toEqual({ descripcion: 'La descripción admite hasta 2000 caracteres.' });
         expect(validarCatalogo({ nombre: 'x'.repeat(121), descripcion: '' }, [], undefined, REGLAS_ETAPA)).toEqual({ nombre: 'El nombre admite hasta 120 caracteres.' });
+    });
+
+    it('los tipos de contrato usan los mensajes y el largo del servidor', () => {
+        const tipos = [{ id: 1, nombre: 'Interventoría' }];
+        expect(validarCatalogo({ nombre: ' ' }, tipos, undefined, REGLAS_TIPO_CONTRATO)).toEqual({ nombre: 'Escribe el nombre del tipo de contrato.' });
+        expect(validarCatalogo({ nombre: 'INTERVENTORIA' }, tipos, undefined, REGLAS_TIPO_CONTRATO)).toEqual({ nombre: 'Ya existe un tipo de contrato con ese nombre.' });
+        expect(validarCatalogo({ nombre: 'Interventoría' }, tipos, 1, REGLAS_TIPO_CONTRATO)).toEqual({});
+        expect(validarCatalogo({ nombre: 'x'.repeat(121) }, [], undefined, REGLAS_TIPO_CONTRATO)).toEqual({ nombre: 'El nombre admite hasta 120 caracteres.' });
     });
 
     it('las modalidades no tienen descripción que validar', () => {
@@ -314,6 +325,19 @@ describe('valor en pesos', () => {
     });
 });
 
+describe('textoFecha', () => {
+    it('año-mes-día como día/mes/año, sin desfase de zona horaria', () => {
+        expect(textoFecha('2026-03-20')).toBe('20/03/2026');
+        expect(textoFecha('2026-01-01')).toBe('01/01/2026');
+    });
+
+    it('sin fecha o con otro formato, un guion', () => {
+        expect(textoFecha(null)).toBe('—');
+        expect(textoFecha('')).toBe('—');
+        expect(textoFecha('mañana')).toBe('—');
+    });
+});
+
 describe('textoContratos', () => {
     it('cuenta los contratos vinculados', () => {
         expect(textoContratos(0)).toBe('Sin contratos');
@@ -385,12 +409,17 @@ describe('formularioProceso', () => {
         url_proceso: null,
         entidad_contratante: { id: 3, nombre: 'Alcaldía' },
         monto: '1500000.00',
+        fuente: { id: 7, nombre: 'Regalías' },
+        responsable: { id: 2, nombre: 'Ana Pérez' },
+        fecha_apertura: '2026-03-01',
+        fecha_cierre: '2026-03-20',
+        observaciones: 'Pliegos publicados',
         estado: 'publicado',
     };
 
     it('nuevo: vacío', () => {
         expect(formularioProceso(null)).toEqual(PROCESO_VACIO);
-        expect(CAMPOS_PROCESO).toEqual(['objeto', 'modalidad_id', 'plataforma', 'codigo_proceso', 'url_proceso', 'entidad_contratante_id', 'monto']);
+        expect(CAMPOS_PROCESO).toEqual(['objeto', 'modalidad_id', 'plataforma', 'codigo_proceso', 'url_proceso', 'entidad_contratante_id', 'monto', 'fuente_id', 'responsable_id', 'fecha_apertura', 'fecha_cierre', 'observaciones']);
     });
 
     it('editar: con los ids como texto para los selects y el valor formateado', () => {
@@ -402,12 +431,25 @@ describe('formularioProceso', () => {
             url_proceso: '',
             entidad_contratante_id: '3',
             monto: '1.500.000',
+            fuente_id: '7',
+            responsable_id: '2',
+            fecha_apertura: '2026-03-01',
+            fecha_cierre: '2026-03-20',
+            observaciones: 'Pliegos publicados',
         });
     });
 
     it('un proceso anterior sin plataforma, entidad ni valor la elige al editar', () => {
         expect(formularioProceso({ ...proceso, plataforma: null, entidad_contratante: null, monto: null })).toMatchObject({
             plataforma: '', entidad_contratante_id: '', monto: '',
+        });
+    });
+
+    it('un proceso sin fuente, responsable, fechas ni observaciones los deja vacíos', () => {
+        expect(formularioProceso({
+            ...proceso, fuente: null, responsable: null, fecha_apertura: null, fecha_cierre: null, observaciones: null,
+        })).toMatchObject({
+            fuente_id: '', responsable_id: '', fecha_apertura: '', fecha_cierre: '', observaciones: '',
         });
     });
 });
@@ -441,6 +483,64 @@ describe('validarProceso', () => {
         expect(validarProceso({ ...valido, monto: '9.999.999.999.999,99' })).toEqual({});
         expect(validarProceso({ ...valido, monto: '10.000.000.000.000' })).toEqual({ monto: 'El valor admite hasta 13 cifras enteras y 2 decimales.' });
     });
+
+    it('las fechas son opcionales y el cierre no es anterior a la apertura', () => {
+        expect(validarProceso({ ...valido, fecha_apertura: '2026-03-01', fecha_cierre: '2026-03-01' })).toEqual({});
+        expect(validarProceso({ ...valido, fecha_cierre: '2026-03-01' })).toEqual({});
+        expect(validarProceso({ ...valido, fecha_apertura: '2026-03-10', fecha_cierre: '2026-03-01' })).toEqual({
+            fecha_cierre: 'La fecha de cierre no puede ser anterior a la de apertura.',
+        });
+    });
+
+    it('rechaza una fecha que no sea año-mes-día y observaciones demasiado largas', () => {
+        expect(validarProceso({ ...valido, fecha_apertura: '01/03/2026' })).toEqual({ fecha_apertura: 'Escribe la fecha de apertura como año-mes-día.' });
+        expect(validarProceso({ ...valido, fecha_cierre: '2026-02-30' })).toEqual({ fecha_cierre: 'Escribe la fecha de cierre como año-mes-día.' });
+        expect(validarProceso({ ...valido, observaciones: 'x'.repeat(5000) })).toEqual({});
+        expect(validarProceso({ ...valido, observaciones: 'x'.repeat(5001) })).toEqual({ observaciones: 'Las observaciones admiten hasta 5000 caracteres.' });
+    });
+});
+
+describe('opcionesFuenteProceso', () => {
+    const fuentes = [
+        { id: 1, nombre: 'Propios', activo: true },
+        { id: 2, nombre: 'Regalías', activo: true },
+        { id: 3, nombre: 'Antigua', activo: false },
+        { id: 4, nombre: 'Cofinanciación', activo: true },
+    ];
+    const nombres = (lista) => lista.map((o) => o.etiqueta);
+
+    it('sin fuentes en el proyecto, una sola lista con las activas', () => {
+        expect(opcionesFuenteProceso(fuentes, null, [])).toEqual({
+            delProyecto: [],
+            otras: [
+                { valor: '1', etiqueta: 'Propios' },
+                { valor: '2', etiqueta: 'Regalías' },
+                { valor: '4', etiqueta: 'Cofinanciación' },
+            ],
+        });
+    });
+
+    it('las del proyecto primero, aparte de las demás', () => {
+        const opciones = opcionesFuenteProceso(fuentes, null, [4, '2']);
+        expect(nombres(opciones.delProyecto)).toEqual(['Regalías', 'Cofinanciación']);
+        expect(nombres(opciones.otras)).toEqual(['Propios']);
+    });
+
+    it('una fuente inactiva del proyecto no se ofrece si el proceso no la tiene', () => {
+        const opciones = opcionesFuenteProceso(fuentes, null, [3, 1]);
+        expect(nombres(opciones.delProyecto)).toEqual(['Propios']);
+        expect(nombres(opciones.otras)).toEqual(['Regalías', 'Cofinanciación']);
+    });
+
+    it('la actual inactiva se conserva marcada, en el grupo que le toca', () => {
+        expect(nombres(opcionesFuenteProceso(fuentes, { id: 3, nombre: 'Antigua' }, []).otras)).toEqual(['Propios', 'Regalías', 'Cofinanciación', 'Antigua (inactiva)']);
+        expect(nombres(opcionesFuenteProceso(fuentes, { id: 3, nombre: 'Antigua' }, [3]).delProyecto)).toEqual(['Antigua (inactiva)']);
+    });
+
+    it('con el catálogo sin cargar ofrece la actual, y sin ella, nada', () => {
+        expect(opcionesFuenteProceso(null, { id: 3, nombre: 'Antigua' }, [1])).toEqual({ delProyecto: [], otras: [{ valor: '3', etiqueta: 'Antigua' }] });
+        expect(opcionesFuenteProceso(null, null, [1])).toEqual({ delProyecto: [], otras: [] });
+    });
 });
 
 describe('datosProceso', () => {
@@ -448,15 +548,38 @@ describe('datosProceso', () => {
         expect(datosProceso({
             objeto: '  Obra ', modalidad_id: '2', plataforma: 'ninguna', codigo_proceso: ' ', url_proceso: '', entidad_contratante_id: '', monto: '',
         })).toEqual({
-            objeto: 'Obra', modalidad_id: 2, plataforma: 'ninguna', codigo_proceso: null, url_proceso: null, entidad_contratante_id: null, monto: null,
+            objeto: 'Obra',
+            modalidad_id: 2,
+            plataforma: 'ninguna',
+            codigo_proceso: null,
+            url_proceso: null,
+            entidad_contratante_id: null,
+            monto: null,
+            fuente_id: null,
+            responsable_id: null,
+            fecha_apertura: null,
+            fecha_cierre: null,
+            observaciones: null,
         });
     });
 
     it('los ids como números y el valor como texto decimal', () => {
         expect(datosProceso({
             objeto: 'Obra', modalidad_id: '2', plataforma: 'secop_i', codigo_proceso: 'SA-3', url_proceso: ' https://secop.gov.co/3 ', entidad_contratante_id: '9', monto: '1.234,5',
+            fuente_id: '7', responsable_id: '2', fecha_apertura: '2026-03-01', fecha_cierre: ' 2026-03-20 ', observaciones: ' Con anexos ',
         })).toEqual({
-            objeto: 'Obra', modalidad_id: 2, plataforma: 'secop_i', codigo_proceso: 'SA-3', url_proceso: 'https://secop.gov.co/3', entidad_contratante_id: 9, monto: '1234.5',
+            objeto: 'Obra',
+            modalidad_id: 2,
+            plataforma: 'secop_i',
+            codigo_proceso: 'SA-3',
+            url_proceso: 'https://secop.gov.co/3',
+            entidad_contratante_id: 9,
+            monto: '1234.5',
+            fuente_id: 7,
+            responsable_id: 2,
+            fecha_apertura: '2026-03-01',
+            fecha_cierre: '2026-03-20',
+            observaciones: 'Con anexos',
         });
     });
 

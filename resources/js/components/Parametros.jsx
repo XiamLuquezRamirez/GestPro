@@ -21,6 +21,7 @@ import { avisarError } from '../utils/avisosPlantillas';
 import { htmlErrores, mensajeApi } from '../utils/plantillasChecklist';
 import CatalogoModalidades from './CatalogoModalidades';
 import CatalogoEtapasContratacion from './CatalogoEtapasContratacion';
+import CatalogoTiposContrato from './CatalogoTiposContrato';
 import ProcesosProyecto from './ProcesosProyecto';
 
 // Componente auxiliar: escucha clics en el mapa y reporta la coordenada al padre.
@@ -38,6 +39,7 @@ const CapturadorClicMapa = ({ onAgregarPunto }) => {
 const SECCIONES_PROPIAS = {
     modalidades: CatalogoModalidades,
     'etapas-contratacion': CatalogoEtapasContratacion,
+    'tipos-contrato': CatalogoTiposContrato,
 };
 
 const CabeceraSeccion = ({ seccion }) => (

@@ -23,6 +23,7 @@ export const SECCIONES_PARAMETROS = [
     // `propia`: la sección es un componente aparte que se pinta sin Parametros, no una de sus tablas.
     { slug: 'modalidades', tab: 'modalidades', titulo: 'Modalidades', descripcion: 'Formas de contratación: licitación pública, mínima cuantía…', grupo: GRUPO.CATALOGOS, icono: 'faGavel', palabras: 'contratacion licitacion seleccion abreviada concurso meritos directa minima cuantia secop catalogo', propia: true },
     { slug: 'etapas-contratacion', tab: 'etapas-contratacion', titulo: 'Etapas de contratación', descripcion: 'Etapas de un proceso y su orden.', grupo: GRUPO.CATALOGOS, icono: 'faListOl', palabras: 'contratacion licitacion proceso pliego adjudicacion cronograma secop catalogo', propia: true },
+    { slug: 'tipos-contrato', tab: 'tipos-contrato', titulo: 'Tipos de contrato', descripcion: 'Clases de contrato: obra, interventoría, consultoría, suministro…', grupo: GRUPO.CATALOGOS, icono: 'faFileSignature', palabras: 'contratacion contratos obra interventoria consultoria suministro prestacion servicios orden compra catalogo', propia: true },
 ];
 
 // No usar /plantillas: bajo /GestPro chocaría con la API del mismo nombre.
