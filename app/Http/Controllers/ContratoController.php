@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Contrato;
 use App\Services\Contratacion\ContratosService;
 use Closure;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -43,6 +44,11 @@ class ContratoController extends Controller
         'avance_fisico.max' => 'El avance físico va de 0 a 100.',
         'avance_financiero.min' => 'El avance financiero va de 0 a 100.',
         'avance_financiero.max' => 'El avance financiero va de 0 a 100.',
+        'secop_id_contrato.max' => 'El ID del contrato de SECOP II admite hasta 40 caracteres.',
+        'secop_id_contrato.regex' => 'El ID del contrato de SECOP II tiene la forma CO1.PCCNTR.123456.',
+        'secop_proceso.max' => 'El proceso de SECOP II admite hasta 40 caracteres.',
+        'url_secop.regex' => 'El enlace de SECOP II debe empezar por http:// o https://.',
+        'url_secop.max' => 'El enlace de SECOP II admite hasta 500 caracteres.',
         'actualizado.present' => 'Falta la versión del contrato que estabas editando. Ciérralo y vuelve a abrirlo.',
         'actualizado.date' => 'La versión del contrato no es válida. Ciérralo y vuelve a abrirlo.',
         'anexos.*.descripcion.required' => 'Escribe la descripción del anexo.',
@@ -83,6 +89,10 @@ class ContratoController extends Controller
         'porcentaje_anticipo' => 'el porcentaje de anticipo',
         'avance_fisico' => 'el avance físico',
         'avance_financiero' => 'el avance financiero',
+        'secop_id_contrato' => 'el ID del contrato de SECOP II',
+        'secop_proceso' => 'el proceso de SECOP II',
+        'url_secop' => 'el enlace de SECOP II',
+        'secop_consultado' => 'la consulta a SECOP II',
         'actualizado' => 'la versión del contrato',
         'anexos' => 'los anexos',
         'anexos.*.descripcion' => 'la descripción del anexo',
@@ -93,6 +103,11 @@ class ContratoController extends Controller
 
     // Las columnas de valor son decimal(15, 2): 13 cifras enteras y 2 decimales.
     private const CIFRAS_ENTERAS = 13;
+
+    // El ID de un contrato en SECOP II (sin distinguir mayúsculas) y su enlace.
+    private const FORMATO_SECOP = '/^CO1\.PCCNTR\.\d+$/i';
+
+    private const URL_SECOP = '#^https?://\S+$#i';
 
     // Lo que sube subirAnexo: un archivo directo en public/anexos_contratos. Otra ruta se rechaza:
     // al eliminar el contrato se borra el archivo.
@@ -105,8 +120,9 @@ class ContratoController extends Controller
     /**
      * Crea (sin `formContrato.id`) o edita un contrato. El pedido es `formContrato` con los campos
      * y `anexos`; al editar, los anexos que trae reemplazan a los que había. Los campos que no se
-     * escriben desde aquí (el valor y la fecha fin vigentes, la referencia de SECOP, lo que la
-     * pantalla manda de más) se ignoran.
+     * escriben desde aquí (el valor y la fecha fin vigentes, lo que la pantalla manda de más) se
+     * ignoran. La referencia de SECOP II se guarda con `secop_consultado`: si es verdadero, el
+     * servidor pone la fecha de la consulta (`secop_consultado_at` del pedido nunca se acepta).
      */
     public function guardar(Request $request): JsonResponse
     {
@@ -114,7 +130,7 @@ class ContratoController extends Controller
         $form = is_array($form) ? $form : [];
         $editar = ! empty($form['id']);
 
-        $validador = Validator::make($form, $this->reglas($editar), self::MENSAJES, self::ATRIBUTOS);
+        $validador = Validator::make($form, $this->reglas($editar ? (int) $form['id'] : null), self::MENSAJES, self::ATRIBUTOS);
         $validadorAnexos = Validator::make($request->only('anexos'), $this->reglasAnexos(), self::MENSAJES, self::ATRIBUTOS);
         // Los dos a la vez: así la pantalla muestra todos los errores de una vez.
         $fallaForm = $validador->fails();
@@ -123,18 +139,35 @@ class ContratoController extends Controller
             throw ValidationException::withMessages([...$validador->errors()->toArray(), ...$validadorAnexos->errors()->toArray()]);
         }
         $datos = $validador->validated();
+        if (array_key_exists('secop_consultado', $datos)) {
+            if ($datos['secop_consultado']) {
+                $datos['secop_consultado_at'] = now()->format('Y-m-d H:i:s');
+            }
+            unset($datos['secop_consultado']);
+        }
         // `anexos: null` es como no enviarlos: se conservan.
         $anexos = $request->input('anexos') !== null ? $validadorAnexos->validated()['anexos'] : null;
         unset($datos['id'], $datos['actualizado']);
 
+        $contrato = null;
         if ($editar) {
             $contrato = Contrato::find($form['id']);
             if ($contrato === null) {
                 return response()->json(['mensaje' => 'El contrato no existe.'], 404);
             }
-            $guardado = $this->contratos->editar($contrato, $datos, $anexos, $form['actualizado'], $request->user());
-        } else {
-            $guardado = $this->contratos->crear($datos, $anexos ?? [], $request->user());
+        }
+
+        try {
+            $guardado = $editar
+                ? $this->contratos->editar($contrato, $datos, $anexos, $form['actualizado'], $request->user())
+                : $this->contratos->crear($datos, $anexos ?? [], $request->user());
+        } catch (UniqueConstraintViolationException $e) {
+            // Otro guardado se llevó el ID de SECOP II entre la validación y el insert.
+            if (! self::esChoqueDelIdSecop($e)) {
+                throw $e;
+            }
+            $id = strtoupper(trim((string) ($datos['secop_id_contrato'] ?? '')));
+            throw ValidationException::withMessages(['secop_id_contrato' => $this->yaRegistrado(Contrato::where('secop_id_contrato', $id)->first())]);
         }
 
         return response()->json([
@@ -194,12 +227,22 @@ class ContratoController extends Controller
      * obligatorios siempre se envían, y también `actualizado` (el updated_at del contrato que
      * tenía el formulario; null para un contrato antiguo, sin fechas).
      */
-    private function reglas(bool $editar): array
+    private function reglas(?int $editando): array
     {
         $cifras = fn (string $atributo, mixed $valor, Closure $falla) => strlen(ltrim(explode('.', ltrim((string) $valor, '+-'))[0], '0')) <= self::CIFRAS_ENTERAS
             || $falla('El valor inicial admite hasta ' . self::CIFRAS_ENTERAS . ' cifras enteras y 2 decimales.');
         $opcional = fn (mixed ...$reglas) => ['sometimes', 'nullable', 'bail', ...$reglas];
         $fecha = $opcional('string', 'date_format:Y-m-d');
+        // Único entre contratos (menos el que se edita). Se guarda en mayúsculas.
+        $secopUnico = function (string $atributo, mixed $valor, Closure $falla) use ($editando) {
+            $otro = Contrato::query()
+                ->where('secop_id_contrato', strtoupper(trim((string) $valor)))
+                ->when($editando !== null, fn ($q) => $q->where('id', '<>', $editando))
+                ->first();
+            if ($otro !== null) {
+                $falla($this->yaRegistrado($otro));
+            }
+        };
 
         return [
             'id' => $opcional($this->entero()),
@@ -227,8 +270,30 @@ class ContratoController extends Controller
             // Los calcula la pantalla y pueden traer decimales: el servicio los redondea.
             'avance_fisico' => $opcional('numeric', 'min:0', 'max:100'),
             'avance_financiero' => $opcional('numeric', 'min:0', 'max:100'),
-            ...($editar ? ['actualizado' => ['present', 'nullable', 'bail', 'string', 'date']] : []),
+            'secop_id_contrato' => $opcional('string', 'max:40', 'regex:' . self::FORMATO_SECOP, $secopUnico),
+            'secop_proceso' => $opcional('string', 'max:40'),
+            'url_secop' => $opcional('string', 'max:500', 'regex:' . self::URL_SECOP),
+            'secop_consultado' => $opcional('boolean'),
+            ...($editando !== null ? ['actualizado' => ['present', 'nullable', 'bail', 'string', 'date']] : []),
         ];
+    }
+
+    /**
+     * Si la violación es la del índice único del ID de SECOP II (y no la de otro índice, aunque el
+     * SQL del insert mencione la columna): se mira solo el mensaje del motor (`errorInfo`), que
+     * nombra el índice en MariaDB/MySQL y la columna sola en SQLite.
+     */
+    private static function esChoqueDelIdSecop(UniqueConstraintViolationException $e): bool
+    {
+        $detalle = trim((string) ($e->errorInfo[2] ?? ''));
+
+        return preg_match("/for key '(?:contratos\.)?contratos_secop_id_contrato_unique'$/", $detalle) === 1
+            || preg_match('/^UNIQUE constraint failed: contratos\.secop_id_contrato$/', $detalle) === 1;
+    }
+
+    private function yaRegistrado(?Contrato $contrato): string
+    {
+        return 'Ese contrato de SECOP II ya está registrado: contrato N° ' . ($contrato?->n_contrato ?? '') . '.';
     }
 
     private function reglasAnexos(): array

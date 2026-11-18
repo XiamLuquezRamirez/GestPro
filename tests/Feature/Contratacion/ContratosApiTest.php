@@ -174,7 +174,7 @@ class ContratosApiTest extends TestCase
             // Lo que la pantalla manda de más y no se escribe desde aquí.
             'valor' => 999,
             'fecha_fin' => '2030-01-01',
-            'secop_id_contrato' => 'CO1.PCCNTR.1',
+            'secop_consultado_at' => '2020-01-01 00:00:00',
             'actividades' => [],
         ]), [], $gestor)->assertOk();
 
@@ -709,6 +709,10 @@ class ContratosApiTest extends TestCase
             'porcentaje_anticipo' => null,
             'avance_fisico' => null,
             'avance_financiero' => null,
+            'secop_id_contrato' => null,
+            'secop_proceso' => null,
+            'url_secop' => null,
+            'secop_consultado_at' => null,
         ], $despues);
     }
 

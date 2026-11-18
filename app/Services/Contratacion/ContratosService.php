@@ -35,7 +35,8 @@ use Illuminate\Validation\ValidationException;
  *   estado. Desvincular se permite.
  * - El tipo de contrato debe existir y estar activo, o ser el que el contrato ya tiene.
  * - La fecha fin inicial no es anterior a la de inicio (con lo que quedaría guardado).
- * - El pedido escribe el valor inicial y la fecha fin inicial. El valor y la fecha fin vigentes
+ * - El pedido escribe el valor inicial y la fecha fin inicial, y la referencia de SECOP II (ID en
+ *   mayúsculas, proceso, enlace y fecha de la última consulta). El valor y la fecha fin vigentes
  *   los deriva recalcular(): inicial más adiciones y prórrogas. Al crear son los iniciales.
  * - Avisos que no impiden guardar: los contratos del proceso que no están anulados suman más que
  *   su monto (R9). Al crear el primer contrato de un proceso adjudicado se propone pasarlo a
@@ -77,11 +78,16 @@ final class ContratosService
         'porcentaje_anticipo' => 'porcentaje_anticipo',
         'avance_fisico' => 'avance_fisico',
         'avance_financiero' => 'avance_financiero',
+        'secop_id_contrato' => 'secop_id_contrato',
+        'secop_proceso' => 'secop_proceso',
+        'url_secop' => 'url_secop',
+        'secop_consultado_at' => 'secop_consultado_at',
     ];
 
     private const TEXTOS = [
         'n_contrato', 'objeto', 'contratante', 'contratante_nit', 'contratista',
         'contratista_identificacion', 'supervisor', 'interventoria', 'numero_rp',
+        'secop_id_contrato', 'secop_proceso', 'url_secop',
     ];
 
     private const ENTEROS = ['proyecto', 'proceso_id', 'tipo_contrato_id', 'porcentaje_anticipo'];
@@ -554,6 +560,7 @@ final class ContratosService
             }
             $texto = trim((string) $valor);
             $valores[$campo] = match (true) {
+                $campo === 'secop_id_contrato' => $texto !== '' ? strtoupper($texto) : null,
                 in_array($campo, self::TEXTOS, true) => $texto !== '' ? $texto : null,
                 in_array($campo, self::ENTEROS, true) => (int) $valor,
                 in_array($campo, self::AVANCES, true) => (int) round((float) $valor),
@@ -679,6 +686,7 @@ final class ContratosService
             $valor = $contrato->{$columna};
             $valores[$campo] = match (true) {
                 $valor === null => null,
+                $campo === 'secop_consultado_at' => $valor->format('Y-m-d H:i:s'),
                 $valor instanceof DateTimeInterface => $valor->format('Y-m-d'),
                 in_array($campo, self::ENTEROS, true), in_array($campo, self::AVANCES, true) => (int) $valor,
                 $campo === 'valor_inicial' => (string) BigDecimal::of((string) $valor)->toScale(2),
