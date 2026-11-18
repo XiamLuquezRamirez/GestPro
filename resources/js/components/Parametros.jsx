@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import axios from '../axios';
 import { faPlus, faTrash, faSave, faTimes, faCalculator, faFile, faInfo, faEdit, faClipboardCheck, faEye, faGavel } from '@fortawesome/free-solid-svg-icons';
@@ -11,6 +11,14 @@ import '../leafletIconFix';
 import '../../css/Parametros.css';
 import { seccionDesdeSlug } from '../utils/navegacion';
 import { alternarFuente, datosFinanciacionDe, financiacionCompleta, fuentesDisponibles, mensajeDeError } from '../utils/fuentesProyecto';
+import { datosEstado, esEdicionDesactualizada, textoValor, valorEnEdicion } from '../utils/contratacion';
+import {
+    ESTADOS_CONTRATO, aplicarPrecarga, contratoVacio, datosContrato, datosDelProceso, erroresGuardarContrato, etiquetaEstadoContrato,
+    formularioContrato, notaProceso, opcionesProceso, opcionesTipoContrato, primerCampoConError, procesoElegido, validarContrato,
+    valorVigente, vigentesDistintos,
+} from '../utils/contratos';
+import { avisarError } from '../utils/avisosPlantillas';
+import { htmlErrores, mensajeApi } from '../utils/plantillasChecklist';
 import CatalogoModalidades from './CatalogoModalidades';
 import CatalogoEtapasContratacion from './CatalogoEtapasContratacion';
 import ProcesosProyecto from './ProcesosProyecto';
@@ -258,36 +266,24 @@ const Parametros = ({ user }) => {
         accion: 'Agregar'
     });
 
-    // Estados posibles para los contratos
-    const estadosContratos = [
-        { value: 'vigente', label: 'Vigente' },
-        { value: 'ejecutado', label: 'Ejecutado' },
-        { value: 'liquidado', label: 'Liquidado' },
-        { value: 'suspendido', label: 'Suspendido' },
-        { value: 'anulado', label: 'Anulado' },
-    ];
-
     // Estado para la lista de contratos
     const [contratos, setContratos] = useState([]);
 
-    // Campos de formulario para contratos
-    const [formContrato, setFormContrato] = useState({
-        n_contrato: '',
-        objeto: '',
-        contratante: '',
-        contratista: '',
-        valor: '',
-        fecha_inicio: '',
-        fecha_fin: '',
-        interventoria: '',
-        avance: '',
-        avance_financiero: '',
-        avance_fisico: '',
-        estado: '',
-        proyecto: '',
-        anticipo: false,
-        porcentaje_anticipo: ''
-    });
+    // Campos de formulario para contratos (los de la API: utils/contratos.js)
+    const [formContrato, setFormContrato] = useState(() => contratoVacio());
+    // Errores del formulario por campo, de la validación local o de un 422.
+    const [erroresContrato, setErroresContrato] = useState({});
+    const [guardandoContrato, setGuardandoContrato] = useState(false);
+    // Evita un segundo envío mientras el primero no termina (el estado tarda un render en verse).
+    const enviandoContrato = useRef(false);
+    // Cada error de validación sube el contador: tras pintar, se enfoca el primer campo con error.
+    const [focoErrorContrato, setFocoErrorContrato] = useState(0);
+    const formularioContratoRef = useRef(null);
+    // Turno de la carga de procesos: una respuesta atrasada (de otro contrato) se descarta.
+    const turnoProcesosContrato = useRef(0);
+    // Catálogo de tipos de contrato y procesos del proyecto; null mientras no cargan.
+    const [tiposContrato, setTiposContrato] = useState(null);
+    const [procesosContrato, setProcesosContrato] = useState(null);
 
     const [actasFinancieras, setActasFinancieras] = useState([]);
     const [formActaFinanciera, setFormActaFinanciera] = useState({
@@ -310,6 +306,13 @@ const Parametros = ({ user }) => {
     // Manejar cambios en el formulario de contratos
     const handleContratoChange = (e) => {
         const { name, value, type, checked } = e.target;
+        setErroresContrato(prev => (prev[name] ? { ...prev, [name]: undefined } : prev));
+        if (name === 'proceso_id') {
+            setFormContrato(prev => ({ ...prev, proceso_id: value }));
+            // R8: en un contrato nuevo, el proceso elegido llena los campos que siguen vacíos.
+            if (value && !editingContrato) precargarDesdeProceso(value);
+            return;
+        }
         if (name === 'anticipo' && !checked) {
             setFormContrato(prev => ({ ...prev, anticipo: false, porcentaje_anticipo: '' }));
             return;
@@ -330,6 +333,51 @@ const Parametros = ({ user }) => {
 
         setFormContrato(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     };
+
+    const precargarDesdeProceso = async (procesoId) => {
+        try {
+            const { data } = await axios.get(`/procesos/${procesoId}/precarga-contrato`);
+            // Si entretanto se eligió otro proceso, esta precarga ya no aplica.
+            setFormContrato(prev => (prev.proceso_id === procesoId ? aplicarPrecarga(prev, data?.precarga) : prev));
+        } catch (error) {
+            avisarError('No se pudieron traer los datos del proceso', error);
+        }
+    };
+
+    // Tipos de contrato (GET /tiposProcesos) y procesos del proyecto para el formulario.
+    const cargarTiposContrato = async () => {
+        try {
+            const { data } = await axios.get('/tiposProcesos');
+            setTiposContrato(Array.isArray(data) ? data : []);
+        } catch (error) {
+            // Sin catálogo, el select ofrece solo el tipo que el contrato ya tiene.
+            setTiposContrato(null);
+        }
+    };
+
+    // Devuelve la lista pedida (o null si falló); solo la última carga llega al formulario.
+    const cargarProcesosContrato = async (proyectoId) => {
+        const numero = ++turnoProcesosContrato.current;
+        if (!proyectoId) {
+            setProcesosContrato([]);
+            return [];
+        }
+        try {
+            const { data } = await axios.get(`/proyectos/${proyectoId}/procesos`);
+            const lista = data?.procesos ?? [];
+            if (numero === turnoProcesosContrato.current) setProcesosContrato(lista);
+            return lista;
+        } catch (error) {
+            if (numero === turnoProcesosContrato.current) setProcesosContrato(null);
+            return null;
+        }
+    };
+
+    useEffect(() => {
+        if (!focoErrorContrato) return;
+        const campo = primerCampoConError(erroresContrato);
+        if (campo) formularioContratoRef.current?.querySelector(`[name="${campo}"]`)?.focus();
+    }, [focoErrorContrato]);
 
     // Manejar cambios en el formulario de anexos
     const handleAnexoChange = (e) => {
@@ -428,8 +476,8 @@ const Parametros = ({ user }) => {
         const porcentajeAnticipo = parseInt(formContrato.porcentaje_anticipo, 10) || 0;
         const amortizacion = formContrato.anticipo ? Math.round(valorFacturado * (porcentajeAnticipo / 100) * 100) / 100 : 0;
         const valorPresente = Math.round((valorFacturado - amortizacion) * 100) / 100;
-        const valorVigente = parseCurrencyValue(formContrato.valor);
-        const porcentajeEjecutado = valorVigente ? Math.round((valorFacturado / valorVigente) * 100 * 100) / 100 : 0;
+        const vigente = valorVigente(formContrato, editingContrato);
+        const porcentajeEjecutado = vigente ? Math.round((valorFacturado / vigente) * 100 * 100) / 100 : 0;
         return { amortizacion, valorPresente, porcentajeEjecutado };
     };
 
@@ -455,7 +503,7 @@ const Parametros = ({ user }) => {
             const { amortizacion, valorPresente, porcentajeEjecutado } = calcularAmortizacionYValorPresente(valorFacturado);
             return { ...prev, amortizacion_50: amortizacion, valor_presente_acta: valorPresente, porcentaje_ejecutado: porcentajeEjecutado };
         });
-    }, [formContrato.anticipo, formContrato.porcentaje_anticipo, formContrato.valor]);
+    }, [formContrato.anticipo, formContrato.porcentaje_anticipo, formContrato.valor_inicial, editingContrato]);
 
     // Manejar cambios en el formulario de acta financiera
     const handleActaFinancieraChange = (e) => {
@@ -655,15 +703,15 @@ const Parametros = ({ user }) => {
 
     // Calcular avance financiero automáticamente: suma de valor_facturado de todas las actas / valor vigente del contrato
     useEffect(() => {
-        const valorVigente = parseCurrencyValue(formContrato.valor);
-        if (actasFinancieras.length === 0 || !valorVigente) {
+        const vigente = valorVigente(formContrato, editingContrato);
+        if (actasFinancieras.length === 0 || !vigente) {
             setFormContrato(prev => (prev.avance_financiero === '' ? prev : { ...prev, avance_financiero: '' }));
             return;
         }
         const totalFacturado = actasFinancieras.reduce((sum, acta) => sum + (parseFloat(acta.valor_facturado) || 0), 0);
-        const porcentaje = Math.round((totalFacturado / valorVigente) * 100 * 100) / 100;
+        const porcentaje = Math.round((totalFacturado / vigente) * 100 * 100) / 100;
         setFormContrato(prev => (prev.avance_financiero === porcentaje ? prev : { ...prev, avance_financiero: porcentaje }));
-    }, [actasFinancieras, formContrato.valor]);
+    }, [actasFinancieras, formContrato.valor_inicial, editingContrato]);
 
     // Calcular avance físico: suma ponderada de (peso x último % de ejecución) de cada actividad
     const handleCalcularAvanceFisico = () => {
@@ -675,54 +723,33 @@ const Parametros = ({ user }) => {
         setFormContrato(prev => ({ ...prev, avance_fisico: Math.round(total) }));
     };
 
-    // Agregar contrato a la lista
-    const handleAddContrato = () => {
-        const valorNumerico = parseCurrencyValue(formContrato.valor);
-        if (!formContrato.n_contrato || !formContrato.objeto || valorNumerico <= 0 || !formContrato.estado) {
-            Swal.fire({ icon: 'warning', title: 'Los campos N° Contrato, Objeto, Valor y Estado son obligatorios' });
-            return;
-        }
-        setContratos(prev => [
-            ...prev,
-            { ...formContrato, id: Date.now(), valor: valorNumerico }
-        ]);
-        setFormContrato({
-            n_contrato: '', objeto: '',
-            contratante: '', contratista: '',
-            valor: '', fecha_inicio: '',
-            fecha_fin: '', interventoria: '',
-            avance_financiero: '',
-            avance_fisico: '', estado: '',
-            proyecto: proyectoContratos.id || '',
-            anticipo: false, porcentaje_anticipo: ''
+    // Eliminar contrato. El servidor lo rechaza si tiene actas, actividades o modificaciones, y
+    // explica por qué: en ese caso se anula.
+    const handleDeleteContrato = async (contrato) => {
+        const { isConfirmed } = await Swal.fire({
+            icon: 'warning',
+            titleText: `¿Eliminar el contrato ${contrato.n_contrato}?`,
+            text: 'También se borran sus anexos. No se puede deshacer.',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar',
         });
-    };
-
-    // Eliminar contrato de la lista
-    const handleDeleteContrato = (id) => {
-        setContratos(prev => prev.filter(c => c.id !== id));
+        if (!isConfirmed) return;
+        try {
+            await axios.post('/eliminarContrato', { id: contrato.id });
+            await listContratos();
+            listProyectos();
+            Swal.fire({ icon: 'success', title: 'Contrato eliminado' });
+        } catch (error) {
+            avisarError('No se pudo eliminar el contrato', error);
+        }
     };
 
     // Editar contrato
     const handleEditContrato = (contrato) => {
         setEditingContrato(contrato);
-        setFormContrato({
-            id: contrato.id || '',
-            n_contrato: contrato.n_contrato || '',
-            objeto: contrato.objeto || '',
-            contratante: contrato.contratante || '',
-            contratista: contrato.contratista || '',
-            valor: contrato.valor ? formatCurrency(Number(contrato.valor)) : '',
-            fecha_inicio: contrato.fecha_inicio || '',
-            fecha_fin: contrato.fecha_fin || '',
-            interventoria: contrato.interventoria || '',
-            avance_financiero: contrato.avance_financiero || '',
-            avance_fisico: contrato.avance_fisico || '',
-            estado: contrato.estado || '',
-            proyecto: contrato.proyecto || '',
-            anticipo: !!contrato.anticipo,
-            porcentaje_anticipo: contrato.porcentaje_anticipo ?? ''
-        });
+        setFormContrato(formularioContrato(contrato));
+        setErroresContrato({});
         // Cargar anexos del contrato si existen
         if (contrato.anexos && contrato.anexos.length > 0) {
             const anexosFormateados = contrato.anexos.map(anexo => ({
@@ -741,82 +768,123 @@ const Parametros = ({ user }) => {
         setModificaciones(contrato.modificaciones || []);
         setResumenModificacion(null);
         setShowContratoForm(true);
+        // Los estados de los procesos pueden haber cambiado desde que se abrió la lista.
+        cargarProcesosContrato(contrato.proyecto ?? proyectoContratos?.id);
     };
 
-    // Guardar contrato (agregar o actualizar)
+    // Primer contrato de un proceso adjudicado: se propone pasar el proceso a celebrado.
+    const proponerProcesoCelebrado = async (contrato) => {
+        const { isConfirmed } = await Swal.fire({
+            icon: 'question',
+            titleText: '¿Pasar el proceso a celebrado?',
+            text: 'Es el primer contrato de este proceso adjudicado. El cambio queda en el historial del proceso.',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, pasar a celebrado',
+            cancelButtonText: 'Ahora no',
+        });
+        if (!isConfirmed) return;
+        // Recién cargado, el proceso trae su `actualizado` vigente.
+        const lista = await cargarProcesosContrato(contrato.proyecto);
+        const proceso = (lista ?? []).find(p => p.id === contrato.proceso_id);
+        if (!proceso) {
+            Swal.fire({ icon: 'error', titleText: 'No se pudo cambiar el estado', text: 'No se pudo cargar el proceso: cambia su estado desde Procesos.' });
+            return;
+        }
+        try {
+            await axios.post(`/procesos/${proceso.id}/estado`, datosEstado(proceso, 'celebrado', null));
+            await cargarProcesosContrato(contrato.proyecto);
+            await Swal.fire({ icon: 'success', title: 'El proceso quedó celebrado' });
+        } catch (error) {
+            if (esEdicionDesactualizada(error)) {
+                await Swal.fire({ icon: 'warning', titleText: 'No se cambió el estado del proceso', text: mensajeApi(error) });
+                return;
+            }
+            avisarError('No se pudo cambiar el estado del proceso', error);
+        }
+    };
+
+    // Guardar contrato (agregar o actualizar), una vez a la vez.
     const handleSaveContrato = async () => {
-        const valorNumerico = parseCurrencyValue(formContrato.valor);
-        if (!formContrato.n_contrato || !formContrato.objeto || valorNumerico <= 0 || !formContrato.estado) {
-            Swal.fire({ icon: 'warning', title: 'Los campos N° Contrato, Objeto, Valor y Estado son obligatorios' });
+        if (enviandoContrato.current) return;
+        enviandoContrato.current = true;
+        try {
+            await enviarContrato();
+        } finally {
+            enviandoContrato.current = false;
+        }
+    };
+
+    const enviarContrato = async () => {
+        const locales = validarContrato(formContrato);
+        setErroresContrato(locales);
+        if (Object.keys(locales).length) {
+            setContratoActiveTab('informacion');
+            setFocoErrorContrato(n => n + 1);
             return;
         }
 
-        const contratoData = { ...formContrato, valor: valorNumerico };
-
-        if (editingContrato) {
-            // Actualizar contrato existente
-            setContratos(prev => prev.map(c =>
-                c.id === editingContrato.id ? { ...contratoData, id: c.id, anexos: anexos } : c
-            ));
-            setEditingContrato(null);
-        } else {
-            // Agregar nuevo contrato
-            setContratos(prev => [
-                ...prev,
-                { ...contratoData, id: Date.now(), anexos: anexos }
-            ]);
-        }
-
-        console.log(contratoData);
-        console.log(anexos);
-        // Actualizar el proyecto con los nuevos contratos con axios
-        const response = await axios.post('/guardarContrato', {
-            formContrato: contratoData,
-            anexos: anexos.map(anexo => ({
-                descripcion: anexo.descripcion,
-                nombreArchivo: anexo.nombreArchivo,
-                rutaArchivo: anexo.rutaArchivo,
-                fecha: anexo.fecha
-            }))
-        });
-        if (response.status === 200) {
-            Swal.fire({
-                title: 'Contrato guardado correctamente',
-                icon: 'success'
-            }).then(() => {
-                listContratos();
-                handleCloseModal();
+        setGuardandoContrato(true);
+        let respuesta;
+        try {
+            respuesta = await axios.post('/guardarContrato', {
+                formContrato: datosContrato(formContrato, editingContrato),
+                anexos: anexos.map(anexo => ({
+                    descripcion: anexo.descripcion,
+                    nombreArchivo: anexo.nombreArchivo,
+                    rutaArchivo: anexo.rutaArchivo,
+                    fecha: anexo.fecha
+                }))
             });
+        } catch (error) {
+            if (esEdicionDesactualizada(error)) {
+                // Otra persona cambió el contrato: se avisa y se recarga la lista. El formulario
+                // sigue abierto para copiar lo escrito; al reabrirlo trae lo último.
+                await Promise.all([
+                    listContratos(),
+                    Swal.fire({ icon: 'warning', titleText: 'No se guardó tu cambio', text: mensajeApi(error) }),
+                ]);
+                return;
+            }
+            const errores = erroresGuardarContrato(error);
+            if (!errores) {
+                avisarError('No se pudo guardar el contrato', error);
+                return;
+            }
+            // Los de campos con control, junto a su control; los demás (el proyecto, los anexos), en un aviso.
+            if (Object.keys(errores.campos).length) {
+                setErroresContrato(errores.campos);
+                setContratoActiveTab('informacion');
+                setFocoErrorContrato(n => n + 1);
+            }
+            if (errores.otros.length) {
+                Swal.fire({ icon: 'error', titleText: 'No se pudo guardar el contrato', html: htmlErrores('Revisa lo siguiente:', errores.otros) });
+            } else if (!Object.keys(errores.campos).length) {
+                avisarError('No se pudo guardar el contrato', error);
+            }
+            return;
+        } finally {
+            setGuardandoContrato(false);
         }
 
-        // Limpiar formulario
-        setFormContrato({
-            n_contrato: '', objeto: '', contratante: '',
-            contratista: '', valor: '',
-            fecha_inicio: '', fecha_fin: '',
-            interventoria: '',
-            avance_financiero: '',
-            avance_fisico: '', estado: '',
-            proyecto: proyectoContratos.id || '',
-            anticipo: false, porcentaje_anticipo: ''
-        });
-        setShowContratoForm(false);
+        const { contrato, avisos = [], proponer_celebrado: proponerCelebrado } = respuesta.data ?? {};
+        if (avisos.length) {
+            await Swal.fire({ icon: 'warning', titleText: 'Contrato guardado, con avisos', html: htmlErrores('Revisa lo siguiente:', avisos) });
+        } else {
+            await Swal.fire({ icon: 'success', title: 'Contrato guardado correctamente' });
+        }
+        if (proponerCelebrado && contrato?.proceso_id) await proponerProcesoCelebrado(contrato);
+
+        listContratos();
+        listProyectos();
+        handleCancelContratoForm();
     };
 
     // Cancelar edición/agregado de contrato
     const handleCancelContratoForm = () => {
         setShowContratoForm(false);
         setEditingContrato(null);
-        setFormContrato({
-            n_contrato: '', objeto: '', contratante: '',
-            contratista: '', valor: '', fecha_inicio: '',
-            fecha_fin: '', interventoria: '',
-            avance_financiero: '',
-            avance_fisico: '',
-            estado: '',
-            proyecto: proyectoContratos.id || '',
-            anticipo: false, porcentaje_anticipo: ''
-        });
+        setFormContrato(contratoVacio(proyectoContratos?.id));
+        setErroresContrato({});
         setAnexos([]);
         setFormAnexo({ descripcion: '', archivo: null });
         setActasFinancieras([]);
@@ -837,15 +905,8 @@ const Parametros = ({ user }) => {
     // Abrir formulario para agregar contrato
     const handleAddNewContrato = () => {
         setEditingContrato(null);
-        setFormContrato({
-            n_contrato: '', objeto: '', contratante: '',
-            contratista: '', valor: '', fecha_inicio: '',
-            fecha_fin: '', interventoria: '',
-            avance_financiero: '',
-            avance_fisico: '', estado: '',
-            proyecto: proyectoContratos.id || '',
-            anticipo: false, porcentaje_anticipo: ''
-        });
+        setFormContrato(contratoVacio(proyectoContratos?.id));
+        setErroresContrato({});
         setAnexos([]);
         setFormAnexo({ descripcion: '', archivo: null });
         setActasFinancieras([]);
@@ -862,6 +923,7 @@ const Parametros = ({ user }) => {
         setResumenModificacion(null);
         setContratoActiveTab('informacion');
         setShowContratoForm(true);
+        cargarProcesosContrato(proyectoContratos?.id);
     };
 
     const listContratos = async () => {
@@ -881,11 +943,11 @@ const Parametros = ({ user }) => {
             const actual = lista.find(c => c.id === formContrato.id);
             if (actual) {
                 setModificaciones(actual.modificaciones || []);
-                setFormContrato(prev => ({
-                    ...prev,
-                    valor: actual.valor ? formatCurrency(Number(actual.valor)) : '',
-                    fecha_fin: actual.fecha_fin || '',
-                }));
+                // Los vigentes recalculados salen del contrato recargado; lo escrito en el
+                // formulario se conserva. Registrar una modificación no cambia la versión
+                // (updated_at), y se guarda la que tenía al abrirse: así un cambio de otra
+                // persona entretanto sigue dando 409.
+                setEditingContrato(prev => ({ ...actual, updated_at: prev?.updated_at ?? actual.updated_at }));
             }
         }
     };
@@ -1282,6 +1344,7 @@ const Parametros = ({ user }) => {
     const handleDelete = async (id, type) => {
         Swal.fire({
             title: '¿Está seguro de que desea eliminar este elemento?',
+            ...(type === 'proyectos' ? { text: 'Sus contratos no se borran: quedan sin proyecto.' } : {}),
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#3085d6',
@@ -1613,12 +1676,11 @@ const Parametros = ({ user }) => {
         }));
     };
 
+    // Valor inicial con los miles agrupados ("1.234.567,89"), como el valor de los procesos.
     const handleContratoValorChange = (e) => {
-        const sanitized = sanitizeCurrencyInput(e.target.value);
-        setFormContrato(prev => ({
-            ...prev,
-            valor: sanitized ? formatCurrencyInput(sanitized) : ''
-        }));
+        const { value } = e.target;
+        setErroresContrato(prev => (prev.valor_inicial ? { ...prev, valor_inicial: undefined } : prev));
+        setFormContrato(prev => ({ ...prev, valor_inicial: valorEnEdicion(value, prev.valor_inicial) }));
     };
 
     const handleAddComponente = () => {
@@ -1660,16 +1722,11 @@ const Parametros = ({ user }) => {
         // Resetear estado del formulario
         setShowContratoForm(false);
         setEditingContrato(null);
-        setFormContrato({
-            n_contrato: '', objeto: '',
-            contratante: '', contratista: '',
-            valor: '', fecha_inicio: '',
-            fecha_fin: '', interventoria: '',
-            avance_financiero: '',
-            avance_fisico: '', estado: '',
-            proyecto: item.id || '',
-            anticipo: false, porcentaje_anticipo: ''
-        });
+        setFormContrato(contratoVacio(item.id));
+        setErroresContrato({});
+        setProcesosContrato(null);
+        cargarTiposContrato();
+        cargarProcesosContrato(item.id);
         setShowContratosModal(true);
     };
 
@@ -1859,6 +1916,29 @@ const Parametros = ({ user }) => {
     const closeEmojiModal = () => setShowEmojiModal(false);
 
     if (!seccion) return <Navigate to="/parametros/proyectos" replace />;
+
+    // Formulario de contrato: proceso elegido, nota R4 y vigentes que difieren de los iniciales.
+    const procesoDelContrato = procesoElegido(procesosContrato, editingContrato?.proceso ?? null, formContrato.proceso_id);
+    const datosProcesoContrato = procesoDelContrato ? datosDelProceso(procesoDelContrato) : null;
+    const notaProcesoContrato = notaProceso(procesosContrato, formContrato.proceso_id);
+    const vigentesContrato = vigentesDistintos(editingContrato);
+
+    // Propiedades comunes de un control del formulario de contrato: valor, cambio y aviso de error.
+    const controlContrato = (campo) => ({
+        id: campo,
+        name: campo,
+        value: formContrato[campo] ?? '',
+        onChange: handleContratoChange,
+        'aria-invalid': Boolean(erroresContrato[campo]),
+        'aria-describedby': erroresContrato[campo] ? `${campo}-error` : undefined,
+    });
+    const campoContrato = (campo, etiqueta, control) => (
+        <div className="form-group">
+            <label htmlFor={campo}>{etiqueta}</label>
+            {control}
+            {erroresContrato[campo] && <small id={`${campo}-error`} className="ct-error-campo" role="alert">{erroresContrato[campo]}</small>}
+        </div>
+    );
 
     return (
         <div className="parametros-container">
@@ -2556,7 +2636,7 @@ const Parametros = ({ user }) => {
                                                                 <td>{contrato.n_contrato}</td>
                                                                 <td>{contrato.objeto}</td>
                                                                 <td>{formatCurrency(Number(contrato.valor))}</td>
-                                                                <td>{estadosContratos.find(e => e.value === contrato.estado)?.label || contrato.estado}</td>
+                                                                <td>{etiquetaEstadoContrato(contrato.estado)}</td>
                                                                 <td>
                                                                     <span className="anexos-count">
                                                                         {contrato.anexos ? contrato.anexos.length : 0} anexos
@@ -2574,7 +2654,7 @@ const Parametros = ({ user }) => {
                                                                         </button>
                                                                         <button
                                                                             type="button"
-                                                                            onClick={() => handleDeleteContrato(contrato.id)}
+                                                                            onClick={() => handleDeleteContrato(contrato)}
                                                                             className="btn-delete-contrato"
                                                                             title="Eliminar contrato"
                                                                         >
@@ -2647,84 +2727,110 @@ const Parametros = ({ user }) => {
                                     {contratoActiveTab === 'informacion' && (
                                         <div className="contratos-modal-section">
                                             <p className="contratos-info">
-                                                Complete los datos del contrato. Los campos marcados con * son obligatorios.
+                                                Completa los datos del contrato. Los campos marcados con * son obligatorios.
                                             </p>
-                                            <div className="contrato-form">
+                                            <div className="contrato-form" ref={formularioContratoRef}>
                                                 <div className="form-row">
-                                                    <div className="form-group">
-                                                        <label htmlFor="n_contrato">N° Contrato *</label>
-                                                        <input type="text" id="n_contrato" name="n_contrato" value={formContrato.n_contrato} onChange={handleContratoChange} />
-                                                    </div>
-                                                    <div className="form-group">
-                                                        <label htmlFor="valor">Valor *</label>
-                                                        <input
-                                                            type="text"
-                                                            id="valor"
-                                                            name="valor"
-                                                            value={formContrato.valor}
-                                                            onChange={handleContratoValorChange}
-                                                            inputMode="decimal"
-                                                            placeholder="$ 0"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="form-group">
-                                                    <label htmlFor="objeto">Objeto *</label>
-                                                    <textarea
-                                                        id="objeto"
-                                                        name="objeto"
-                                                        value={formContrato.objeto}
-                                                        onChange={handleContratoChange}
-                                                        rows="4"
-                                                        placeholder="Ingrese el objeto del contrato"
-                                                    />
-                                                </div>
-                                                <div className="form-row">
-                                                    <div className="form-group">
-                                                        <label htmlFor="contratante">Contratante *</label>
-                                                        <input type="text" id="contratante" name="contratante" value={formContrato.contratante} onChange={handleContratoChange} />
-                                                    </div>
-                                                    <div className="form-group">
-                                                        <label htmlFor="contratista">Contratista *</label>
-                                                        <input type="text" id="contratista" name="contratista" value={formContrato.contratista} onChange={handleContratoChange} />
-                                                    </div>
-                                                </div>
-                                                <div className="form-row">
-                                                    <div className="form-group">
-                                                        <label htmlFor="fecha_inicio">Fecha Inicio *</label>
-                                                        <input type="date" id="fecha_inicio" name="fecha_inicio" value={formContrato.fecha_inicio} onChange={handleContratoChange} />
-                                                    </div>
-                                                    <div className="form-group">
-                                                        <label htmlFor="fecha_fin">Fecha Fin *</label>
-                                                        <input type="date" id="fecha_fin" name="fecha_fin" value={formContrato.fecha_fin} onChange={handleContratoChange} />
-                                                    </div>
-                                                </div>
-                                                <div className="form-row">
-                                                    <div className="form-group">
-                                                        <label htmlFor="interventoria">Interventoría *</label>
-                                                        <input type="text" id="interventoria" name="interventoria" value={formContrato.interventoria} onChange={handleContratoChange} />
-                                                    </div>
-                                                    <div className="form-group">
-                                                        <label htmlFor="estado">Estado *</label>
-                                                        <select id="estado" name="estado" value={formContrato.estado} onChange={handleContratoChange}>
-                                                            <option value="">Seleccione un estado</option>
-                                                            {estadosContratos.map(e => (
-                                                                <option key={e.value} value={e.value}>{e.label}</option>
+                                                    {campoContrato('proceso_id', 'Proceso de contratación', (
+                                                        <select {...controlContrato('proceso_id')}>
+                                                            {opcionesProceso(procesosContrato, editingContrato?.proceso ?? null).map(o => (
+                                                                <option key={o.valor} value={o.valor}>{o.etiqueta}</option>
                                                             ))}
                                                         </select>
-                                                    </div>
-                                                    <div className="form-group">
-                                                        <label htmlFor="avance_financiero">Avance Financiero</label>
-                                                        <input type="text" disabled id="avance_financiero" name="avance_financiero" value={formContrato.avance_financiero} onChange={handleContratoChange} />
-                                                    </div>
-                                                    <div className="form-group">
-                                                        <label htmlFor="avance_fisico">Avance Físico</label>
+                                                    ))}
+                                                    {campoContrato('tipo_contrato_id', 'Tipo de contrato', (
+                                                        <select {...controlContrato('tipo_contrato_id')}>
+                                                            <option value="">Sin tipo</option>
+                                                            {opcionesTipoContrato(tiposContrato, editingContrato).map(o => (
+                                                                <option key={o.valor} value={o.valor}>{o.etiqueta}</option>
+                                                            ))}
+                                                        </select>
+                                                    ))}
+                                                </div>
+                                                {notaProcesoContrato && <p className="contrato-nota">{notaProcesoContrato}</p>}
+                                                {datosProcesoContrato && (
+                                                    <dl className="contrato-proceso-datos" aria-label="Datos del proceso">
+                                                        <div><dt>Número del proceso</dt><dd>{datosProcesoContrato.numero}</dd></div>
+                                                        <div><dt>Modalidad</dt><dd>{datosProcesoContrato.modalidad}</dd></div>
+                                                        <div><dt>Plataforma</dt><dd>{datosProcesoContrato.plataforma}</dd></div>
+                                                        <div>
+                                                            <dt>Enlace</dt>
+                                                            <dd>
+                                                                {datosProcesoContrato.enlace
+                                                                    ? <a className="ct-enlace" href={datosProcesoContrato.enlace} target="_blank" rel="noopener noreferrer">Ver el proceso</a>
+                                                                    : '—'}
+                                                            </dd>
+                                                        </div>
+                                                    </dl>
+                                                )}
+                                                <div className="form-row">
+                                                    {campoContrato('n_contrato', 'N° Contrato *', <input type="text" maxLength={100} {...controlContrato('n_contrato')} />)}
+                                                    {campoContrato('estado', 'Estado *', (
+                                                        <select {...controlContrato('estado')}>
+                                                            <option value="">Elige el estado</option>
+                                                            {ESTADOS_CONTRATO.map(([valor, etiqueta]) => (
+                                                                <option key={valor} value={valor}>{etiqueta}</option>
+                                                            ))}
+                                                        </select>
+                                                    ))}
+                                                </div>
+                                                {campoContrato('objeto', 'Objeto *', (
+                                                    <textarea rows="4" maxLength={5000} placeholder="Escribe el objeto del contrato" {...controlContrato('objeto')} />
+                                                ))}
+                                                <div className="form-row">
+                                                    {campoContrato('contratante', 'Contratante', <input type="text" maxLength={5000} {...controlContrato('contratante')} />)}
+                                                    {campoContrato('contratante_nit', 'NIT de la entidad contratante', <input type="text" maxLength={30} {...controlContrato('contratante_nit')} />)}
+                                                </div>
+                                                <div className="form-row">
+                                                    {campoContrato('contratista', 'Contratista', <input type="text" maxLength={5000} {...controlContrato('contratista')} />)}
+                                                    {campoContrato('contratista_identificacion', 'Identificación del contratista', <input type="text" maxLength={30} {...controlContrato('contratista_identificacion')} />)}
+                                                </div>
+                                                <div className="form-row">
+                                                    {campoContrato('valor_inicial', 'Valor inicial *', (
+                                                        <input type="text" inputMode="decimal" placeholder="0" {...controlContrato('valor_inicial')} onChange={handleContratoValorChange} />
+                                                    ))}
+                                                    {vigentesContrato.valor && (
+                                                        <div className="form-group">
+                                                            <label htmlFor="valor_vigente">Valor vigente</label>
+                                                            <input type="text" id="valor_vigente" disabled value={textoValor(valorVigente(formContrato, editingContrato))} aria-describedby="vigentes-nota" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="form-row">
+                                                    {campoContrato('fecha_suscripcion', 'Fecha de suscripción', <input type="date" {...controlContrato('fecha_suscripcion')} />)}
+                                                    {campoContrato('fecha_acta_inicio', 'Fecha del acta de inicio', <input type="date" {...controlContrato('fecha_acta_inicio')} />)}
+                                                </div>
+                                                <div className="form-row">
+                                                    {campoContrato('fecha_inicio', 'Fecha de inicio', <input type="date" {...controlContrato('fecha_inicio')} />)}
+                                                    {campoContrato('fecha_fin_inicial', 'Fecha fin inicial', <input type="date" {...controlContrato('fecha_fin_inicial')} />)}
+                                                    {vigentesContrato.fechaFin && (
+                                                        <div className="form-group">
+                                                            <label htmlFor="fecha_fin_vigente">Fecha fin vigente</label>
+                                                            <input type="date" id="fecha_fin_vigente" disabled value={String(editingContrato.fecha_fin).slice(0, 10)} aria-describedby="vigentes-nota" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {(vigentesContrato.valor || vigentesContrato.fechaFin) && (
+                                                    <p id="vigentes-nota" className="contrato-nota">
+                                                        Los vigentes suman al valor inicial y a la fecha fin inicial las adiciones y prórrogas de la pestaña Modificaciones; se recalculan al guardar.
+                                                    </p>
+                                                )}
+                                                <div className="form-row">
+                                                    {campoContrato('numero_rp', 'Número del RP', <input type="text" maxLength={40} {...controlContrato('numero_rp')} />)}
+                                                    {campoContrato('fecha_rp', 'Fecha del RP', <input type="date" {...controlContrato('fecha_rp')} />)}
+                                                </div>
+                                                <div className="form-row">
+                                                    {campoContrato('supervisor', 'Supervisor', <input type="text" maxLength={255} {...controlContrato('supervisor')} />)}
+                                                    {campoContrato('interventoria', 'Interventoría', <input type="text" maxLength={5000} {...controlContrato('interventoria')} />)}
+                                                </div>
+                                                <div className="form-row">
+                                                    {campoContrato('avance_financiero', 'Avance Financiero', <input type="text" disabled {...controlContrato('avance_financiero')} />)}
+                                                    {campoContrato('avance_fisico', 'Avance Físico', (
                                                         <div className="avance-fisico-container">
-                                                            <input type="text" id="avance_fisico" disabled name="avance_fisico" value={formContrato.avance_fisico} onChange={handleContratoChange} />
+                                                            <input type="text" disabled {...controlContrato('avance_fisico')} />
                                                             <button type="button" className="btn-calcular-avance" title='Calcular Avance Físico' onClick={handleCalcularAvanceFisico}><FontAwesomeIcon icon={faCalculator} /></button>
                                                         </div>
-                                                    </div>
-
+                                                    ))}
                                                 </div>
                                                 <div className="form-row">
                                                     <div className="form-group anticipo-group">
@@ -2749,9 +2855,12 @@ const Parametros = ({ user }) => {
                                                                 value={formContrato.porcentaje_anticipo}
                                                                 onChange={handleContratoChange}
                                                                 min="0"
-                                                                max="100"
+                                                                max="50"
                                                                 disabled={!formContrato.anticipo}
+                                                                aria-invalid={Boolean(erroresContrato.porcentaje_anticipo)}
+                                                                aria-describedby={erroresContrato.porcentaje_anticipo ? 'porcentaje_anticipo-error' : undefined}
                                                             />
+                                                            {erroresContrato.porcentaje_anticipo && <small id="porcentaje_anticipo-error" className="ct-error-campo" role="alert">{erroresContrato.porcentaje_anticipo}</small>}
                                                         </div>
 
                                                     </div>
@@ -3280,9 +3389,9 @@ const Parametros = ({ user }) => {
                                         type="button"
                                         onClick={handleSaveContrato}
                                         className="btn-save"
-                                        disabled={!formContrato.n_contrato || !formContrato.objeto || parseCurrencyValue(formContrato.valor) <= 0 || !formContrato.estado}
+                                        disabled={guardandoContrato}
                                     >
-                                        <FontAwesomeIcon icon={faSave} /> {editingContrato ? 'Actualizar' : 'Guardar'} Contrato
+                                        <FontAwesomeIcon icon={faSave} /> {guardandoContrato ? 'Guardando…' : `${editingContrato ? 'Actualizar' : 'Guardar'} Contrato`}
                                     </button>
                                 </>
                             )}

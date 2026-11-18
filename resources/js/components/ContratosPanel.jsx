@@ -44,6 +44,7 @@ const ContratosPanel = ({ proyectos, compacto = false }) => {
     const conDatos = contratos.filter((c) => !c.sinDatos);
     const sinDatos = contratos.filter((c) => c.sinDatos);
 
+    // aplanarContratos ya deja fuera los anulados: no cuentan en ningún total.
     const totalValor = contratos.reduce((s, c) => s + c.valorNumerico, 0);
 
     const promedioFisico = conDatos.length

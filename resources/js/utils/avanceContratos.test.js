@@ -241,3 +241,20 @@ describe('construirSerieTemporal', () => {
         expect(construirSerieTemporal({ valor: '1000000000.00', actividades: [], avancesFinancieros: [] })).toEqual([]);
     });
 });
+
+describe('aplanarContratos y los anulados', () => {
+    it('deja fuera los contratos anulados (R16), como la cadena presupuestal', () => {
+        const proyectos = [{
+            id: 1,
+            nombre: 'Acueducto',
+            contratos: [
+                { id: 1, estado: 'en_ejecucion', valor: '100.00', actividades: [], avancesFinancieros: [] },
+                { id: 2, estado: 'anulado', valor: '900.00', actividades: [], avancesFinancieros: [] },
+                { id: 3, valor: '50.00', actividades: [], avancesFinancieros: [] },
+            ],
+        }];
+        const filas = aplanarContratos(proyectos);
+        expect(filas.map((c) => c.id)).toEqual([1, 3]);
+        expect(filas.reduce((s, c) => s + c.valorNumerico, 0)).toBe(150);
+    });
+});

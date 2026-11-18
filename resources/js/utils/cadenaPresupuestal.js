@@ -14,8 +14,8 @@ const porcentaje = (parte, total) => (total > 0 ? Math.round((parte / total) * 1
  * Suma los tres niveles presupuestales de una lista de proyectos.
  *
  * - planeado:   suma de proyectos.presupuesto
- * - contratado: suma de contratos.valor (valor vigente, ya incluye adiciones)
- * - ejecutado:  suma de avancesFinancieros.valor_facturado
+ * - contratado: suma de contratos.valor (valor vigente, ya incluye adiciones), sin los anulados
+ * - ejecutado:  suma de avancesFinancieros.valor_facturado de esos mismos contratos
  *
  * Devuelve además los porcentajes de avance de la cadena y el excedente de
  * contratación sobre lo planeado (0 si no hay excedente).
@@ -31,6 +31,8 @@ export const calcularCadenaPresupuestal = (proyectos) => {
         planeado += numero(proyecto?.presupuesto);
 
         for (const contrato of (proyecto?.contratos || [])) {
+            // R16: un contrato anulado no cuenta, ni su valor ni lo facturado.
+            if (contrato?.estado === 'anulado') continue;
             contratado += numero(contrato?.valor);
 
             for (const acta of (contrato?.avancesFinancieros || [])) {

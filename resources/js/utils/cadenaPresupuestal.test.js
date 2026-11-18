@@ -60,6 +60,19 @@ describe('calcularCadenaPresupuestal', () => {
         expect(r.ejecutado).toBe(0);
     });
 
+    it('un contrato anulado no aporta a contratado ni a ejecutado (R16)', () => {
+        const conAnulado = [{
+            id: 9, presupuesto: '100000000.00',
+            contratos: [
+                { id: 90, estado: 'en_ejecucion', valor: '60000000.00', avancesFinancieros: [{ valor_facturado: '10000000.00' }] },
+                { id: 91, estado: 'anulado', valor: '30000000.00', avancesFinancieros: [{ valor_facturado: '5000000.00' }] },
+            ],
+        }];
+        const r = calcularCadenaPresupuestal(conAnulado);
+        expect(r.contratado).toBe(60000000);
+        expect(r.ejecutado).toBe(10000000);
+    });
+
     it('calcula el porcentaje contratado sobre lo planeado, redondeado', () => {
         // 900M / 1500M = 60%
         expect(calcularCadenaPresupuestal(proyectos).pctContratado).toBe(60);

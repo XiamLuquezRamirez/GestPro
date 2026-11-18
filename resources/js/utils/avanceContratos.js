@@ -85,11 +85,14 @@ export const construirSerieTemporal = (contrato) => {
 // Parámetros, así que pueden estar desactualizadas respecto a las actas y avances
 // ya registrados. Derivar del historial garantiza que el scatter y la gráfica de
 // evolución muestren exactamente los mismos números.
+//
+// R16: los contratos anulados quedan fuera, como en la cadena presupuestal: no cuentan en los
+// totales ni en los avances.
 export const aplanarContratos = (proyectos) => {
     if (!Array.isArray(proyectos)) return [];
 
     return proyectos.flatMap((proyecto) =>
-        (proyecto.contratos || []).map((contrato) => {
+        (proyecto.contratos || []).filter((contrato) => contrato?.estado !== 'anulado').map((contrato) => {
             const serie = construirSerieTemporal(contrato);
             // Sin historial (o sin valor vigente) no hay nada que comparar: el
             // contrato queda fuera del scatter y se lista aparte.

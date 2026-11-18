@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faClipboardCheck, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { COLOR_SEVERIDAD, construirSerieTemporal, severidadDesfase } from '../utils/avanceContratos';
 import { textoAvanceProyecto } from '../utils/expedientesResumen';
+import { etiquetaEstadoContrato } from '../utils/contratos';
 
 const moneda = (valor) => (valor || valor === 0 ? `$ ${Math.round(Number(valor)).toLocaleString('es-CO')}` : '—');
 
@@ -46,7 +47,7 @@ const DetalleContrato = ({ contrato, onCerrar }) => {
     const ultimo = serie[serie.length - 1];
 
     return (
-        <Ventana titulo={`Contrato ${contrato.n_contrato || contrato.numero || contrato.nombre}`} subtitulo={contrato.estado} onCerrar={onCerrar}>
+        <Ventana titulo={`Contrato ${contrato.n_contrato || contrato.numero || contrato.nombre}`} subtitulo={contrato.estado ? etiquetaEstadoContrato(contrato.estado) : null}onCerrar={onCerrar}>
             <div className="tb-modal-cuerpo">
                 <dl className="tb-datos">
                     <div className="tb-dato ancho"><dt className="gp-etiqueta">Objeto</dt><dd>{contrato.objeto || contrato.descripcion || '—'}</dd></div>

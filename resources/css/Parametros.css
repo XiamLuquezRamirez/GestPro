@@ -260,6 +260,14 @@
 
 .contratos-list-header, .contrato-form-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem; padding-bottom: .75rem; margin-bottom: 1rem; border-bottom: 1px solid var(--gp-linea); }
 
+/* Formulario de contrato: errores por campo, notas y datos del proceso de solo lectura */
+.form-group .ct-error-campo { display: block; margin-top: .25rem; }
+.form-group [aria-invalid="true"] { border-color: var(--gp-coral); }
+.contrato-nota { margin: -.4rem 0 1rem; font-size: .82rem; color: var(--gp-texto-3); }
+.contrato-proceso-datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .6rem 1rem; padding: .75rem 1rem; margin: 0 0 1rem; background: var(--gp-superficie-2); border: 1px solid var(--gp-linea); border-radius: var(--gp-radio); }
+.contrato-proceso-datos dt { font-size: .74rem; font-weight: 600; color: var(--gp-texto-3); }
+.contrato-proceso-datos dd { margin: .15rem 0 0; font-size: .88rem; color: var(--gp-texto); overflow-wrap: anywhere; }
+
 .presupuesto-total { margin-top: 1rem; }
 .total-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem 1rem; padding: .9rem 1.1rem; background: var(--gp-azul-suave); border: 1px solid rgba(1, 142, 178, .6); border-radius: var(--gp-radio); }
 .total-label { font-size: .9rem; font-weight: 600; color: var(--gp-texto-2); }
