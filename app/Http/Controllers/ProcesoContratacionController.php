@@ -91,6 +91,12 @@ class ProcesoContratacionController extends Controller
         ]);
     }
 
+    /** La vista detallada del proceso: sus datos, su proyecto y sus contratos (ProcesosContratacion::detalle). */
+    public function detalle(ProcesoLicitacion $proceso): JsonResponse
+    {
+        return response()->json($this->procesos->detalle($proceso));
+    }
+
     /** Lo que precarga el formulario de un contrato nuevo del proceso. */
     public function precargaContrato(ProcesoLicitacion $proceso): JsonResponse
     {

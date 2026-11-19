@@ -15,6 +15,11 @@ use Illuminate\Support\Facades\Route;
 // Lectura: cualquier usuario autenticado.
 Route::get('/proyectos/{proyecto}/procesos', [ProcesoContratacionController::class, 'index'])
     ->name('procesos.index');
+// Vista detallada del proceso (la página /contratacion/:procesoId). Sin GET /procesos/{id}: como
+// con los contratos, se deja libre por si el SPA la usa.
+Route::get('/procesos/{proceso}/detalle', [ProcesoContratacionController::class, 'detalle'])
+    ->whereNumber('proceso')
+    ->name('procesos.detalle');
 Route::get('/procesos/{proceso}/precarga-contrato', [ProcesoContratacionController::class, 'precargaContrato'])
     ->name('procesos.precarga-contrato');
 Route::get('/procesos/{proceso}/plantillas-compatibles', [ProcesoContratacionController::class, 'plantillasCompatibles'])

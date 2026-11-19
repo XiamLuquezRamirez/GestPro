@@ -117,6 +117,46 @@ final class ProcesosContratacion
         return $this->forma($proceso, $this->expedientes->resumenDeProcesos(collect([$proceso]))[$proceso->id]);
     }
 
+    /**
+     * La vista detallada del proceso, tenga o no expediente: su proyecto, el proceso con la forma
+     * de presentar() (la del formulario de editar y cambiar el estado), si admite contratos y sus
+     * contratos en el orden en que se registraron (también los anulados), con el valor inicial y
+     * el vigente (`valor`). Las consultas no crecen con los contratos.
+     *
+     * `proyecto.fuente_ids`: las fuentes del proyecto (ids ascendentes), como `fuente_ids` de GET
+     * /proyectos/{id}, para agrupar "Fuentes del proyecto" en el formulario.
+     *
+     * @return array{proyecto: ?array{id: int, nombre: string, fuente_ids: list<int>}, proceso: array, admite_contratos: bool, contratos: list<array{id: int, n_contrato: ?string, objeto: ?string, contratista: ?string, estado: ?string, valor_inicial: ?string, valor: ?string}>}
+     */
+    public function detalle(ProcesoLicitacion $proceso): array
+    {
+        $proceso->load('proyectoRel:id,nombre');
+        $proyecto = $proceso->proyectoRel;
+
+        return [
+            'proyecto' => $proyecto ? [
+                'id' => $proyecto->id,
+                'nombre' => $proyecto->nombre,
+                'fuente_ids' => DB::table('proyecto_fuentes')->where('proyecto_id', $proyecto->id)
+                    ->orderBy('fuente_id')->pluck('fuente_id')->map(fn ($id) => (int) $id)->values()->all(),
+            ] : null,
+            'proceso' => $this->presentar($proceso),
+            'admite_contratos' => in_array($proceso->estado, ProcesoLicitacion::ADMITEN_CONTRATOS, true),
+            'contratos' => $proceso->contratos()
+                ->orderBy('id')
+                ->get(['id', 'n_contrato', 'objeto', 'contratista', 'estado', 'valor_inicial', 'valor'])
+                ->map(fn (Contrato $c) => [
+                    'id' => $c->id,
+                    'n_contrato' => $c->n_contrato,
+                    'objeto' => $c->objeto,
+                    'contratista' => $c->contratista,
+                    'estado' => $c->estado,
+                    'valor_inicial' => $c->valor_inicial,
+                    'valor' => $c->valor,
+                ])->all(),
+        ];
+    }
+
     /** @param array{objeto: string, modalidad_id: int, plataforma: string, codigo_proceso?: ?string, url_proceso?: ?string, entidad_contratante_id?: ?int, monto?: int|float|string|null, fuente_id?: ?int, responsable_id?: ?int, fecha_apertura?: ?string, fecha_cierre?: ?string, observaciones?: ?string} $datos */
     public function crear(Proyecto $proyecto, array $datos, ?User $usuario): ProcesoLicitacion
     {
