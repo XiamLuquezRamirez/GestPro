@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\ProcesoLicitacion;
 use App\Models\Proyecto;
+use App\Services\Contratacion\ExpedientesContratacion;
 use App\Services\Contratacion\ProcesosContratacion;
+use App\Services\Viabilizacion\ExpedienteService;
+use App\Services\Viabilizacion\PlantillasExpediente;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -41,6 +44,9 @@ class ProcesoContratacionController extends Controller
         'observacion.max' => 'La observación admite hasta 2000 caracteres.',
         'actualizado.present' => 'Falta la versión del proceso que estabas editando. Ciérralo y vuelve a abrirlo.',
         'actualizado.date' => 'La versión del proceso no es válida. Ciérralo y vuelve a abrirlo.',
+        'plantillas.required' => 'Elige al menos una plantilla para el expediente.',
+        'plantillas.array' => 'Elige al menos una plantilla para el expediente.',
+        'plantillas.max' => 'Un expediente admite como máximo :max plantillas.',
     ];
 
     private const ATRIBUTOS = [
@@ -59,6 +65,8 @@ class ProcesoContratacionController extends Controller
         'estado' => 'el estado',
         'observacion' => 'la observación',
         'actualizado' => 'la versión del proceso',
+        'plantillas' => 'las plantillas',
+        'plantillas.*' => 'cada plantilla',
     ];
 
     // La columna es decimal(15, 2): 13 cifras enteras y 2 decimales.
@@ -68,8 +76,11 @@ class ProcesoContratacionController extends Controller
     // proceso sin fechas, anterior a ellas. Con otro valor, el servicio responde 409.
     private const VERSION = ['present', 'nullable', 'bail', 'string', 'date'];
 
-    public function __construct(private readonly ProcesosContratacion $procesos)
-    {
+    public function __construct(
+        private readonly ProcesosContratacion $procesos,
+        private readonly ExpedientesContratacion $expedientes,
+        private readonly ExpedienteService $expediente,
+    ) {
     }
 
     public function index(Proyecto $proyecto): JsonResponse
@@ -84,6 +95,26 @@ class ProcesoContratacionController extends Controller
     public function precargaContrato(ProcesoLicitacion $proceso): JsonResponse
     {
         return response()->json($this->procesos->precargaContrato($proceso));
+    }
+
+    /** Las plantillas de contratación con que se puede crear el expediente del proceso. */
+    public function plantillasCompatibles(ProcesoLicitacion $proceso): JsonResponse
+    {
+        return response()->json($this->expedientes->disponibles($proceso));
+    }
+
+    /** Crea el expediente del proceso con las plantillas elegidas; la primera es la principal. */
+    public function crearExpediente(Request $request, ProcesoLicitacion $proceso): JsonResponse
+    {
+        $entero = fn (string $atributo, mixed $valor, Closure $falla) => is_int($valor)
+            || $falla('Revisa :attribute: debe ser un número entero.');
+        $datos = $request->validate([
+            'plantillas' => ['bail', 'required', 'array', 'max:' . PlantillasExpediente::MAX_PLANTILLAS],
+            'plantillas.*' => ['bail', 'integer', $entero],
+        ], self::MENSAJES, self::ATRIBUTOS);
+        $creado = $this->expedientes->crear($proceso, $datos['plantillas'], $request->user());
+
+        return response()->json($this->expediente->presentar($creado), 201);
     }
 
     public function store(Request $request, Proyecto $proyecto): JsonResponse

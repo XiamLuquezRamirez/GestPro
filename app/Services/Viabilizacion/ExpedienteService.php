@@ -6,6 +6,7 @@ use App\Exceptions\ReglaNegocioException;
 use App\Models\CatalogoVersion;
 use App\Models\Fase;
 use App\Models\PlantillaChecklist;
+use App\Models\ProcesoLicitacion;
 use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
 use App\Models\ProyectoRequisito;
@@ -16,6 +17,7 @@ use App\Models\RequisitoTipo;
 use App\Models\RequisitoTipologia;
 use App\Models\Responsable;
 use App\Models\User;
+use Closure;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -41,7 +43,8 @@ use Illuminate\Validation\ValidationException;
  * - Solo se radica con todos los requisitos que aplican cumplidos.
  * - Radicado, el expediente queda congelado: no se reconfigura ni se marca.
  * - Los expedientes del proyecto son los de viabilización (Proyecto::expedientes()). Uno de
- *   contratación (de un proceso) comparte el checklist, pero no se configura ni se radica.
+ *   contratación (de un proceso) nace con crearDeProceso(), ya configurado: comparte el
+ *   checklist, pero no se configura ni se radica.
  */
 final class ExpedienteService
 {
@@ -124,6 +127,49 @@ final class ExpedienteService
             $this->guardarSeleccion($expediente, $seleccion);
             $this->sincronizar($expediente);
             $this->historial->registrarExpediente($expediente, 'expediente_creado', [], [
+                'plantillas' => $this->plantillasRegistrables($this->plantillas->versionesDe($expediente)),
+            ], $usuario);
+
+            return $expediente;
+        });
+    }
+
+    /**
+     * Expediente de contratación de un proceso, con las plantillas que valida quien lo pide
+     * (ExpedientesContratacion) con el proceso ya bloqueado. Nace configurado: no tiene
+     * configuración SGR que confirmar. La fase SGR conserva el valor por defecto de la columna,
+     * que no se usa. Un proceso tiene como máximo un expediente.
+     *
+     * @param Closure(ProcesoLicitacion): array{versiones: array<int, int>, principal_id: int} $plantillas
+     *        recibe el proceso bloqueado y devuelve plantilla_id => catalogo_version_id, con la
+     *        forma de PlantillasExpediente::validar()
+     */
+    public function crearDeProceso(ProcesoLicitacion $proceso, Closure $plantillas, ?User $usuario): ProyectoExpediente
+    {
+        return DB::transaction(function () use ($proceso, $plantillas, $usuario) {
+            // El bloqueo evita dos expedientes por una doble petición simultánea (el índice
+            // único de proceso_id es la última defensa) y que el proceso cambie o se elimine
+            // mientras nace: eliminado, no se encuentra (404).
+            $proceso = ProcesoLicitacion::query()->whereKey($proceso->id)->lockForUpdate()->firstOrFail();
+            $plantillas = $plantillas($proceso);
+            $existente = ProyectoExpediente::query()->where('proceso_id', $proceso->id)->value('id');
+            if ($existente) {
+                throw new ReglaNegocioException("El proceso ya tiene el expediente #{$existente}.");
+            }
+
+            $expediente = ProyectoExpediente::create([
+                'proyecto_id' => $proceso->proyecto,
+                'tipo' => ProyectoExpediente::TIPO_CONTRATACION,
+                'proceso_id' => $proceso->id,
+                'estado' => ProyectoExpediente::BORRADOR,
+                'fecha_configuracion' => now(),
+                'usuario_creo_id' => $usuario?->id,
+            ])->refresh();
+
+            $this->plantillas->guardar($expediente, $plantillas);
+            $this->sincronizar($expediente);
+            $this->historial->registrarExpediente($expediente, 'expediente_creado', [], [
+                'proceso_id' => $proceso->id,
                 'plantillas' => $this->plantillasRegistrables($this->plantillas->versionesDe($expediente)),
             ], $usuario);
 

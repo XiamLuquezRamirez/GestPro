@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Contrato;
 use App\Models\Proyecto;
 use App\Services\Contratacion\ContratosService;
+use App\Services\Contratacion\ExpedientesContratacion;
 use App\Services\Contratacion\ProcesosContratacion;
 use App\Services\Financiacion\FuentesProyecto;
 use App\Services\Viabilizacion\ExpedienteService;
@@ -343,11 +344,12 @@ class ProyectoController extends Controller
         return response()->json(['success' => 'Fase activada correctamente']);
     }
 
-    public function guardarProyecto(Request $request, ExpedienteService $expedientes, FuentesProyecto $fuentes)
+    public function guardarProyecto(Request $request, ExpedienteService $expedientes, FuentesProyecto $fuentes, ExpedientesContratacion $expedientesContratacion)
     {
         $proyecto = $request->all();
         $proyectoId = $proyecto['id'] ?? null;
         $faseAnterior = null;
+        $cambiaSector = false;
 
         // Antes de la transacción: su catch convertiría una regla incumplida en un 500.
         // Al editar sin enviar fuentes se conservan las que tiene.
@@ -422,6 +424,8 @@ class ProyectoController extends Controller
 
                 // Solo si viene en la petición: quien no lo envía no debe borrarlo.
                 if (array_key_exists('sector', $proyecto)) {
+                    $sectorAnterior = DB::table('proyectos')->where('id', $proyecto['id'])->value('sector');
+                    $cambiaSector = (int) ($sectorAnterior ?? 0) !== (int) ($proyecto['sector'] ?: 0);
                     DB::table('proyectos')->where('id', $proyecto['id'])->update(['sector' => $proyecto['sector'] ?: null]);
                 }
 
@@ -466,6 +470,11 @@ class ProyectoController extends Controller
         )) {
             $expedientes->crearAutomatico($guardado, $request->user());
         }
+        // Con otro sector, un proceso sin expediente puede tener ahora una sola plantilla de
+        // contratación compatible: nace su expediente, sin interrumpir el guardado.
+        if ($guardado && $cambiaSector) {
+            $expedientesContratacion->crearAutomaticosDeProyecto($guardado->id, $request->user());
+        }
         if ($guardado && ! $esNuevo && ($advertencia = $expedientes->advertenciaAlSalirDeFormulacion($guardado, $faseAnterior))) {
             $respuesta['advertencia'] = $advertencia;
         }
@@ -473,10 +482,15 @@ class ProyectoController extends Controller
         return response()->json($respuesta);
     }
 
-    public function eliminarProyecto(Request $request)
+    public function eliminarProyecto(Request $request, ExpedientesContratacion $expedientesContratacion)
     {
         $proyecto = $request->all();
-        DB::table('proyectos')->where('id', $proyecto['id'])->delete();
+        // Primero los expedientes de contratación: sin ellos, la cascada a los procesos no
+        // choca con el restrict de proyectos_expedientes.proceso_id.
+        DB::transaction(function () use ($proyecto, $expedientesContratacion) {
+            $expedientesContratacion->eliminarDeProyecto((int) $proyecto['id']);
+            DB::table('proyectos')->where('id', $proyecto['id'])->delete();
+        });
         return response()->json(['success' => 'Proyecto eliminado correctamente']);
     }
 

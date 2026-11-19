@@ -33,7 +33,11 @@ use Illuminate\Validation\ValidationException;
  * - Un proceso nuevo empieza en preparación. El estado solo cambia con cambiarEstado(): lo
  *   cambia una persona, sin transiciones prohibidas (el checklist solo avisa), pero no al mismo
  *   estado.
- * - No se elimina un proceso con contratos vinculados (contratos.proceso_licitacion).
+ * - No se elimina un proceso con contratos vinculados (contratos.proceso_licitacion) ni con
+ *   expediente de contratación.
+ * - Al registrarlo, o al cambiarle la modalidad o la fuente mientras no tenga expediente, se
+ *   intenta crear su expediente (ExpedientesContratacion::crearAutomatico), ya guardado el
+ *   proceso: nunca interrumpe el guardado.
  * - Todo queda en checklist_historial (entidad_tipo = proceso, sin expediente): al editar, solo
  *   lo que cambió; al eliminar, los datos para saber qué era.
  * - Los cambios sobre un proceso bloquean su fila: dos ediciones no se pisan en el historial.
@@ -75,8 +79,10 @@ final class ProcesosContratacion
 
     private const RELACIONES = ['modalidadRel:id,nombre,clave,activo', 'entidadContratante:id,nombre', 'fuente:id,nombre', 'responsable:id,nombre', 'usuarioCreo:id,name'];
 
-    public function __construct(private readonly HistorialChecklist $historial)
-    {
+    public function __construct(
+        private readonly HistorialChecklist $historial,
+        private readonly ExpedientesContratacion $expedientes,
+    ) {
     }
 
     /** Los procesos del proyecto en el orden en que se crearon, con la forma de presentar(). */
@@ -102,7 +108,7 @@ final class ProcesosContratacion
     {
         $valores = $this->valores([...array_fill_keys(array_keys(self::CAMPOS), null), ...$datos]);
 
-        return DB::transaction(function () use ($proyecto, $valores, $usuario) {
+        $proceso = DB::transaction(function () use ($proyecto, $valores, $usuario) {
             $this->exigirCatalogos($valores, null);
             $this->exigirFechas($valores);
             $proceso = ProcesoLicitacion::create([
@@ -119,6 +125,10 @@ final class ProcesosContratacion
 
             return $proceso;
         });
+        // Después del commit: el proceso queda guardado pase lo que pase con el expediente.
+        $this->expedientes->crearAutomatico($proceso, $usuario);
+
+        return $proceso;
     }
 
     /**
@@ -131,7 +141,7 @@ final class ProcesosContratacion
     {
         $valores = $this->valores($datos);
 
-        return DB::transaction(function () use ($proceso, $valores, $actualizado, $usuario) {
+        [$actual, $cambios] = DB::transaction(function () use ($proceso, $valores, $actualizado, $usuario) {
             // Compara con la fila bloqueada: así también se decide sobre los catálogos y las
             // fechas que el proceso tiene ahora, no los de cuando llegó el pedido.
             $actual = $this->bloquearVigente($proceso, $actualizado);
@@ -145,8 +155,14 @@ final class ProcesosContratacion
                 $this->historial->registrarProceso($actual, 'proceso_editado', array_intersect_key($antes, $cambios), $cambios, $usuario);
             }
 
-            return $actual;
+            return [$actual, $cambios];
         });
+        // Después del commit, como al crearlo. crearAutomatico no toca un expediente que ya existe.
+        if (array_intersect_key($cambios, ['modalidad_id' => true, 'fuente_id' => true]) !== []) {
+            $this->expedientes->crearAutomatico($actual, $usuario);
+        }
+
+        return $actual;
     }
 
     /** `$actualizado` es el `actualizado` del proceso que tenía el formulario. */
@@ -185,6 +201,9 @@ final class ProcesosContratacion
                 throw new ReglaNegocioException($contratos === 1
                     ? 'El proceso tiene 1 contrato vinculado: no se puede eliminar.'
                     : "El proceso tiene {$contratos} contratos vinculados: no se puede eliminar.");
+            }
+            if ($actual->expediente()->exists()) {
+                throw new ReglaNegocioException('El proceso tiene un expediente de contratación: no se puede eliminar.');
             }
 
             // El registro sobrevive al proceso: con el proyecto y los nombres de los catálogos.

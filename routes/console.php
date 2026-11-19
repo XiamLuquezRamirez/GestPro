@@ -2,12 +2,14 @@
 
 use App\Exceptions\ReglaNegocioException;
 use App\Models\Proyecto;
+use App\Services\Contratacion\ExpedientesContratacion;
 use App\Services\Contratacion\PlantillaLicitacionPublica;
 use App\Services\Viabilizacion\ExpedienteService;
 use App\Services\Viabilizacion\PlantillasExpediente;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -29,6 +31,24 @@ Artisan::command('expedientes:crear-faltantes {--simular : Solo lista los proyec
     $creados = $proyectos->filter(fn (Proyecto $p) => $servicio->crearAutomatico($p, null) !== null)->count();
     $this->info("Expedientes creados: {$creados} de {$proyectos->count()}.");
 })->purpose('Crea el expediente, sin configurar, a los proyectos en Formulación con al menos una fuente definida que no tienen');
+
+Artisan::command('expedientes:crear-faltantes-contratacion {--simular : Solo lista los procesos y la plantilla con que nacería su expediente, sin crear nada}', function (ExpedientesContratacion $servicio) {
+    $faltantes = $servicio->faltantes();
+
+    if ($this->option('simular')) {
+        $faltantes->each(function (array $fila) {
+            $proceso = $fila['proceso'];
+            $nombre = $proceso->codigo_proceso ?? Str::limit($proceso->objeto, 60);
+            $this->line("#{$proceso->id} {$nombre} ({$proceso->proyectoRel?->nombre}): plantilla {$fila['plantilla']->nombre}");
+        });
+        $this->info("Se crearían {$faltantes->count()} expedientes.");
+
+        return;
+    }
+
+    $creados = $faltantes->filter(fn (array $fila) => $servicio->crearAutomatico($fila['proceso'], null) !== null)->count();
+    $this->info("Expedientes creados: {$creados} de {$faltantes->count()}.");
+})->purpose('Crea el expediente de contratación a los procesos sin expediente con una sola plantilla compatible publicada');
 
 Artisan::command('plantillas:sembrar-contratacion {--simular : Solo lista los requisitos que crearía, sin escribir nada}', function (PlantillaLicitacionPublica $semilla) {
     if ($existente = $semilla->existente()) {

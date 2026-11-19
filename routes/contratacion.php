@@ -16,6 +16,8 @@ Route::get('/proyectos/{proyecto}/procesos', [ProcesoContratacionController::cla
     ->name('procesos.index');
 Route::get('/procesos/{proceso}/precarga-contrato', [ProcesoContratacionController::class, 'precargaContrato'])
     ->name('procesos.precarga-contrato');
+Route::get('/procesos/{proceso}/plantillas-compatibles', [ProcesoContratacionController::class, 'plantillasCompatibles'])
+    ->name('procesos.plantillas-compatibles');
 
 // Contratos de todos los proyectos (y los que no tienen proyecto). Sin GET /contratos ni
 // GET /contratos/{id}: esas rutas son del SPA y no deben coincidir con la API.
@@ -35,6 +37,8 @@ Route::middleware('can:editar-datos')->group(function () {
         ->name('procesos.estado');
     Route::delete('/procesos/{proceso}', [ProcesoContratacionController::class, 'destroy'])
         ->name('procesos.destroy');
+    Route::post('/procesos/{proceso}/expediente', [ProcesoContratacionController::class, 'crearExpediente'])
+        ->name('procesos.expediente.store');
 });
 
 // SECOP II (datos abiertos): consultar para importar contratos. Administrador o Gestor, con
