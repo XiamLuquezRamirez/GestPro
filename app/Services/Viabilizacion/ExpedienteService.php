@@ -1238,26 +1238,42 @@ final class ExpedienteService
     }
 
     /**
-     * Progreso ponderado de varios expedientes de contratación, con consultas que no crecen con
-     * los expedientes: todas sus filas que cuentan se leen juntas. Espera cargadas sus
-     * `versionesPlantilla`, que deciden el requisito que muestra cada fila.
+     * Progreso ponderado y avance por etapa (con sus fechas y su semáforo, el de
+     * presentarCronograma()) de varios expedientes de contratación, con consultas que no crecen
+     * con los expedientes: todas sus filas que aplican, con su etapa, y sus cronogramas se leen
+     * juntos. Espera cargadas sus `versionesPlantilla`, que deciden el requisito que muestra
+     * cada fila. No cambia nada.
      *
      * @param Collection<int, ProyectoExpediente> $expedientes
-     * @return array<int, array{total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}> expediente_id => progreso
+     * @return array<int, array{progreso: array{total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}, avance_por_etapa: list<array>}> expediente_id => avance
      */
-    public function progresoPonderadoDe(Collection $expedientes): array
+    public function avanceDeVarios(Collection $expedientes): array
     {
-        $filas = $expedientes->isEmpty() ? collect() : ProyectoRequisito::query()
-            ->cuenta()
-            ->whereIn('expediente_id', $expedientes->pluck('id'))
-            ->with(['requisito', 'origenes.version:id,plantilla_id'])
+        if ($expedientes->isEmpty()) {
+            return [];
+        }
+        $ids = $expedientes->pluck('id');
+        $filas = ProyectoRequisito::query()
+            ->where('aplica', true)
+            ->whereIn('expediente_id', $ids)
+            ->with(['requisito', 'origenes.version:id,plantilla_id', ...self::RELACIONES_ETAPA])
             ->get()
             ->groupBy('expediente_id');
+        $cronogramas = ExpedienteEtapa::query()->whereIn('expediente_id', $ids)->get()->groupBy('expediente_id');
 
-        return $expedientes->mapWithKeys(fn (ProyectoExpediente $e) => [$e->id => $this->progresoPonderado(
-            $filas->get($e->id, collect()),
-            $this->posiciones($this->plantillas->ordenar($e->versionesPlantilla))
-        )])->all();
+        return $expedientes->mapWithKeys(function (ProyectoExpediente $e) use ($filas, $cronogramas) {
+            $deEste = $filas->get($e->id, collect());
+            $posiciones = $this->posiciones($this->plantillas->ordenar($e->versionesPlantilla));
+
+            return [$e->id => [
+                'progreso' => $this->progresoPonderado($deEste, $posiciones),
+                'avance_por_etapa' => $this->presentarCronograma(
+                    $this->avancePorEtapa($deEste, $posiciones),
+                    $cronogramas->get($e->id, collect())->keyBy('etapa_id'),
+                    $e->esBorrador()
+                ),
+            ]];
+        })->all();
     }
 
     /**

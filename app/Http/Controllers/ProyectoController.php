@@ -123,8 +123,9 @@ class ProyectoController extends Controller
         return response()->json([
             'proyecto' => $fila,
             'expediente' => $expedientes->resumenPorProyecto($modelo->id)[0] ?? null,
-            'procesos' => $procesos->deProyecto($modelo),
-            'contratos' => $contratos->buscar(['proyecto' => (string) $modelo->id]),
+            // Los avisos de los procesos se calculan una vez: los contratos reusan los de la lista.
+            'procesos' => $procesos->deProyecto($modelo, $resumenes),
+            'contratos' => $contratos->buscar(['proyecto' => (string) $modelo->id], $resumenes),
         ]);
     }
 
@@ -1125,7 +1126,8 @@ class ProyectoController extends Controller
     {
         $proyecto = $request->all();
         $contratos = DB::table('contratos')->where('proyecto', $proyecto['proyecto'])->get();
-        app(ContratosService::class)->agregarProcesos($contratos);
+        // Con lo que avisa el proceso de cada contrato, como en el detalle.
+        app(ContratosService::class)->agregarProcesos($contratos, true);
         app(ContratosService::class)->agregarDetalle($contratos);
 
         return response()->json($contratos);

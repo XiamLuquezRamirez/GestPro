@@ -88,7 +88,7 @@ class ContratosBusquedaApiTest extends TestCase
         $fila = $filas[0];
         $this->assertSame(
             ['id', 'n_contrato', 'objeto', 'contratista', 'contratante', 'estado', 'valor', 'valor_inicial', 'fecha_inicio', 'fecha_fin',
-                'avance_fisico', 'avance_financiero', 'tipo_contrato', 'proyecto', 'proceso', 'secop_id_contrato', 'updated_at'],
+                'avance_fisico', 'avance_financiero', 'tipo_contrato', 'proyecto', 'proceso', 'aviso_proceso', 'secop_id_contrato', 'updated_at'],
             array_keys($fila),
         );
         $this->assertSame($c->id, $fila['id']);

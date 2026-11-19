@@ -48,6 +48,9 @@ use Illuminate\Validation\ValidationException;
  *   anula. Al eliminar se borran sus anexos, las filas y los archivos.
  * - Todo queda en checklist_historial (entidad_tipo = contrato, sin expediente): al editar, solo
  *   lo que cambió; al eliminar, los datos para saber qué era.
+ * - La búsqueda, el detalle y el listado por proyecto traen `aviso_proceso`: lo que avisa el
+ *   proceso del contrato (etapas vencidas, cierre vencido o sin actualización), o null si no
+ *   tiene proceso o este no avisa nada (ExpedientesContratacion::resumenDeProcesos).
  */
 final class ContratosService
 {
@@ -112,8 +115,10 @@ final class ContratosService
 
     private const CARPETA_ANEXOS = 'anexos_contratos';
 
-    public function __construct(private readonly HistorialChecklist $historial)
-    {
+    public function __construct(
+        private readonly HistorialChecklist $historial,
+        private readonly ExpedientesContratacion $expedientes,
+    ) {
     }
 
     /**
@@ -341,11 +346,14 @@ final class ContratosService
 
     /**
      * Completa las filas de contratos de los listados (consultas con DB::table) con `proceso_id`
-     * y `proceso` resumido, o null, en una sola consulta de procesos.
+     * y `proceso` resumido, o null, en una sola consulta de procesos. Con `$conAviso`, también con
+     * `aviso_proceso` (avisoProceso()), con consultas que no crecen con los procesos.
      *
      * @param iterable<object> $filas
+     * @param array<int, array{avisos: array}> $resumenes los de ExpedientesContratacion::resumenDeProcesos()
+     *        que quien llama ya tiene (proceso_id => resumen): solo se calculan los que faltan
      */
-    public function agregarProcesos(iterable $filas): void
+    public function agregarProcesos(iterable $filas, bool $conAviso = false, array $resumenes = []): void
     {
         $filas = Collection::make($filas);
         $procesos = ProcesoLicitacion::query()
@@ -353,12 +361,41 @@ final class ContratosService
             ->with('modalidadRel:id,nombre')
             ->get()
             ->keyBy('id');
+        if ($conAviso) {
+            $faltan = $procesos->reject(fn (ProcesoLicitacion $p) => isset($resumenes[$p->id]))->values();
+            $resumenes += $faltan->isEmpty() ? [] : $this->expedientes->resumenDeProcesos($faltan);
+        }
 
         foreach ($filas as $fila) {
             $proceso = $fila->proceso_licitacion !== null ? $procesos->get($fila->proceso_licitacion) : null;
             $fila->proceso_id = $this->entero($fila->proceso_licitacion);
             $fila->proceso = $proceso ? $this->resumenProceso($proceso) : null;
+            if ($conAviso) {
+                $fila->aviso_proceso = $proceso ? $this->avisoProceso($proceso->id, $resumenes[$proceso->id]['avisos']) : null;
+            }
         }
+    }
+
+    /**
+     * Lo que avisa el proceso de un contrato en el módulo Contratos: null si no tiene etapas
+     * vencidas, ni el cierre vencido, ni está sin actualización.
+     *
+     * @param array $avisos los de AvisosContratacion::resumen()
+     * @return ?array{proceso_id: int, etapas_vencidas: int, cierre_vencido: bool, sin_actualizacion: bool, dias_sin_actualizacion: ?int}
+     */
+    private function avisoProceso(int $procesoId, array $avisos): ?array
+    {
+        if ($avisos['etapas_vencidas'] === 0 && ! $avisos['cierre_vencido'] && ! $avisos['sin_actualizacion']) {
+            return null;
+        }
+
+        return [
+            'proceso_id' => $procesoId,
+            'etapas_vencidas' => $avisos['etapas_vencidas'],
+            'cierre_vencido' => $avisos['cierre_vencido'],
+            'sin_actualizacion' => $avisos['sin_actualizacion'],
+            'dias_sin_actualizacion' => $avisos['dias_sin_actualizacion'],
+        ];
     }
 
     /**
@@ -409,9 +446,10 @@ final class ContratosService
      * `proyecto` (id o 'sin') y `proceso` (id).
      *
      * @param array{q?: ?string, estado?: ?string, proyecto?: int|string|null, proceso?: int|string|null} $filtros
+     * @param array<int, array{avisos: array}> $resumenes los resúmenes de procesos que quien llama ya tiene (agregarProcesos())
      * @return list<array<string, mixed>>
      */
-    public function buscar(array $filtros): array
+    public function buscar(array $filtros, array $resumenes = []): array
     {
         $consulta = DB::table('contratos')
             ->leftJoin('proyectos', 'proyectos.id', '=', 'contratos.proyecto')
@@ -449,7 +487,7 @@ final class ContratosService
         }
 
         $filas = $consulta->get();
-        $this->agregarProcesos($filas);
+        $this->agregarProcesos($filas, true, $resumenes);
 
         return $filas->map(fn ($f) => [
             'id' => (int) $f->id,
@@ -467,14 +505,15 @@ final class ContratosService
             'tipo_contrato' => $f->tipo_contrato_id !== null ? ['id' => (int) $f->tipo_contrato_id, 'nombre' => $f->tipo_nombre] : null,
             'proyecto' => $f->proyecto_id !== null ? ['id' => (int) $f->proyecto_id, 'nombre' => $f->proyecto_nombre] : null,
             'proceso' => $f->proceso,
+            'aviso_proceso' => $f->aviso_proceso,
             'secop_id_contrato' => $f->secop_id_contrato,
             'updated_at' => $f->updated_at,
         ])->all();
     }
 
     /**
-     * El contrato con la misma forma que un elemento de GET /listarContratos, más `proyecto_nombre`,
-     * o null si no existe.
+     * El contrato con la misma forma que un elemento de GET /listarContratos (con `aviso_proceso`),
+     * más `proyecto_nombre`, o null si no existe.
      */
     public function detalle(int $id): ?object
     {
@@ -487,7 +526,7 @@ final class ContratosService
             return null;
         }
         $filas = [$fila];
-        $this->agregarProcesos($filas);
+        $this->agregarProcesos($filas, true);
         $this->agregarDetalle($filas);
 
         return $fila;

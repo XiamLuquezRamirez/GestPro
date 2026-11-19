@@ -27,12 +27,15 @@ use Illuminate\Support\Collection;
  *   proyecto al que le cambia el sector. Nunca interrumpe a quien guarda el proceso o el proyecto.
  * - Cambiar la modalidad o la fuente de un proceso con expediente no lo toca: el proceso avisa
  *   cuando ninguna de sus plantillas le sirve ya, y por qué (resumenDeProcesos).
+ * - resumenDeProcesos también da los avisos de cada proceso (AvisosContratacion): etapas
+ *   vencidas y próximas, cierre, días sin actualización e hitos.
  */
 final class ExpedientesContratacion
 {
     public function __construct(
         private readonly ExpedienteService $expedientes,
         private readonly PlantillasContratacion $plantillas,
+        private readonly AvisosContratacion $avisos,
     ) {
     }
 
@@ -198,13 +201,15 @@ final class ExpedientesContratacion
     }
 
     /**
-     * El expediente de cada proceso, resumido para la API del proceso: su estado, su avance
-     * ponderado (ExpedienteService::progresoPonderadoDe) y el aviso si ninguna de sus plantillas
-     * le sirve ya (no corresponde a la modalidad, la fuente o el sector, está inactiva o no tiene
-     * versión publicada). Las consultas no crecen con los procesos.
+     * Lo que la API del proceso muestra de su expediente y sus avisos. `expediente` es el
+     * expediente resumido: su estado, su avance ponderado (ExpedienteService::avanceDeVarios) y
+     * el aviso si ninguna de sus plantillas le sirve ya (no corresponde a la modalidad, la fuente
+     * o el sector, está inactiva o no tiene versión publicada); null sin expediente. `avisos` es
+     * el resumen de AvisosContratacion, también para un proceso sin expediente (solo con el
+     * cierre y la actualización). Las consultas no crecen con los procesos.
      *
      * @param Collection<int, ProcesoLicitacion> $procesos
-     * @return array<int, ?array{id: int, estado: string, progreso: array{total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}, aviso_plantilla: ?string}> proceso_id => resumen; null sin expediente
+     * @return array<int, array{expediente: ?array{id: int, estado: string, progreso: array{total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}, aviso_plantilla: ?string}, avisos: array}> proceso_id => resumen
      */
     public function resumenDeProcesos(Collection $procesos): array
     {
@@ -214,27 +219,37 @@ final class ExpedientesContratacion
             ->with('versionesPlantilla')
             ->get()
             ->keyBy('proceso_id');
-        $progresos = $this->expedientes->progresoPonderadoDe($expedientes->values());
+        $avances = $this->expedientes->avanceDeVarios($expedientes->values());
+        $eventos = $this->avisos->ultimosEventos($expedientes->pluck('id'));
         $estados = $this->plantillas->estadoPorProceso(
             $procesos->filter(fn (ProcesoLicitacion $p) => $expedientes->has($p->id))->values(),
             $expedientes->flatMap(fn (ProyectoExpediente $e) => $e->versionesPlantilla->pluck('plantilla_id'))
                 ->map(fn ($id) => (int) $id)->unique()->values()->all()
         );
 
-        return $procesos->mapWithKeys(function (ProcesoLicitacion $proceso) use ($expedientes, $estados, $progresos) {
+        return $procesos->mapWithKeys(function (ProcesoLicitacion $proceso) use ($expedientes, $estados, $avances, $eventos) {
             $expediente = $expedientes->get($proceso->id);
+            $avisos = $this->avisos->resumen(
+                $proceso,
+                $expediente,
+                $expediente ? $avances[$expediente->id]['avance_por_etapa'] : [],
+                $expediente ? ($eventos[$expediente->id] ?? null) : null
+            );
             if (! $expediente) {
-                return [$proceso->id => null];
+                return [$proceso->id => ['expediente' => null, 'avisos' => $avisos]];
             }
             $razones = $expediente->versionesPlantilla
                 ->map(fn ($v) => PlantillasContratacion::razon($estados[$proceso->id][(int) $v->plantilla_id]))
                 ->all();
 
             return [$proceso->id => [
-                'id' => $expediente->id,
-                'estado' => $expediente->estado,
-                'progreso' => $progresos[$expediente->id],
-                'aviso_plantilla' => $this->avisoPlantilla($razones),
+                'expediente' => [
+                    'id' => $expediente->id,
+                    'estado' => $expediente->estado,
+                    'progreso' => $avances[$expediente->id]['progreso'],
+                    'aviso_plantilla' => $this->avisoPlantilla($razones),
+                ],
+                'avisos' => $avisos,
             ]];
         })->all();
     }
