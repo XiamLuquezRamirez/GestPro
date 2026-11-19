@@ -409,6 +409,15 @@ describe('acciones sobre un requisito', () => {
 });
 
 describe('describirEvento', () => {
+    it('la revisión por etapa: aprobar, aprobar de nuevo y devolver', () => {
+        const despues = { etapa: '1. Planeación' };
+        expect(describirEvento({ evento: 'etapa_aprobada', antes: {}, despues })).toBe('Aprobó la etapa 1. Planeación');
+        expect(describirEvento({ evento: 'etapa_aprobada', antes: {}, despues: { ...despues, reaprobacion: true } })).toBe('Aprobó de nuevo la etapa 1. Planeación');
+        expect(describirEvento({ evento: 'etapa_aprobada', antes: {}, despues: { ...despues, pendientes_al_aprobar: 2 } })).toBe('Aprobó la etapa 1. Planeación con 2 requisitos pendientes');
+        expect(describirEvento({ evento: 'etapa_aprobada', antes: {}, despues: { ...despues, reaprobacion: true, pendientes_al_aprobar: 1 } })).toBe('Aprobó de nuevo la etapa 1. Planeación con 1 requisito pendiente');
+        expect(describirEvento({ evento: 'etapa_devuelta', antes: {}, despues: { ...despues, observacion: 'Falta el CDP.' } })).toBe('Devolvió la etapa 1. Planeación: Falta el CDP.');
+    });
+
     it('explica cada cambio con sus datos', () => {
         expect(describirEvento({ evento: 'cumplido_marcado' })).toBe('Marcó como cumplido');
         expect(describirEvento({ evento: 'soporte_reemplazado', antes: { soporte_nombre: 'v1.pdf' }, despues: { soporte_nombre: 'v2.pdf' } }))

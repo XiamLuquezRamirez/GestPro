@@ -66,3 +66,37 @@
     font-size: .88rem;
 }
 .exc-avisos ul { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0; padding: 0; list-style: none; }
+
+/* Revisión por etapa (fase 5): estado, quién y cuándo, observación y botones bajo cada etapa. */
+.exc-revision {
+    display: grid;
+    gap: .3rem;
+    padding-top: .5rem;
+    border-top: 1px dashed var(--exv-linea-suave);
+}
+.exc-revision-linea { display: flex; flex-wrap: wrap; gap: .3rem .5rem; align-items: center; }
+.exc-revision-detalle, .exc-revision-nota { font-size: .78rem; color: var(--exv-tinta-suave); }
+.exc-revision-nota { font-style: italic; }
+.exc-revision-observacion {
+    margin: 0;
+    padding: .35rem .55rem;
+    font-size: .85rem;
+    color: var(--exv-tinta);
+    background: var(--gp-superficie-3);
+    border-radius: var(--exv-radio);
+    overflow-wrap: anywhere;
+    white-space: pre-line;
+}
+.exc-revision-rotulo { font-weight: 600; }
+.exc-revision-acciones { display: flex; flex-wrap: wrap; gap: .4rem; }
+.exc-revision-acciones .exv-btn { font-size: .82rem; }
+
+/* En la sección de una etapa del checklist: su etapa anterior aún no está aprobada. */
+.exc-aviso-anterior {
+    margin: 0 0 .6rem;
+    padding: .35rem .6rem;
+    font-size: .85rem;
+    color: var(--gp-ambar);
+    background: var(--gp-ambar-suave);
+    border-radius: var(--exv-radio);
+}

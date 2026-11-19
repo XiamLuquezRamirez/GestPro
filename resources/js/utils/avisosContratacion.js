@@ -1,4 +1,4 @@
-// Avisos de contratación (fase 4B): el semáforo de cada etapa del expediente, la franja de avisos
+// Avisos de contratación (fases 4B y 5): el semáforo y el estado de revisión de cada etapa del expediente, la franja de avisos
 // de la página del expediente, los chips de cada proceso (diálogo de procesos y ficha del
 // proyecto) y el aviso del proceso en el módulo Contratos. Todo sale de lo que calcula el backend
 // (`alerta`, `avisos`, `aviso_proceso`): aquí no se mira la fecha de hoy. Funciones puras,
@@ -12,10 +12,24 @@ const ALERTAS = {
     al_dia: { texto: 'Al día', tono: 'azul' },
     completa: { texto: 'Completa', tono: 'verde' },
     sin_completar: { texto: 'Sin completar', tono: 'neutro' },
+    aprobada: { texto: 'Aprobada', tono: 'verde' },
 };
 
 /** La etiqueta del semáforo de una etapa (`alerta` de la API); sin fecha, ninguna. */
 export const etiquetaAlerta = (alerta) => (ALERTAS[alerta] ? { ...ALERTAS[alerta] } : null);
+
+// El estado visible de la revisión de una etapa (`revision.estado`, fase 5).
+const REVISIONES = {
+    pendiente: { texto: 'Pendiente', tono: 'neutro' },
+    lista: { texto: 'Lista para revisar', tono: 'azul' },
+    aprobada: { texto: 'Aprobada', tono: 'verde' },
+    aprobada_con_cambios: { texto: 'Aprobada con cambios', tono: 'ambar' },
+    devuelta: { texto: 'Devuelta', tono: 'coral' },
+    sin_requisitos: { texto: 'Sin requisitos', tono: 'neutro' },
+};
+
+/** La etiqueta del estado de revisión de una etapa; null si no se conoce. */
+export const etiquetaRevision = (estado) => (REVISIONES[estado] ? { ...REVISIONES[estado] } : null);
 
 const numero = (valor) => Number(valor) || 0;
 const dias = (n) => (n === 1 ? '1 día' : `${n} días`);
@@ -32,8 +46,8 @@ export const textoCierre = (avisos) => {
 export const textoSinActualizacion = (n) => (n === null || n === undefined ? 'Sin actualización' : `Sin actualización hace ${dias(n)}`);
 
 /**
- * Los chips de un proceso desde su `avisos`: vencidas, próximas, cierre, sin actualización e
- * hitos (si hay etapas que contar), cada uno con su tono de `ct-estado-*` y un título que explica
+ * Los chips de un proceso desde su `avisos`: vencidas, próximas, devueltas, por revisar, cierre,
+ * sin actualización e hitos (etapas aprobadas, si hay etapas que contar), cada uno con su tono de `ct-estado-*` y un título que explica
  * la cifra. Lista vacía si no hay nada que mostrar.
  */
 export const chipsAvisosProceso = (avisos) => {
@@ -55,6 +69,24 @@ export const chipsAvisosProceso = (avisos) => {
             texto: proximas === 1 ? '1 próxima' : `${proximas} próximas`,
             tono: 'ambar',
             titulo: proximas === 1 ? '1 etapa del expediente próxima a vencer' : `${proximas} etapas del expediente próximas a vencer`,
+        });
+    }
+    const devueltas = numero(avisos.etapas_devueltas);
+    if (devueltas > 0) {
+        chips.push({
+            clave: 'devueltas',
+            texto: devueltas === 1 ? '1 devuelta' : `${devueltas} devueltas`,
+            tono: 'coral',
+            titulo: devueltas === 1 ? '1 etapa del expediente devuelta en la revisión' : `${devueltas} etapas del expediente devueltas en la revisión`,
+        });
+    }
+    const porRevisar = numero(avisos.etapas_por_revisar);
+    if (porRevisar > 0) {
+        chips.push({
+            clave: 'por-revisar',
+            texto: `${porRevisar} por revisar`,
+            tono: 'azul',
+            titulo: porRevisar === 1 ? '1 etapa del expediente lista para revisar' : `${porRevisar} etapas del expediente listas para revisar`,
         });
     }
     const cierre = textoCierre(avisos);
@@ -81,7 +113,7 @@ export const chipsAvisosProceso = (avisos) => {
             clave: 'hitos',
             texto: `Hitos ${completadas}/${total}`,
             tono: completadas >= total ? 'verde' : 'neutro',
-            titulo: `${completadas} de ${total} etapas del expediente completas`,
+            titulo: `${completadas} de ${total} etapas del expediente aprobadas`,
         });
     }
     return chips;
@@ -104,6 +136,18 @@ export const franjaAvisosExpediente = (avisos) => {
             clave: 'proximas',
             texto: proximas === 1 ? '1 etapa próxima a vencer' : `${proximas} etapas próximas a vencer`,
             tono: 'ambar',
+        });
+    }
+    const devueltas = numero(avisos.etapas_devueltas);
+    if (devueltas > 0) {
+        franja.push({ clave: 'devueltas', texto: devueltas === 1 ? '1 etapa devuelta' : `${devueltas} etapas devueltas`, tono: 'coral' });
+    }
+    const porRevisar = numero(avisos.etapas_por_revisar);
+    if (porRevisar > 0) {
+        franja.push({
+            clave: 'por-revisar',
+            texto: porRevisar === 1 ? '1 etapa lista para revisar' : `${porRevisar} etapas listas para revisar`,
+            tono: 'azul',
         });
     }
     if (avisos.cierre_vencido) {

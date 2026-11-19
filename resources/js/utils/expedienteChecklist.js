@@ -113,6 +113,8 @@ const EVENTOS = {
     expediente_radicado: 'Radicó el expediente',
     expediente_cerrado: 'Cerró el expediente',
     version_aplicada: 'Aplicó una versión nueva de una plantilla',
+    etapa_aprobada: 'Aprobó la etapa',
+    etapa_devuelta: 'Devolvió la etapa',
 };
 
 const CAMPOS_PROPIO = { titulo: 'título', descripcion: 'descripción', categoria: 'categoría', caracter: 'carácter' };
@@ -186,6 +188,13 @@ export const describirEvento = (entrada) => {
             const cambios = cambiosConfiguracion(a, d);
             return cambios.length ? `${base}: ${enumerar(cambios)}` : base;
         }
+        case 'etapa_aprobada': {
+            const n = Number(d.pendientes_al_aprobar) || 0;
+            const accion = d.reaprobacion === true || a.estado_revision === 'aprobada' ? 'Aprobó de nuevo la etapa' : base;
+            return `${accion}${d.etapa ? ` ${d.etapa}` : ''}${n > 0 ? ` con ${n} ${n === 1 ? 'requisito pendiente' : 'requisitos pendientes'}` : ''}`;
+        }
+        case 'etapa_devuelta':
+            return `${base}${d.etapa ? ` ${d.etapa}` : ''}${d.observacion ? `: ${d.observacion}` : ''}`;
         case 'version_aplicada':
             if (!d.plantilla || !d.version) return base;
             return `Aplicó la versión ${d.version} de ${d.plantilla}${a.version ? ` (antes ${a.version})` : ''}`;

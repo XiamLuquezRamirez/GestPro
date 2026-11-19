@@ -3,7 +3,7 @@
 // pendientes al cerrar y la elección de plantillas para crearlo. La agrupación de viabilización
 // (agruparChecklist) no cambia. Funciones puras, probadas en expedienteContratacion.test.js.
 
-import { etiquetaAlerta } from './avisosContratacion';
+import { etiquetaAlerta, etiquetaRevision } from './avisosContratacion';
 import { esIdContrato } from './contratosModulo';
 import { opcionesEtapa } from './contratacion';
 import { datosPropio, formularioPropio } from './expedienteChecklist';
@@ -65,21 +65,75 @@ export const avanceEtapas = (avance) => (avance ?? []).map((a) => ({
     porcentaje: a.porcentaje,
 }));
 
+// ---------- Revisión por etapa (fase 5) ----------
+
+const APROBADAS = ['aprobada', 'aprobada_con_cambios'];
+
+/** Si la etapa está aprobada (con o sin cambios después). */
+const estaAprobada = (avance) => APROBADAS.includes(avance?.revision?.estado);
+
+const momento = (iso) => {
+    const ms = iso ? Date.parse(iso) : NaN;
+    return Number.isNaN(ms) ? null : ms;
+};
+
+// Si la etapa que llega trae una revisión más vieja que la de pantalla (o ninguna): la petición
+// salió antes de aprobarla o devolverla.
+const revisionAtrasada = (previa, nueva) => {
+    const antes = momento(previa?.revision?.fecha);
+    if (antes === null) return false;
+    const ahora = momento(nueva?.revision?.fecha);
+    return ahora === null || ahora < antes;
+};
+
+/** Si la respuesta de una acción del checklist salió antes de una aprobación o devolución ya pintada. */
+export const hayRevisionAtrasada = (actual, entrante) => {
+    const previas = new Map((actual ?? []).filter((a) => a.etapa).map((a) => [a.etapa.id, a]));
+    return (entrante ?? []).some((n) => n.etapa && revisionAtrasada(previas.get(n.etapa.id), n));
+};
+
+/**
+ * `aviso_etapa_anterior` con la regla de la API: alguna etapa anterior (en el orden en que llegan,
+ * el del catálogo) con requisitos que cuentan no está aprobada, y esta tiene algo cumplido. Hace
+ * falta al aprobar o devolver una etapa: la respuesta trae solo esa, y el aviso de las siguientes
+ * cambia. Solo toca las etapas que ya traen la clave.
+ */
+export const recalcularAvisoAnterior = (avance) => {
+    let anteriorSinAprobar = false;
+    return (avance ?? []).map((a) => {
+        if (!a.etapa || !('aviso_etapa_anterior' in a)) return a;
+        const aviso = anteriorSinAprobar && Number(a.cumplidos) > 0;
+        if (Number(a.total) > 0 && !estaAprobada(a)) anteriorSinAprobar = true;
+        return a.aviso_etapa_anterior === aviso ? a : { ...a, aviso_etapa_anterior: aviso };
+    });
+};
+
+/** Los ids de las etapas cuya etapa anterior aún no está aprobada (para su sección del checklist). */
+export const etapasConAvisoAnterior = (avance) => new Set(
+    (avance ?? []).filter((a) => a.etapa && a.aviso_etapa_anterior).map((a) => a.etapa.id)
+);
+
 /**
  * El avance por etapa que llega de una acción del checklist, sin reponer fechas viejas: esa
  * petición pudo salir antes de que se guardara una fecha. En las etapas `protegidas` (ids cuya
  * fecha se guardó en esta pantalla) se conservan las fechas y el semáforo actuales; solo si la
  * etapa se completó o dejó de estarlo se toma la fecha real que llega (la sugerida o su borrado).
  * El avance (conteos y porcentajes) siempre es el que llega.
+ *
+ * Lo mismo con la revisión: si la petición salió antes de aprobar o devolver una etapa (su
+ * revisión es más vieja que la de pantalla), se conservan la revisión, el semáforo y la fecha real
+ * de esa etapa (la aprobación pudo poner la fecha real) y se recalcula el aviso de la etapa
+ * anterior. Con la misma revisión o una más nueva vale la que llega: puede traer "aprobada con
+ * cambios" o la devuelta que se volvió a trabajar.
  */
 export const fusionarAvance = (actual, entrante, protegidas) => {
     if (!entrante) return actual;
-    if (!protegidas || protegidas.size === 0) return entrante;
+    const conProtegidas = Boolean(protegidas && protegidas.size > 0);
+    const atrasada = hayRevisionAtrasada(actual, entrante);
+    if (!conProtegidas && !atrasada) return entrante;
     const previas = new Map((actual ?? []).filter((a) => a.etapa).map((a) => [a.etapa.id, a]));
-    return entrante.map((nueva) => {
-        const id = nueva.etapa?.id;
-        const previa = previas.get(id);
-        if (!id || !protegidas.has(id) || !previa) return nueva;
+    const protegerFechas = (nueva, previa) => {
+        if (!conProtegidas || !protegidas.has(nueva.etapa.id)) return nueva;
         if (Boolean(previa.completa) !== Boolean(nueva.completa)) return { ...nueva, fecha_programada: previa.fecha_programada };
         return {
             ...nueva,
@@ -88,15 +142,33 @@ export const fusionarAvance = (actual, entrante, protegidas) => {
             fecha_real_sugerida: previa.fecha_real_sugerida,
             alerta: previa.alerta,
         };
+    };
+    const fusionado = entrante.map((nueva) => {
+        const previa = nueva.etapa ? previas.get(nueva.etapa.id) : null;
+        if (!previa) return nueva;
+        const conFechas = protegerFechas(nueva, previa);
+        if (!revisionAtrasada(previa, nueva)) return conFechas;
+        return {
+            ...conFechas,
+            revision: previa.revision,
+            alerta: previa.alerta,
+            fecha_real: previa.fecha_real,
+            fecha_real_sugerida: previa.fecha_real_sugerida,
+        };
     });
+    return atrasada ? recalcularAvisoAnterior(fusionado) : fusionado;
 };
 
-/** El expediente con el progreso y el avance por etapa que trae una respuesta parcial, si los trae. */
+/**
+ * El expediente con el progreso y el avance por etapa que trae una respuesta parcial, si los trae.
+ * Si la respuesta salió antes de una aprobación o devolución ya pintada, sus avisos (por revisar,
+ * devueltas, hitos) son viejos: quedan los de pantalla.
+ */
 export const conAvance = (expediente, datos, protegidas) => ({
     ...expediente,
     progreso: datos?.progreso ?? expediente.progreso,
     avance_por_etapa: fusionarAvance(expediente.avance_por_etapa, datos?.avance_por_etapa, protegidas),
-    avisos: datos?.avisos ?? expediente.avisos,
+    avisos: (hayRevisionAtrasada(expediente.avance_por_etapa, datos?.avance_por_etapa) ? null : datos?.avisos) ?? expediente.avisos,
 });
 
 // ---------- Cronograma (fechas por etapa) ----------
@@ -119,10 +191,126 @@ export const fechasEtapa = (avance) => {
     };
 };
 
-/** El avance por etapa para sus barras (avanceEtapas) con las fechas y el semáforo de cada una. */
+const plural = (n, singular, varios) => (n === 1 ? `${n} ${singular}` : `${n} ${varios}`);
+
+/** Un momento ISO (UTC) como día/mes/año en la zona de contratación; null si no hay o no es válido. */
+export const fechaMomento = (iso) => {
+    const ms = momento(iso);
+    return ms === null ? null : fechaLegible(fechaHoyBogota(new Date(ms)));
+};
+
+const quienCuando = (accion, revision) => {
+    const cuando = fechaMomento(revision.fecha);
+    return `${accion}${revision.usuario ? ` por ${revision.usuario}` : ''}${cuando ? ` el ${cuando}` : ''}`;
+};
+
+/**
+ * La revisión de una etapa para mostrarla (`revision` de `avance_por_etapa`): la etiqueta de su
+ * estado, quién y cuándo la aprobó o la devolvió, su observación y una nota si cambió después.
+ * Una devuelta que se volvió a trabajar se ve pendiente o lista, pero conserva la devolución.
+ * Null en el grupo sin etapa o si la respuesta no trae la revisión.
+ */
+export const revisionEtapa = (avance) => {
+    const revision = avance?.etapa ? avance.revision : null;
+    if (!revision) return null;
+    const { estado } = revision;
+    let detalle = null;
+    let nota = null;
+    if (APROBADAS.includes(estado)) {
+        const n = Number(revision.pendientes_al_aprobar) || 0;
+        detalle = `${quienCuando('Aprobada', revision)}${n > 0 ? ` con ${plural(n, 'requisito pendiente', 'requisitos pendientes')}` : ''}`;
+        if (estado === 'aprobada_con_cambios') nota = 'Algún requisito de la etapa cambió después de aprobarla.';
+    } else if (revision.devuelta_at) {
+        detalle = quienCuando('Devuelta', revision);
+        if (estado !== 'devuelta') nota = 'Tuvo cambios después de la devolución.';
+    }
+    return { estado, etiqueta: etiquetaRevision(estado), detalle, observacion: revision.observacion || null, nota };
+};
+
+/**
+ * El avance por etapa para sus barras (avanceEtapas) con las fechas y el semáforo de cada una, su
+ * revisión, cuántos requisitos que cuentan le faltan y si su etapa anterior aún no está aprobada.
+ */
 export const etapasConFechas = (avance) => {
     const lista = avance ?? [];
-    return avanceEtapas(lista).map((e, i) => ({ ...e, ...fechasEtapa(lista[i]) }));
+    return avanceEtapas(lista).map((e, i) => ({
+        ...e,
+        ...fechasEtapa(lista[i]),
+        revision: revisionEtapa(lista[i]),
+        faltan: Math.max(0, (Number(e.total) || 0) - (Number(e.cumplidos) || 0)),
+        avisoEtapaAnterior: Boolean(lista[i]?.etapa && lista[i]?.aviso_etapa_anterior),
+    }));
+};
+
+/**
+ * Los botones de revisión de una etapa (de etapasConFechas): solo para quien edita un expediente
+ * en borrador, en una etapa del catálogo con revisión. "Aprobar etapa" si no está aprobada,
+ * "Aprobar de nuevo" si está aprobada con cambios (reaprueba sin devolverla) y "Devolver" siempre;
+ * una etapa sin requisitos que cuenten no tiene botones.
+ */
+export const accionesRevision = (etapa, editable) => {
+    const estado = etapa?.revision?.estado;
+    if (!editable || !estado || estado === 'sin_requisitos') return { aprobar: false, reaprobar: false, devolver: false };
+    return { aprobar: !APROBADAS.includes(estado), reaprobar: estado === 'aprobada_con_cambios', devolver: true };
+};
+
+/** El diálogo de aprobar una etapa; si le faltan requisitos, dice cuántos (solo avisa). */
+export const dialogoAprobarEtapa = (titulo, faltan, otraVez = false) => {
+    const n = Number(faltan) || 0;
+    if (n <= 0) {
+        return {
+            icono: 'question',
+            titulo: otraVez ? `¿Aprobar de nuevo la etapa «${titulo}»?` : `¿Aprobar la etapa «${titulo}»?`,
+            texto: 'La aprobación queda en el historial del expediente con tu nombre y la fecha.',
+            boton: otraVez ? 'Aprobar de nuevo' : 'Aprobar etapa',
+        };
+    }
+    return {
+        icono: 'warning',
+        titulo: otraVez ? `¿Aprobar de nuevo la etapa «${titulo}» con requisitos pendientes?` : `¿Aprobar la etapa «${titulo}» con requisitos pendientes?`,
+        texto: `${n === 1 ? 'Falta' : 'Faltan'} ${plural(n, 'requisito', 'requisitos')} de esta etapa. Puedes aprobarla de todos modos: la revisión solo avisa.`,
+        boton: 'Aprobar de todos modos',
+    };
+};
+
+/**
+ * El cuerpo del POST de aprobar: la observación sin espacios (o null) y, si se confirmó, `confirmar`
+ * con `pendientes_vistos` (los que mostró la confirmación, para que el servidor avise si hay más).
+ */
+export const datosAprobarEtapa = (observacion, confirmar, pendientesVistos) => ({
+    observacion: String(observacion ?? '').trim() || null,
+    ...(confirmar ? { confirmar: true } : {}),
+    ...(confirmar && Number.isInteger(pendientesVistos) && pendientesVistos >= 0 ? { pendientes_vistos: pendientesVistos } : {}),
+});
+
+/** Cuántos requisitos faltan si el servidor pide confirmar la aprobación (422 con `pendientes`); null si es otro error. */
+export const pendientesAlAprobar = (error) => {
+    const pendientes = error?.response?.status === 422 ? error.response.data?.pendientes : null;
+    return typeof pendientes === 'number' ? pendientes : null;
+};
+
+/**
+ * Aprueba una etapa con la confirmación de pendientes. `enviar(confirmar, vistos)` hace el POST y
+ * devuelve la respuesta; `confirmar(n)` pregunta si se aprueba con n pendientes (true/false). Con
+ * pendientes en pantalla va directo con `confirmar` y los vistos; si el servidor responde el 422 de
+ * confirmación (hay pendientes que la pantalla no veía, o más que los vistos), pregunta con su
+ * número y reintenta, tantas veces como haga falta. Otros errores se propagan.
+ * Devuelve { aprobada, data }; `aprobada` es false si no se confirmó.
+ */
+export const aprobarConConfirmacion = async ({ faltan, enviar, confirmar }) => {
+    let vistos = Math.max(0, Number(faltan) || 0);
+    let confirmado = vistos > 0;
+    for (;;) {
+        try {
+            return { aprobada: true, data: await enviar(confirmado, vistos) };
+        } catch (e) {
+            const n = pendientesAlAprobar(e);
+            if (n === null) throw e;
+            if (!(await confirmar(n))) return { aprobada: false, data: null };
+            vistos = n;
+            confirmado = true;
+        }
+    }
 };
 
 /**
@@ -142,13 +330,17 @@ export const fechaCompleta = (valor) => {
 /** El cuerpo del PUT de la etapa: solo el campo que cambió; vacío lo borra (null). */
 export const datosFechaEtapa = (campo, valor) => (CAMPOS_FECHA_ETAPA.includes(campo) ? { [campo]: valor || null } : {});
 
-/** El expediente con la etapa que respondió el PUT (`etapa`) en su lugar y los `avisos` nuevos. */
+/**
+ * El expediente con la etapa que respondió el PUT de fechas, aprobar o devolver (`etapa`) en su
+ * lugar y los `avisos` nuevos. El aviso de la etapa anterior se recalcula en las demás: aprobar o
+ * devolver una etapa lo cambia en las siguientes.
+ */
 export const conEtapaActualizada = (expediente, datos) => {
     if (!expediente || !datos) return expediente;
     const id = datos.etapa?.etapa?.id;
     return {
         ...expediente,
-        avance_por_etapa: (expediente.avance_por_etapa ?? []).map((a) => (id && a.etapa?.id === id ? datos.etapa : a)),
+        avance_por_etapa: recalcularAvisoAnterior((expediente.avance_por_etapa ?? []).map((a) => (id && a.etapa?.id === id ? datos.etapa : a))),
         avisos: datos.avisos ?? expediente.avisos,
     };
 };
@@ -197,27 +389,60 @@ export const datosPropioContratacion = (formulario) => ({
 /** Un propio de contratación se guarda con título y etapa. */
 export const propioCompleto = (formulario) => Boolean(formulario.titulo.trim()) && Boolean(formulario.etapa_propia_id);
 
-const plural = (n, singular, varios) => (n === 1 ? `${n} ${singular}` : `${n} ${varios}`);
+const etapasSinAprobar = (pendientes) => (Array.isArray(pendientes?.etapas_sin_aprobar) ? pendientes.etapas_sin_aprobar : []);
 
 /**
  * Los pendientes con que el servidor rechazó cerrar sin confirmar (`pendientes` del 422):
- * "Faltan 4 requisitos por cumplir" y una línea por etapa. Null si no hay.
+ * "Faltan 4 requisitos por cumplir" y una línea por etapa; y, si hay etapas sin aprobar
+ * (`etapas_sin_aprobar`), "Hay 2 etapas sin aprobar" con el estado de cada una en `sinAprobar`.
+ * Sin requisitos pendientes, `titulo` es null. Null si no hay nada.
  */
 export const textoPendientesCierre = (pendientes) => {
-    if (!pendientes?.total) return null;
+    const total = Number(pendientes?.total) || 0;
+    const lista = etapasSinAprobar(pendientes);
+    if (total === 0 && lista.length === 0) return null;
+    const sinAprobar = lista.length > 0 ? {
+        titulo: `Hay ${plural(lista.length, 'etapa', 'etapas')} sin aprobar`,
+        etapas: lista.map((e) => `${tituloEtapa(e.etapa)}: ${(etiquetaRevision(e.estado)?.texto ?? 'Sin aprobar').toLowerCase()}`),
+    } : null;
     return {
-        titulo: `${pendientes.total === 1 ? 'Falta' : 'Faltan'} ${plural(pendientes.total, 'requisito', 'requisitos')} por cumplir`,
-        etapas: (pendientes.por_etapa ?? []).map((e) => `${tituloEtapa(e.etapa)}: ${plural(e.pendientes, 'pendiente', 'pendientes')}`),
+        titulo: total > 0 ? `${total === 1 ? 'Falta' : 'Faltan'} ${plural(total, 'requisito', 'requisitos')} por cumplir` : null,
+        etapas: total > 0 ? (pendientes.por_etapa ?? []).map((e) => `${tituloEtapa(e.etapa)}: ${plural(e.pendientes, 'pendiente', 'pendientes')}`) : [],
+        ...(sinAprobar ? { sinAprobar } : {}),
     };
+};
+
+const htmlLista = (titulo, lineas) => {
+    const items = lineas.map((e) => `<li>${escaparHtml(e)}</li>`).join('');
+    return `<p>${escaparHtml(titulo)}.</p>${items ? `<ul style="text-align:left">${items}</ul>` : ''}`;
 };
 
 /** El cuerpo del aviso antes de confirmar el cierre, con los nombres escapados. */
 export const htmlPendientesCierre = (pendientes) => {
     const texto = textoPendientesCierre(pendientes);
     if (!texto) return '';
-    const etapas = texto.etapas.map((e) => `<li>${escaparHtml(e)}</li>`).join('');
-    return `<p>${escaparHtml(texto.titulo)}.</p>${etapas ? `<ul style="text-align:left">${etapas}</ul>` : ''}`
+    return (texto.titulo ? htmlLista(texto.titulo, texto.etapas) : '')
+        + (texto.sinAprobar ? htmlLista(texto.sinAprobar.titulo, texto.sinAprobar.etapas) : '')
         + '<p>Puedes cerrarlo de todos modos: la revisión solo avisa. Cerrado, el checklist queda congelado.</p>';
+};
+
+/** El título del diálogo de cierre con pendientes, según falten requisitos, aprobaciones o ambos. */
+export const tituloCierrePendientes = (pendientes) => {
+    const requisitos = (Number(pendientes?.total) || 0) > 0;
+    const etapas = etapasSinAprobar(pendientes).length > 0;
+    if (requisitos && etapas) return '¿Cerrar con pendientes?';
+    return etapas ? '¿Cerrar con etapas sin aprobar?' : '¿Cerrar con requisitos pendientes?';
+};
+
+/**
+ * Si el cierre no tiene nada que avisar: todo cumplido y todas las etapas con requisitos que
+ * cuentan aprobadas. Entonces la pantalla confirma el congelado antes de enviar; si no, el
+ * servidor responde con los pendientes y se confirma con ellos.
+ */
+export const cierreSinAvisos = (expediente) => {
+    const { cumplidos = 0, total = 0 } = expediente?.progreso ?? {};
+    if (cumplidos < total) return false;
+    return (expediente?.avance_por_etapa ?? []).every((a) => !a.etapa || !a.revision || Number(a.total) === 0 || estaAprobada(a));
 };
 
 const fecha = (iso) => (iso ? new Date(iso).toLocaleDateString('es-CO') : null);

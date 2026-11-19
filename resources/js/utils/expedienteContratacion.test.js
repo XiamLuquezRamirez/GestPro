@@ -1,6 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
+    accionesRevision,
+    aprobarConConfirmacion,
     agruparPorEtapa,
+    cierreSinAvisos,
+    datosAprobarEtapa,
+    dialogoAprobarEtapa,
+    etapasConAvisoAnterior,
+    fechaMomento,
+    hayRevisionAtrasada,
+    pendientesAlAprobar,
+    recalcularAvisoAnterior,
+    revisionEtapa,
+    tituloCierrePendientes,
     avisoIncompatiblesProceso,
     alternarPlantillaNueva,
     avanceEtapas,
@@ -561,5 +573,368 @@ describe('pondera', () => {
         expect(pondera([fila(1, null), fila(2, null)])).toBe(false);
         expect(pondera([])).toBe(false);
         expect(pondera(undefined)).toBe(false);
+    });
+});
+
+// ---------- Revisión por etapa (fase 5) ----------
+
+const revisionApi = (cambios = {}) => ({
+    estado: 'pendiente', usuario: null, fecha: null, observacion: null, pendientes_al_aprobar: null, devuelta_at: null, ...cambios,
+});
+
+const avanceRevision = (id, cambios = {}) => avanceApi(id, { revision: id === null ? null : revisionApi(), aviso_etapa_anterior: false, ...cambios });
+
+describe('fechaMomento', () => {
+    it('un momento ISO en UTC como día/mes/año de Bogotá', () => {
+        expect(fechaMomento('2026-11-19T15:30:00+00:00')).toBe('19/11/2026');
+        expect(fechaMomento('2026-11-20T02:00:00+00:00')).toBe('19/11/2026');
+    });
+
+    it('sin momento o uno inválido, null', () => {
+        expect(fechaMomento(null)).toBeNull();
+        expect(fechaMomento('no es fecha')).toBeNull();
+    });
+});
+
+describe('revisionEtapa', () => {
+    it('aprobada: etiqueta, quién y cuándo, y la observación', () => {
+        const r = revisionEtapa(avanceRevision(1, {
+            revision: revisionApi({ estado: 'aprobada', usuario: 'Gestora', fecha: '2026-11-19T15:30:00+00:00', observacion: 'Revisado con jurídica.', pendientes_al_aprobar: 0 }),
+        }));
+        expect(r).toEqual({
+            estado: 'aprobada',
+            etiqueta: { texto: 'Aprobada', tono: 'verde' },
+            detalle: 'Aprobada por Gestora el 19/11/2026',
+            observacion: 'Revisado con jurídica.',
+            nota: null,
+        });
+    });
+
+    it('aprobada con requisitos pendientes: lo dice el detalle', () => {
+        const r = revisionEtapa(avanceRevision(1, {
+            revision: revisionApi({ estado: 'aprobada', usuario: 'Ana', fecha: '2026-11-19T15:30:00+00:00', pendientes_al_aprobar: 2 }),
+        }));
+        expect(r.detalle).toBe('Aprobada por Ana el 19/11/2026 con 2 requisitos pendientes');
+        const una = revisionEtapa(avanceRevision(1, { revision: revisionApi({ estado: 'aprobada', fecha: '2026-11-19T15:30:00+00:00', pendientes_al_aprobar: 1 }) }));
+        expect(una.detalle).toBe('Aprobada el 19/11/2026 con 1 requisito pendiente');
+    });
+
+    it('aprobada con cambios: avisa que algo cambió después', () => {
+        const r = revisionEtapa(avanceRevision(1, { revision: revisionApi({ estado: 'aprobada_con_cambios', usuario: 'Ana', fecha: '2026-11-19T15:30:00+00:00', pendientes_al_aprobar: 0 }) }));
+        expect(r.etiqueta).toEqual({ texto: 'Aprobada con cambios', tono: 'ambar' });
+        expect(r.detalle).toBe('Aprobada por Ana el 19/11/2026');
+        expect(r.nota).toBe('Algún requisito de la etapa cambió después de aprobarla.');
+    });
+
+    it('devuelta vigente: quién, cuándo y por qué', () => {
+        const r = revisionEtapa(avanceRevision(1, {
+            revision: revisionApi({ estado: 'devuelta', usuario: 'Ana', fecha: '2026-11-19T15:30:00+00:00', devuelta_at: '2026-11-19T15:30:00+00:00', observacion: 'Falta el CDP.' }),
+        }));
+        expect(r).toEqual({
+            estado: 'devuelta', etiqueta: { texto: 'Devuelta', tono: 'coral' }, detalle: 'Devuelta por Ana el 19/11/2026', observacion: 'Falta el CDP.', nota: null,
+        });
+    });
+
+    it('devuelta y trabajada después: pendiente o lista, conservando la devolución', () => {
+        const r = revisionEtapa(avanceRevision(1, {
+            revision: revisionApi({ estado: 'lista', usuario: 'Ana', fecha: '2026-11-19T15:30:00+00:00', devuelta_at: '2026-11-19T15:30:00+00:00', observacion: 'Falta el CDP.' }),
+        }));
+        expect(r.etiqueta).toEqual({ texto: 'Lista para revisar', tono: 'azul' });
+        expect(r.detalle).toBe('Devuelta por Ana el 19/11/2026');
+        expect(r.observacion).toBe('Falta el CDP.');
+        expect(r.nota).toBe('Tuvo cambios después de la devolución.');
+    });
+
+    it('sin revisión: solo la etiqueta', () => {
+        expect(revisionEtapa(avanceRevision(1))).toEqual({
+            estado: 'pendiente', etiqueta: { texto: 'Pendiente', tono: 'neutro' }, detalle: null, observacion: null, nota: null,
+        });
+    });
+
+    it('el grupo sin etapa o una respuesta sin revisión: null', () => {
+        expect(revisionEtapa(avanceRevision(null))).toBeNull();
+        expect(revisionEtapa(avanceApi(1))).toBeNull();
+        expect(revisionEtapa(undefined)).toBeNull();
+    });
+});
+
+describe('etapasConFechas con la revisión', () => {
+    it('cada etapa trae su revisión, lo que le falta y el aviso de la etapa anterior', () => {
+        const lista = etapasConFechas([
+            avanceRevision(1, { total: 3, cumplidos: 1 }),
+            avanceRevision(2, { aviso_etapa_anterior: true }),
+            avanceRevision(null),
+        ]);
+        expect(lista[0]).toMatchObject({ faltan: 2, avisoEtapaAnterior: false, revision: { estado: 'pendiente' } });
+        expect(lista[1].avisoEtapaAnterior).toBe(true);
+        expect(lista[2]).toMatchObject({ faltan: 1, revision: null, avisoEtapaAnterior: false });
+    });
+});
+
+describe('accionesRevision', () => {
+    const conEstado = (estado) => etapasConFechas([avanceRevision(1, { revision: revisionApi({ estado }) })])[0];
+
+    it('sin aprobar: aprobar y devolver', () => {
+        ['pendiente', 'lista', 'devuelta'].forEach((estado) => {
+            expect(accionesRevision(conEstado(estado), true)).toEqual({ aprobar: true, reaprobar: false, devolver: true });
+        });
+    });
+
+    it('aprobada sin cambios: solo devolver', () => {
+        expect(accionesRevision(conEstado('aprobada'), true)).toEqual({ aprobar: false, reaprobar: false, devolver: true });
+    });
+
+    it('aprobada con cambios: aprobar de nuevo y devolver', () => {
+        expect(accionesRevision(conEstado('aprobada_con_cambios'), true)).toEqual({ aprobar: false, reaprobar: true, devolver: true });
+    });
+
+    it('sin requisitos que cuenten: ningún botón', () => {
+        expect(accionesRevision(conEstado('sin_requisitos'), true)).toEqual({ aprobar: false, reaprobar: false, devolver: false });
+    });
+
+    it('solo lectura o grupo sin etapa: ninguna', () => {
+        expect(accionesRevision(conEstado('lista'), false)).toEqual({ aprobar: false, reaprobar: false, devolver: false });
+        expect(accionesRevision(etapasConFechas([avanceRevision(null)])[0], true)).toEqual({ aprobar: false, reaprobar: false, devolver: false });
+        expect(accionesRevision(undefined, true)).toEqual({ aprobar: false, reaprobar: false, devolver: false });
+    });
+});
+
+describe('aprobar una etapa', () => {
+    it('el diálogo sin pendientes', () => {
+        expect(dialogoAprobarEtapa('1. Planeación', 0)).toEqual({
+            icono: 'question',
+            titulo: '¿Aprobar la etapa «1. Planeación»?',
+            texto: 'La aprobación queda en el historial del expediente con tu nombre y la fecha.',
+            boton: 'Aprobar etapa',
+        });
+    });
+
+    it('el diálogo con pendientes dice cuántos', () => {
+        expect(dialogoAprobarEtapa('1. Planeación', 2)).toEqual({
+            icono: 'warning',
+            titulo: '¿Aprobar la etapa «1. Planeación» con requisitos pendientes?',
+            texto: 'Faltan 2 requisitos de esta etapa. Puedes aprobarla de todos modos: la revisión solo avisa.',
+            boton: 'Aprobar de todos modos',
+        });
+        expect(dialogoAprobarEtapa('X', 1).texto).toBe('Falta 1 requisito de esta etapa. Puedes aprobarla de todos modos: la revisión solo avisa.');
+    });
+
+    it('el cuerpo: observación sin espacios (o null) y confirmar solo si se confirmó', () => {
+        expect(datosAprobarEtapa('  Revisado.  ', false)).toEqual({ observacion: 'Revisado.' });
+        expect(datosAprobarEtapa('', true)).toEqual({ observacion: null, confirmar: true });
+        expect(datosAprobarEtapa(undefined, false)).toEqual({ observacion: null });
+    });
+
+    it('el cuerpo con confirmación envía los pendientes que se mostraron', () => {
+        expect(datosAprobarEtapa('Ok', true, 2)).toEqual({ observacion: 'Ok', confirmar: true, pendientes_vistos: 2 });
+        expect(datosAprobarEtapa('', true, 0)).toEqual({ observacion: null, confirmar: true, pendientes_vistos: 0 });
+        expect(datosAprobarEtapa('', false, 2)).toEqual({ observacion: null });
+        expect(datosAprobarEtapa('', true)).toEqual({ observacion: null, confirmar: true });
+    });
+
+    it('el diálogo de aprobar de nuevo', () => {
+        expect(dialogoAprobarEtapa('1. Planeación', 0, true)).toMatchObject({
+            titulo: '¿Aprobar de nuevo la etapa «1. Planeación»?', boton: 'Aprobar de nuevo',
+        });
+        expect(dialogoAprobarEtapa('1. Planeación', 2, true).boton).toBe('Aprobar de todos modos');
+    });
+
+    it('los pendientes del 422 que pide confirmar; cualquier otro error, null', () => {
+        const error = (status, data) => ({ response: { status, data } });
+        expect(pendientesAlAprobar(error(422, { mensaje: 'Faltan 2 requisitos...', pendientes: 2 }))).toBe(2);
+        expect(pendientesAlAprobar(error(422, { mensaje: 'La etapa ya está aprobada.' }))).toBeNull();
+        expect(pendientesAlAprobar(error(422, { pendientes: { total: 1 } }))).toBeNull();
+        expect(pendientesAlAprobar(error(500, { pendientes: 2 }))).toBeNull();
+        expect(pendientesAlAprobar(undefined)).toBeNull();
+    });
+});
+
+describe('aviso de la etapa anterior', () => {
+    const aprobada = revisionApi({ estado: 'aprobada', fecha: '2026-11-19T15:30:00+00:00' });
+
+    it('los ids de las etapas con el aviso', () => {
+        const avance = [avanceRevision(1), avanceRevision(2, { aviso_etapa_anterior: true }), avanceRevision(null)];
+        expect([...etapasConAvisoAnterior(avance)]).toEqual([2]);
+        expect(etapasConAvisoAnterior(undefined).size).toBe(0);
+    });
+
+    it('recalcularAvisoAnterior: con la regla de la API (anterior con requisitos sin aprobar y esta con algo cumplido)', () => {
+        const avance = [
+            avanceRevision(1, { revision: aprobada }),
+            avanceRevision(2, { cumplidos: 1, aviso_etapa_anterior: true }),
+            avanceRevision(3, { total: 0, cumplidos: 0 }),
+            avanceRevision(4, { cumplidos: 1 }),
+            avanceRevision(5, { cumplidos: 0, aviso_etapa_anterior: true }),
+            avanceRevision(null, { cumplidos: 1 }),
+        ];
+        expect(recalcularAvisoAnterior(avance).map((a) => a.aviso_etapa_anterior)).toEqual([false, false, false, true, false, false]);
+    });
+
+    it('una etapa vacía o aprobada con cambios no cuenta como sin aprobar', () => {
+        const avance = [
+            avanceRevision(1, { revision: revisionApi({ estado: 'aprobada_con_cambios' }) }),
+            avanceRevision(2, { total: 0, cumplidos: 0 }),
+            avanceRevision(3, { cumplidos: 1, aviso_etapa_anterior: true }),
+        ];
+        expect(recalcularAvisoAnterior(avance)[2].aviso_etapa_anterior).toBe(false);
+    });
+
+    it('sin las claves de la revisión, no toca nada', () => {
+        const avance = [avanceApi(1), avanceApi(2)];
+        expect(recalcularAvisoAnterior(avance)).toEqual(avance);
+    });
+
+    it('conEtapaActualizada lo recalcula al aprobar o devolver', () => {
+        const expediente = { id: 5, avance_por_etapa: [avanceRevision(1), avanceRevision(2, { aviso_etapa_anterior: true })], avisos: {} };
+        const nuevo = conEtapaActualizada(expediente, { etapa: avanceRevision(1, { revision: aprobada, alerta: 'aprobada' }), avisos: { etapas_por_revisar: 0 } });
+        expect(nuevo.avance_por_etapa[1].aviso_etapa_anterior).toBe(false);
+        const devuelto = conEtapaActualizada(nuevo, { etapa: avanceRevision(1, { revision: revisionApi({ estado: 'devuelta', fecha: '2026-11-19T16:00:00+00:00' }) }) });
+        expect(devuelto.avance_por_etapa[1].aviso_etapa_anterior).toBe(true);
+    });
+});
+
+describe('fusionarAvance con una revisión más nueva en pantalla', () => {
+    const aprobada = revisionApi({ estado: 'aprobada', usuario: 'Ana', fecha: '2026-11-19T15:30:00+00:00', pendientes_al_aprobar: 0 });
+    const actual = [
+        avanceRevision(1, { cumplidos: 2, completa: true, fecha_real: '2026-11-19', fecha_real_sugerida: false, alerta: 'aprobada', revision: aprobada }),
+        avanceRevision(2, { cumplidos: 1, aviso_etapa_anterior: false }),
+    ];
+
+    it('una respuesta que salió antes de aprobar no repone la revisión, el semáforo ni la fecha real', () => {
+        const vieja = [
+            avanceRevision(1, { cumplidos: 2, completa: true, fecha_real: '2026-11-18', fecha_real_sugerida: true, alerta: 'vencida', revision: revisionApi({ estado: 'lista' }) }),
+            avanceRevision(2, { cumplidos: 2, aviso_etapa_anterior: true }),
+        ];
+        const r = fusionarAvance(actual, vieja);
+        expect(r[0]).toMatchObject({ cumplidos: 2, fecha_real: '2026-11-19', fecha_real_sugerida: false, alerta: 'aprobada', revision: aprobada });
+        expect(r[1]).toMatchObject({ cumplidos: 2, aviso_etapa_anterior: false });
+        expect(hayRevisionAtrasada(actual, vieja)).toBe(true);
+    });
+
+    it('una respuesta con la misma revisión (o más nueva) pasa tal cual: puede traer "aprobada con cambios"', () => {
+        const nueva = [
+            avanceRevision(1, { cumplidos: 1, alerta: 'aprobada', revision: { ...aprobada, estado: 'aprobada_con_cambios' } }),
+            avanceRevision(2),
+        ];
+        expect(fusionarAvance(actual, nueva)).toBe(nueva);
+        expect(hayRevisionAtrasada(actual, nueva)).toBe(false);
+    });
+
+    it('conAvance conserva los avisos si la respuesta salió antes de la revisión', () => {
+        const expediente = { avance_por_etapa: actual, progreso: {}, avisos: { etapas_por_revisar: 0 } };
+        const vieja = [avanceRevision(1, { revision: revisionApi({ estado: 'lista' }) }), avanceRevision(2)];
+        expect(conAvance(expediente, { avance_por_etapa: vieja, avisos: { etapas_por_revisar: 1 } }).avisos).toEqual({ etapas_por_revisar: 0 });
+        expect(conAvance(expediente, { avance_por_etapa: actual, avisos: { etapas_por_revisar: 2 } }).avisos).toEqual({ etapas_por_revisar: 2 });
+    });
+});
+
+describe('cierre con etapas sin aprobar', () => {
+    const sinAprobar = [
+        { etapa: etapa(1, 1, 'Planeación'), estado: 'lista' },
+        { etapa: etapa(2, 2, 'Selección'), estado: 'devuelta' },
+    ];
+
+    it('requisitos y etapas sin aprobar', () => {
+        expect(textoPendientesCierre({ total: 1, por_etapa: [{ etapa: etapa(2, 2, 'Selección'), pendientes: 1 }], etapas_sin_aprobar: sinAprobar })).toEqual({
+            titulo: 'Falta 1 requisito por cumplir',
+            etapas: ['2. Selección: 1 pendiente'],
+            sinAprobar: { titulo: 'Hay 2 etapas sin aprobar', etapas: ['1. Planeación: lista para revisar', '2. Selección: devuelta'] },
+        });
+    });
+
+    it('solo etapas sin aprobar (todo cumplido)', () => {
+        expect(textoPendientesCierre({ total: 0, por_etapa: [], etapas_sin_aprobar: [sinAprobar[0]] })).toEqual({
+            titulo: null,
+            etapas: [],
+            sinAprobar: { titulo: 'Hay 1 etapa sin aprobar', etapas: ['1. Planeación: lista para revisar'] },
+        });
+    });
+
+    it('el html trae las dos listas, escapadas', () => {
+        const html = htmlPendientesCierre({ total: 0, por_etapa: [], etapas_sin_aprobar: [{ etapa: etapa(1, 1, '<i>P</i>'), estado: 'pendiente' }] });
+        expect(html).toContain('Hay 1 etapa sin aprobar.');
+        expect(html).toContain('&lt;i&gt;P&lt;/i&gt;: pendiente');
+        expect(html).not.toContain('<i>P</i>');
+        expect(html).not.toContain('por cumplir');
+        expect(html).toContain('Puedes cerrarlo de todos modos');
+    });
+
+    it('el título del diálogo según lo que falte', () => {
+        expect(tituloCierrePendientes({ total: 2, etapas_sin_aprobar: sinAprobar })).toBe('¿Cerrar con pendientes?');
+        expect(tituloCierrePendientes({ total: 2, etapas_sin_aprobar: [] })).toBe('¿Cerrar con requisitos pendientes?');
+        expect(tituloCierrePendientes({ total: 2 })).toBe('¿Cerrar con requisitos pendientes?');
+        expect(tituloCierrePendientes({ total: 0, etapas_sin_aprobar: sinAprobar })).toBe('¿Cerrar con etapas sin aprobar?');
+    });
+
+    it('cierreSinAvisos: todo cumplido y todas las etapas con requisitos aprobadas', () => {
+        const aprobada = revisionApi({ estado: 'aprobada' });
+        const exp = (avance, cumplidos = 2) => ({ progreso: { total: 2, cumplidos }, avance_por_etapa: avance });
+        expect(cierreSinAvisos(exp([avanceRevision(1, { revision: aprobada }), avanceRevision(2, { total: 0, cumplidos: 0 }), avanceRevision(null)]))).toBe(true);
+        expect(cierreSinAvisos(exp([avanceRevision(1, { revision: revisionApi({ estado: 'aprobada_con_cambios' }) })]))).toBe(true);
+        expect(cierreSinAvisos(exp([avanceRevision(1, { revision: revisionApi({ estado: 'lista' }) })]))).toBe(false);
+        expect(cierreSinAvisos(exp([avanceRevision(1, { revision: aprobada })], 1))).toBe(false);
+        expect(cierreSinAvisos(exp([avanceApi(1)]))).toBe(true);
+    });
+});
+
+
+describe('sin requisitos que cuenten', () => {
+    it('la revisión es neutra', () => {
+        const etapa = etapasConFechas([avanceRevision(1, { total: 0, cumplidos: 0, revision: revisionApi({ estado: 'sin_requisitos' }) })])[0];
+        expect(etapa.revision.etiqueta).toEqual({ texto: 'Sin requisitos', tono: 'neutro' });
+        expect(etapa.revision.nota).toBeNull();
+    });
+});
+
+describe('aprobarConConfirmacion', () => {
+    const error422 = (pendientes) => ({ response: { status: 422, data: { mensaje: 'Faltan', pendientes } } });
+
+    it('sin pendientes: envía sin confirmar y aprueba', async () => {
+        const enviar = vi.fn().mockResolvedValue({ etapa: 1 });
+        const confirmar = vi.fn();
+        expect(await aprobarConConfirmacion({ faltan: 0, enviar, confirmar })).toEqual({ aprobada: true, data: { etapa: 1 } });
+        expect(enviar).toHaveBeenCalledWith(false, 0);
+        expect(confirmar).not.toHaveBeenCalled();
+    });
+
+    it('con pendientes mostrados: confirma y envía los pendientes vistos', async () => {
+        const enviar = vi.fn().mockResolvedValue({ ok: true });
+        await aprobarConConfirmacion({ faltan: 2, enviar, confirmar: vi.fn() });
+        expect(enviar).toHaveBeenCalledWith(true, 2);
+    });
+
+    it('si el servidor cuenta más pendientes, vuelve a pedir confirmación con el número nuevo', async () => {
+        const enviar = vi.fn()
+            .mockRejectedValueOnce(error422(3))
+            .mockResolvedValueOnce({ ok: true });
+        const confirmar = vi.fn().mockResolvedValue(true);
+        const r = await aprobarConConfirmacion({ faltan: 2, enviar, confirmar });
+        expect(confirmar).toHaveBeenCalledWith(3);
+        expect(enviar).toHaveBeenNthCalledWith(1, true, 2);
+        expect(enviar).toHaveBeenNthCalledWith(2, true, 3);
+        expect(r).toEqual({ aprobada: true, data: { ok: true } });
+    });
+
+    it('puede pedir confirmación más de una vez', async () => {
+        const enviar = vi.fn()
+            .mockRejectedValueOnce(error422(3))
+            .mockRejectedValueOnce(error422(4))
+            .mockResolvedValueOnce({ ok: true });
+        const confirmar = vi.fn().mockResolvedValue(true);
+        await aprobarConConfirmacion({ faltan: 2, enviar, confirmar });
+        expect(confirmar.mock.calls.map((c) => c[0])).toEqual([3, 4]);
+        expect(enviar).toHaveBeenLastCalledWith(true, 4);
+    });
+
+    it('si no confirma el número nuevo, no aprueba', async () => {
+        const enviar = vi.fn().mockRejectedValueOnce(error422(1));
+        const r = await aprobarConConfirmacion({ faltan: 0, enviar, confirmar: vi.fn().mockResolvedValue(false) });
+        expect(r).toEqual({ aprobada: false, data: null });
+        expect(enviar).toHaveBeenCalledTimes(1);
+    });
+
+    it('cualquier otro error se propaga', async () => {
+        const fallo = { response: { status: 500, data: {} } };
+        await expect(aprobarConConfirmacion({ faltan: 0, enviar: vi.fn().mockRejectedValue(fallo), confirmar: vi.fn() })).rejects.toBe(fallo);
     });
 });

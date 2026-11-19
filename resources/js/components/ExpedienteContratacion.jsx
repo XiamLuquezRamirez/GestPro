@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { faArrowLeft, faArrowsRotate, faClockRotateLeft, faLock, faPlus } from '@fortawesome/free-solid-svg-icons';
+import {
+    faArrowLeft, faArrowsRotate, faCheck, faClockRotateLeft, faLock, faPlus, faRotateLeft,
+} from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
 import { ChecklistPorEtapa } from './ExpedienteChecklist';
@@ -11,9 +13,10 @@ import {
     contarOpcionales, motivoNoEliminarPropio, plantillasConVersion, requiereAprobacionNoAplica, textoOpcionales,
 } from '../utils/expedienteChecklist';
 import {
-    alternarPlantillaNueva, avisoIncompatiblesProceso, conAvance, conEtapaActualizada, datosFechaEtapa, datosPropioContratacion,
-    errorDeProceso, errorFechaEtapa, esIdProceso, etapasConFechas, fechaHoyBogota, fechaLegible, fechaPorGuardar, htmlPendientesCierre, NOTA_PONDERADO,
-    pondera, seleccionInicial, textoEstadoExpediente, textoSinPlantillas,
+    accionesRevision, alternarPlantillaNueva, aprobarConConfirmacion, avisoIncompatiblesProceso, cierreSinAvisos, conAvance, conEtapaActualizada, datosAprobarEtapa,
+    datosFechaEtapa, datosPropioContratacion, dialogoAprobarEtapa, errorDeProceso, errorFechaEtapa, esIdProceso, etapasConAvisoAnterior,
+    etapasConFechas, fechaHoyBogota, fechaLegible, fechaPorGuardar, htmlPendientesCierre, NOTA_PONDERADO, pondera,
+    seleccionInicial, textoEstadoExpediente, textoSinPlantillas, tituloCierrePendientes,
 } from '../utils/expedienteContratacion';
 import { franjaAvisosExpediente } from '../utils/avisosContratacion';
 import { etiquetaEstadoProceso, numeroProceso, tonoEstado } from '../utils/contratacion';
@@ -158,8 +161,69 @@ const CampoFecha = ({ campo, valor, max, deshabilitado, sugerida, onGuardar }) =
     );
 };
 
-/** El avance de una etapa con su semáforo y, si es una etapa del catálogo, sus fechas. */
-const EtapaCronograma = ({ etapa, editable, hoy, onGuardarFecha }) => {
+/**
+ * El estado de revisión de una etapa: su etiqueta, quién y cuándo la aprobó o la devolvió, la
+ * observación y, para quien edita un expediente en borrador, los botones de aprobar y devolver.
+ */
+const RevisionEtapa = ({ etapa, editable, ocupado, onAprobar, onDevolver }) => {
+    const { revision } = etapa;
+    if (!revision) return null;
+    const acciones = accionesRevision(etapa, editable);
+    return (
+        <div className="exc-revision">
+            <span className="exc-revision-linea">
+                <span className={`ct-estado ct-estado-${revision.etiqueta?.tono ?? 'neutro'}`}>
+                    <span className="ct-oculto">Revisión: </span>{revision.etiqueta?.texto ?? revision.estado}
+                </span>
+                {revision.detalle && <small className="exc-revision-detalle">{revision.detalle}</small>}
+            </span>
+            {revision.nota && <small className="exc-revision-nota">{revision.nota}</small>}
+            {revision.observacion && (
+                <p className="exc-revision-observacion"><span className="exc-revision-rotulo">Observación:</span> {revision.observacion}</p>
+            )}
+            {(acciones.aprobar || acciones.reaprobar || acciones.devolver) && (
+                <div className="exc-revision-acciones exv-no-imprimir">
+                    {acciones.aprobar && (
+                        <button
+                            type="button"
+                            className="exv-btn exv-btn-primario"
+                            onClick={() => onAprobar(etapa)}
+                            disabled={ocupado}
+                            aria-label={`Aprobar etapa ${etapa.titulo}`}
+                        >
+                            <FontAwesomeIcon icon={faCheck} /> Aprobar etapa
+                        </button>
+                    )}
+                    {acciones.reaprobar && (
+                        <button
+                            type="button"
+                            className="exv-btn exv-btn-primario"
+                            onClick={() => onAprobar(etapa, true)}
+                            disabled={ocupado}
+                            aria-label={`Aprobar de nuevo la etapa ${etapa.titulo}`}
+                        >
+                            <FontAwesomeIcon icon={faCheck} /> Aprobar de nuevo
+                        </button>
+                    )}
+                    {acciones.devolver && (
+                        <button
+                            type="button"
+                            className="exv-btn"
+                            onClick={() => onDevolver(etapa)}
+                            disabled={ocupado}
+                            aria-label={`Devolver la etapa ${etapa.titulo}`}
+                        >
+                            <FontAwesomeIcon icon={faRotateLeft} /> Devolver
+                        </button>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+/** El avance de una etapa con su semáforo, su revisión y, si es una etapa del catálogo, sus fechas. */
+const EtapaCronograma = ({ etapa, editable, ocupado, hoy, onGuardarFecha, onAprobar, onDevolver }) => {
     const guardar = (campo, valor) => onGuardarFecha(etapa, campo, valor);
     return (
         <div className="exc-etapa">
@@ -184,17 +248,18 @@ const EtapaCronograma = ({ etapa, editable, hoy, onGuardarFecha }) => {
                     )}
                 </div>
             )}
+            <RevisionEtapa etapa={etapa} editable={editable} ocupado={ocupado} onAprobar={onAprobar} onDevolver={onDevolver} />
         </div>
     );
 };
 
-/** La franja de avisos del expediente: vencidas, próximas, cierre y sin actualización. */
+/** La franja de avisos del expediente: vencidas, próximas, devueltas, por revisar, cierre y sin actualización. */
 const FranjaAvisos = ({ avisos }) => {
     const items = franjaAvisosExpediente(avisos);
     if (items.length === 0) return null;
     return (
         <div className="exc-avisos exv-no-imprimir">
-            <b>Avisos del cronograma</b>
+            <b>Avisos del expediente</b>
             <ul>
                 {items.map((a) => <li key={a.clave} className={`ct-estado ct-estado-${a.tono}`}>{a.texto}</li>)}
             </ul>
@@ -573,7 +638,9 @@ const Expediente = ({ procesoId, user }) => {
         try {
             const { data } = await axios.put(`/expedientes/${id}/etapas/${etapa.etapaId}`, datosFechaEtapa(campo, valor));
             if (!montado.current) return null;
-            // Su fecha ya es la más nueva: una respuesta del checklist que salió antes no la repone.
+            // Su fecha ya es la más nueva: una respuesta del checklist que salió antes no la repone,
+            // ni una carga completa que empezó antes.
+            turno.current += 1;
             etapasProtegidas.current.add(etapa.etapaId);
             setExpediente((prev) => (prev?.id === id ? conEtapaActualizada(prev, data) : prev));
             nuevaRevision();
@@ -585,6 +652,95 @@ const Expediente = ({ procesoId, user }) => {
             return mensaje;
         }
     };
+
+    // Aprobar o devolver responden la etapa y los avisos, como el PUT de fechas.
+    // Como las cargas, sube el turno: una carga que empezó antes no tapa la revisión nueva.
+    const ponerRevision = (id, data, texto) => {
+        turno.current += 1;
+        setExpediente((prev) => (prev?.id === id ? conEtapaActualizada(prev, data) : prev));
+        nuevaRevision();
+        setAnuncio(texto);
+    };
+
+    // Un solo diálogo: la observación opcional y, si en pantalla le faltan requisitos, cuántos; así
+    // se envía con `confirmar`. Si el servidor cuenta pendientes que la pantalla no veía (otra
+    // persona desmarcó algo), pide confirmar con su número y se reintenta con `confirmar: true`.
+    const aprobarEtapa = (etapa, otraVez = false) => ejecutar(async () => {
+        const { id } = expediente;
+        const dialogo = dialogoAprobarEtapa(etapa.titulo, etapa.faltan, otraVez);
+        const { isConfirmed, value } = await Swal.fire({
+            icon: dialogo.icono,
+            titleText: dialogo.titulo,
+            text: dialogo.texto,
+            input: 'textarea',
+            inputLabel: 'Observación (opcional)',
+            inputAttributes: { maxlength: '2000' },
+            showCancelButton: true,
+            confirmButtonText: dialogo.boton,
+            cancelButtonText: 'Cancelar',
+        });
+        if (!isConfirmed || !montado.current) return;
+        const url = `/expedientes/${id}/etapas/${etapa.etapaId}/aprobar`;
+        let resultado;
+        try {
+            resultado = await aprobarConConfirmacion({
+                faltan: etapa.faltan,
+                enviar: async (confirmar, vistos) => (await axios.post(url, datosAprobarEtapa(value, confirmar, vistos))).data,
+                confirmar: async (faltan) => {
+                    if (!montado.current) return false;
+                    const otra = dialogoAprobarEtapa(etapa.titulo, faltan, otraVez);
+                    const confirmacion = await Swal.fire({
+                        icon: otra.icono,
+                        titleText: otra.titulo,
+                        text: otra.texto,
+                        showCancelButton: true,
+                        confirmButtonText: otra.boton,
+                        cancelButtonText: 'Cancelar',
+                    });
+                    return confirmacion.isConfirmed && montado.current;
+                },
+            });
+        } catch (e) {
+            if (!montado.current) return;
+            avisarError('No se pudo aprobar la etapa', e);
+            recargar();
+            return;
+        }
+        if (!montado.current) return;
+        // Sin aprobar, el avance se pone al día con lo que cambió en el servidor. Aprobando, la
+        // respuesta trae la etapa al día (una recarga en curso podría reponer la anterior).
+        if (!resultado.aprobada) {
+            recargar();
+            return;
+        }
+        ponerRevision(id, resultado.data, `${otraVez ? 'Aprobada de nuevo' : 'Aprobada'}: ${etapa.titulo}.`);
+    });
+
+    const devolverEtapa = (etapa) => ejecutar(async () => {
+        const { id } = expediente;
+        const { isConfirmed, value } = await Swal.fire({
+            icon: 'warning',
+            titleText: `¿Devolver la etapa «${etapa.titulo}»?`,
+            text: 'Tu observación queda en la etapa y en el historial. La revisión solo avisa: el checklist se sigue pudiendo trabajar.',
+            input: 'textarea',
+            inputLabel: 'Observación',
+            inputPlaceholder: 'Explica qué hay que corregir',
+            inputAttributes: { maxlength: '2000', 'aria-required': 'true' },
+            inputValidator: (texto) => (!texto?.trim() ? 'Escribe por qué devuelves la etapa.' : undefined),
+            showCancelButton: true,
+            confirmButtonText: 'Devolver',
+            cancelButtonText: 'Cancelar',
+        });
+        if (!isConfirmed || !montado.current) return;
+        try {
+            const { data } = await axios.post(`/expedientes/${id}/etapas/${etapa.etapaId}/devolver`, { observacion: value.trim() });
+            if (montado.current) ponerRevision(id, data, `Devuelta: ${etapa.titulo}.`);
+        } catch (e) {
+            if (!montado.current) return;
+            avisarError('No se pudo devolver la etapa', e);
+            recargar();
+        }
+    });
 
     const urlPropios = () => `/expedientes/${expediente.id}/requisitos-propios`;
 
@@ -679,11 +835,11 @@ const Expediente = ({ procesoId, user }) => {
         }
     });
 
-    // Primero sin confirmar: si faltan requisitos, el servidor dice cuántos y en qué etapas, y se
-    // pide confirmación (la revisión solo avisa). Si todo está cumplido, se confirma el congelado.
+    // Primero sin confirmar: si faltan requisitos o hay etapas sin aprobar, el servidor dice cuáles
+    // y se pide confirmación (la revisión solo avisa). Sin nada que avisar, se confirma el congelado.
     const cerrarExpediente = () => ejecutar(async () => {
-        const { id, progreso } = expediente;
-        if (progreso.cumplidos >= progreso.total) {
+        const { id } = expediente;
+        if (cierreSinAvisos(expediente)) {
             const { isConfirmed } = await Swal.fire({
                 icon: 'question',
                 titleText: '¿Cerrar el expediente?',
@@ -711,7 +867,7 @@ const Expediente = ({ procesoId, user }) => {
             if (!montado.current) return;
             const { isConfirmed } = await Swal.fire({
                 icon: 'warning',
-                titleText: '¿Cerrar con requisitos pendientes?',
+                titleText: tituloCierrePendientes(pendientes),
                 html: htmlPendientesCierre(pendientes),
                 showCancelButton: true,
                 confirmButtonText: 'Cerrar de todos modos',
@@ -834,7 +990,16 @@ const Expediente = ({ procesoId, user }) => {
                     {etapasAvance.length > 0 && (
                         <section className="exc-etapas" aria-label="Avance y cronograma por etapa">
                             {etapasAvance.map((e) => (
-                                <EtapaCronograma key={e.clave} etapa={e} editable={editable} hoy={hoy} onGuardarFecha={guardarFecha} />
+                                <EtapaCronograma
+                                    key={e.clave}
+                                    etapa={e}
+                                    editable={editable}
+                                    ocupado={ocupado}
+                                    hoy={hoy}
+                                    onGuardarFecha={guardarFecha}
+                                    onAprobar={aprobarEtapa}
+                                    onDevolver={devolverEtapa}
+                                />
                             ))}
                         </section>
                     )}
@@ -886,6 +1051,7 @@ const Expediente = ({ procesoId, user }) => {
                         editable={editable}
                         ocupado={ocupado}
                         etapas={etapas}
+                        etapasAvisoAnterior={etapasConAvisoAnterior(expediente.avance_por_etapa)}
                         onAplica={decidirAplica}
                         onGuardarPropio={guardarPropio}
                         onEliminarPropio={eliminarPropio}

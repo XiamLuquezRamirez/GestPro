@@ -606,7 +606,9 @@ const ExpedienteChecklist = ({ expediente, editable, ocupado, onGuardarPropio, o
  * al final (agruparPorEtapa). Cada propio va en su etapa, que es obligatoria; al final, quien
  * edita agrega uno nuevo eligiendo la etapa entre `etapas` (GET /etapasContratacion).
  */
-export const ChecklistPorEtapa = ({ expediente, editable, ocupado, etapas, onGuardarPropio, onEliminarPropio, ...acciones }) => {
+export const ChecklistPorEtapa = ({
+    expediente, editable, ocupado, etapas, etapasAvisoAnterior, onGuardarPropio, onEliminarPropio, ...acciones
+}) => {
     const grupos = useMemo(() => agruparPorEtapa(expediente.requisitos), [expediente.requisitos]);
     const propiosAbiertos = useFormularioPropios(expediente, onGuardarPropio);
     const { formulario, contenedor, abrir, guardar, cerrar } = propiosAbiertos;
@@ -629,6 +631,9 @@ export const ChecklistPorEtapa = ({ expediente, editable, ocupado, etapas, onGua
                         <h3 id={`exv-${grupo.clave}-titulo`}>{grupo.titulo}</h3>
                         <span className="exv-cita">{grupo.cumplidos}/{grupo.total}</span>
                     </div>
+                    {grupo.etapa && etapasAvisoAnterior?.has(grupo.etapa.id) && (
+                        <p className="exc-aviso-anterior">La etapa anterior aún no está aprobada</p>
+                    )}
                     {grupo.filas.map(renderFila)}
                 </section>
             ))}

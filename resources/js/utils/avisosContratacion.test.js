@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    avisoProcesoContrato, chipsAvisosProceso, etiquetaAlerta, franjaAvisosExpediente, textoCierre, textoSinActualizacion,
+    avisoProcesoContrato, chipsAvisosProceso, etiquetaAlerta, etiquetaRevision, franjaAvisosExpediente, textoCierre, textoSinActualizacion,
 } from './avisosContratacion';
 
 const avisos = (cambios = {}) => ({
@@ -85,7 +85,7 @@ describe('chipsAvisosProceso', () => {
         expect(chips.map((c) => c.titulo)).toEqual([
             '1 etapa del expediente vencida',
             '3 etapas del expediente próximas a vencer',
-            '2 de 3 etapas del expediente completas',
+            '2 de 3 etapas del expediente aprobadas',
         ]);
     });
 
@@ -100,9 +100,9 @@ describe('chipsAvisosProceso', () => {
         expect(textos(chipsAvisosProceso(avisos({ cierre_proximo: true, dias_para_cierre: 0 })))).toEqual(['Cierre hoy']);
     });
 
-    it('con todas las etapas completas, los hitos van en verde', () => {
+    it('con todas las etapas aprobadas, los hitos van en verde', () => {
         expect(chipsAvisosProceso(avisos({ hitos: { completadas: 3, total: 3 } }))).toEqual([
-            { clave: 'hitos', texto: 'Hitos 3/3', tono: 'verde', titulo: '3 de 3 etapas del expediente completas' },
+            { clave: 'hitos', texto: 'Hitos 3/3', tono: 'verde', titulo: '3 de 3 etapas del expediente aprobadas' },
         ]);
     });
 
@@ -178,5 +178,66 @@ describe('avisoProcesoContrato', () => {
         expect(avisoProcesoContrato(undefined)).toBeNull();
         expect(avisoProcesoContrato(aviso())).toBeNull();
         expect(avisoProcesoContrato(aviso({ proceso_id: null, etapas_vencidas: 2 }))).toBeNull();
+    });
+});
+
+describe('revisión por etapa en los avisos (fase 5)', () => {
+    it('la alerta "aprobada" se muestra como "Aprobada", en verde', () => {
+        expect(etiquetaAlerta('aprobada')).toEqual({ texto: 'Aprobada', tono: 'verde' });
+    });
+
+    it('la etiqueta de cada estado de revisión, con su tono', () => {
+        expect(etiquetaRevision('pendiente')).toEqual({ texto: 'Pendiente', tono: 'neutro' });
+        expect(etiquetaRevision('lista')).toEqual({ texto: 'Lista para revisar', tono: 'azul' });
+        expect(etiquetaRevision('aprobada')).toEqual({ texto: 'Aprobada', tono: 'verde' });
+        expect(etiquetaRevision('aprobada_con_cambios')).toEqual({ texto: 'Aprobada con cambios', tono: 'ambar' });
+        expect(etiquetaRevision('devuelta')).toEqual({ texto: 'Devuelta', tono: 'coral' });
+        expect(etiquetaRevision('sin_requisitos')).toEqual({ texto: 'Sin requisitos', tono: 'neutro' });
+        expect(etiquetaRevision('otro')).toBeNull();
+        expect(etiquetaRevision(undefined)).toBeNull();
+    });
+
+    it('chips: devueltas y por revisar después de las próximas, antes del cierre', () => {
+        const chips = chipsAvisosProceso(avisos({
+            etapas_vencidas: 1,
+            etapas_proximas: 1,
+            etapas_devueltas: 2,
+            etapas_por_revisar: 3,
+            cierre_vencido: true,
+            hitos: { completadas: 1, total: 4 },
+        }));
+        expect(textos(chips)).toEqual(['1 vencida', '1 próxima', '2 devueltas', '3 por revisar', 'Cierre vencido', 'Hitos 1/4']);
+        expect(chips.find((c) => c.clave === 'devueltas')).toEqual({
+            clave: 'devueltas', texto: '2 devueltas', tono: 'coral', titulo: '2 etapas del expediente devueltas en la revisión',
+        });
+        expect(chips.find((c) => c.clave === 'por-revisar')).toEqual({
+            clave: 'por-revisar', texto: '3 por revisar', tono: 'azul', titulo: '3 etapas del expediente listas para revisar',
+        });
+    });
+
+    it('chips en singular', () => {
+        const chips = chipsAvisosProceso(avisos({ etapas_devueltas: 1, etapas_por_revisar: 1 }));
+        expect(textos(chips)).toEqual(['1 devuelta', '1 por revisar']);
+        expect(chips.map((c) => c.titulo)).toEqual(['1 etapa del expediente devuelta en la revisión', '1 etapa del expediente lista para revisar']);
+    });
+
+    it('los hitos cuentan las etapas aprobadas', () => {
+        expect(chipsAvisosProceso(avisos({ hitos: { completadas: 1, total: 3 } }))[0].titulo).toBe('1 de 3 etapas del expediente aprobadas');
+    });
+
+    it('sin las claves nuevas (o en 0), sin esos chips', () => {
+        expect(chipsAvisosProceso(avisos({ etapas_devueltas: 0, etapas_por_revisar: 0 }))).toEqual([]);
+    });
+
+    it('franja: devueltas y por revisar en frases completas', () => {
+        expect(franjaAvisosExpediente(avisos({ etapas_vencidas: 1, etapas_devueltas: 2, etapas_por_revisar: 1, sin_actualizacion: true, dias_sin_actualizacion: 15 })))
+            .toEqual([
+                { clave: 'vencidas', texto: '1 etapa vencida', tono: 'coral' },
+                { clave: 'devueltas', texto: '2 etapas devueltas', tono: 'coral' },
+                { clave: 'por-revisar', texto: '1 etapa lista para revisar', tono: 'azul' },
+                { clave: 'sin-actualizacion', texto: 'Sin actualización hace 15 días', tono: 'neutro' },
+            ]);
+        expect(textos(franjaAvisosExpediente(avisos({ etapas_devueltas: 1, etapas_por_revisar: 3 }))))
+            .toEqual(['1 etapa devuelta', '3 etapas listas para revisar']);
     });
 });
