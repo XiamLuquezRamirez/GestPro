@@ -7,9 +7,9 @@ import { ORDEN_SECCIONES, SECCIONES } from '../utils/expedienteChecklist';
 import { avisarError } from '../utils/avisosPlantillas';
 import { opcionesEtapa } from '../utils/contratacion';
 import {
-    CARACTERES, CATEGORIAS, CONDICIONADO, FUENTES_NORMATIVAS, SIN_ETAPA, TIPOS_REQUISITO, USO_CONTRATACION, agruparPorEtapa, datosRequisito,
-    erroresDeEtapa, etiquetaCaracter, etiquetaCategoria, formularioRequisito, htmlErrores, mensajeApi, mover, opcionesResponsable,
-    ordenTrasMoverEnEtapa, porRedactar, requisitoVacio, sinEtapa, usoDePlantilla,
+    CARACTERES, CATEGORIAS, CONDICIONADO, FUENTES_NORMATIVAS, PESO_MAXIMO, PESO_MINIMO, SIN_ETAPA, TIPOS_REQUISITO, USO_CONTRATACION, agruparPorEtapa,
+    datosRequisito, erroresDelRequisito, etiquetaCaracter, etiquetaCategoria, etiquetaPeso, formularioRequisito, htmlErrores, mensajeApi, mover,
+    opcionesResponsable, ordenTrasMoverEnEtapa, porRedactar, requisitoVacio, sinEtapa, usoDePlantilla,
 } from '../utils/plantillasChecklist';
 import useOcupado from './useOcupado';
 import '../../css/Contratacion.css';
@@ -27,19 +27,25 @@ const Campo = ({ etiqueta, children, ancho }) => (
  * En una plantilla de contratación pide la etapa: `etapas` es su catálogo (null mientras carga o si
  * falló, con `avisoEtapas`) y `errorEtapa`, { texto, enfocar } con lo que el servidor objetó de
  * ella y si el foco debe ir ya al campo (no mientras se muestra el aviso con los demás errores).
+ * También pide el peso del requisito en el avance; `errorPeso` es como `errorEtapa`, para el peso.
  */
 const FormularioRequisito = ({
-    motor, esSgr, contratacion, inicial, catalogoSgr, responsables, etapas, avisoEtapas, errorEtapa, onCambioEtapa, guardando, onGuardar, onCancelar,
+    motor, esSgr, contratacion, inicial, catalogoSgr, responsables, etapas, avisoEtapas, errorEtapa, onCambioEtapa, errorPeso, onCambioPeso,
+    guardando, onGuardar, onCancelar,
 }) => {
     const [f, setF] = useState(inicial);
     const [revisionCondicion, setRevisionCondicion] = useState(null);
     const campoEtapa = useRef(null);
+    const campoPeso = useRef(null);
     const cambiar = (campo, valor) => setF((actual) => ({ ...actual, [campo]: valor }));
 
-    // Si el servidor objeta la etapa, el foco va al campo, donde se muestra el error.
+    // Si el servidor objeta la etapa o el peso, el foco va al campo, donde se muestra el error.
     useEffect(() => {
         if (errorEtapa?.enfocar) campoEtapa.current?.focus();
     }, [errorEtapa]);
+    useEffect(() => {
+        if (errorPeso?.enfocar) campoPeso.current?.focus();
+    }, [errorPeso]);
 
     const texto = (campo, props = {}) => <input value={f[campo]} onChange={(e) => cambiar(campo, e.target.value)} {...props} />;
     // Las personas salen de los responsables activos; la que el requisito ya tiene se conserva
@@ -102,6 +108,27 @@ const FormularioRequisito = ({
                     </select>
                     {errorEtapa && <small id="pl-etapa-error" className="ct-error-campo">{errorEtapa.texto}</small>}
                     {avisoEtapas && <small id="pl-etapa-aviso" className="pl-ayuda">{avisoEtapas}</small>}
+                </div>
+            )}
+            {contratacion && (
+                <div className="pl-campo">
+                    <label htmlFor="pl-peso">Peso</label>
+                    <input
+                        id="pl-peso"
+                        ref={campoPeso}
+                        type="number"
+                        inputMode="numeric"
+                        required
+                        min={PESO_MINIMO}
+                        max={PESO_MAXIMO}
+                        step={1}
+                        value={f.peso}
+                        aria-invalid={Boolean(errorPeso)}
+                        aria-describedby={[errorPeso && 'pl-peso-error', 'pl-peso-ayuda'].filter(Boolean).join(' ')}
+                        onChange={(e) => { cambiar('peso', e.target.value); onCambioPeso(); }}
+                    />
+                    {errorPeso && <small id="pl-peso-error" className="ct-error-campo">{errorPeso.texto}</small>}
+                    <small id="pl-peso-ayuda" className="pl-ayuda">Cuánto pesa en el avance del proceso. 1 si todos valen lo mismo.</small>
                 </div>
             )}
 
@@ -216,7 +243,7 @@ const FormularioRequisito = ({
 };
 
 /** Una fila de la lista de requisitos, con sus acciones si la versión es un borrador. */
-const FilaRequisito = ({ requisito: r, motor, editable, ocupado, primero, ultimo, onMover, onEditar, onEliminar }) => (
+const FilaRequisito = ({ requisito: r, motor, contratacion, editable, ocupado, primero, ultimo, onMover, onEditar, onEliminar }) => (
     <li className={r.activo ? '' : 'inactivo'}>
         <div className="pl-fila-texto">
             <span className="pl-codigo">{r.codigo || r.clave}</span>
@@ -224,6 +251,7 @@ const FilaRequisito = ({ requisito: r, motor, editable, ocupado, primero, ultimo
             <span className="pl-fila-etiquetas">
                 {r.categoria && <span className="pl-insignia pl-insignia-suave">{etiquetaCategoria(r.categoria)}</span>}
                 {motor === 'simple' && <span className="pl-insignia pl-insignia-suave">{etiquetaCaracter(r.caracter)}</span>}
+                {contratacion && etiquetaPeso(r.peso) && <span className="pl-insignia pl-insignia-suave">{etiquetaPeso(r.peso)}</span>}
                 {porRedactar(r) && <span className="pl-insignia pl-insignia-alerta">Por redactar</span>}
                 {!r.activo && <span className="pl-insignia pl-insignia-alerta">Inactivo</span>}
             </span>
@@ -261,6 +289,7 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
     const [etapas, setEtapas] = useState(null);
     const [avisoEtapas, setAvisoEtapas] = useState(null);
     const [errorEtapa, setErrorEtapa] = useState(null); // { texto, enfocar } del servidor, bajo el campo
+    const [errorPeso, setErrorPeso] = useState(null); // lo mismo, para el peso
     const [ocupado, ejecutar] = useOcupado();
     const contenedor = useRef(null);
     const retorno = useRef(null); // data-foco del botón que abrió el formulario
@@ -308,11 +337,13 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
     const abrir = (requisito) => {
         retorno.current = requisito === 'nuevo' ? 'nuevo' : `editar-${requisito.id}`;
         setErrorEtapa(null);
+        setErrorPeso(null);
         setEditando(requisito);
     };
 
     const cerrar = () => {
         setErrorEtapa(null);
+        setErrorPeso(null);
         setEditando(null);
     };
 
@@ -336,27 +367,34 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
             cerrar();
             await onCambio();
         } catch (e) {
-            // Lo que el servidor objeta de la etapa va bajo su campo; el resto, en el aviso de siempre.
-            // El foco termina en la etapa: enseguida si no hay aviso o, si lo hay, al cerrarlo (el
-            // aviso no lo devuelve a "Guardar requisito").
-            const repartidos = contratacion ? erroresDeEtapa(e) : null;
-            if (!repartidos?.etapa.length) {
+            // Lo que el servidor objeta de la etapa y del peso va bajo su campo; el resto, en el aviso
+            // de siempre. El foco termina en el primero con error (la etapa y, si no, el peso):
+            // enseguida si no hay aviso o, si lo hay, al cerrarlo (el aviso no lo devuelve a
+            // "Guardar requisito").
+            const repartidos = contratacion ? erroresDelRequisito(e) : null;
+            if (!repartidos?.etapa.length && !repartidos?.peso.length) {
                 avisarError('No se pudo guardar el requisito', e);
                 return;
             }
-            const texto = repartidos.etapa.join(' ');
+            const deEtapa = repartidos.etapa.length ? repartidos.etapa.join(' ') : null;
+            const dePeso = repartidos.peso.length ? repartidos.peso.join(' ') : null;
+            const marcar = (enfocar) => {
+                setErrorEtapa(deEtapa ? { texto: deEtapa, enfocar } : null);
+                setErrorPeso(dePeso ? { texto: dePeso, enfocar: enfocar && !deEtapa } : null);
+            };
             if (!repartidos.otros.length) {
-                setErrorEtapa({ texto, enfocar: true });
+                marcar(true);
                 return;
             }
-            setErrorEtapa({ texto, enfocar: false });
+            marcar(false);
             await Swal.fire({
                 icon: 'error',
                 titleText: 'No se pudo guardar el requisito',
                 html: htmlErrores(repartidos.mensaje, repartidos.otros),
                 returnFocus: false,
             });
-            setErrorEtapa((actual) => (actual ? { ...actual, enfocar: true } : actual));
+            if (deEtapa) setErrorEtapa((actual) => (actual ? { ...actual, enfocar: true } : actual));
+            else setErrorPeso((actual) => (actual ? { ...actual, enfocar: true } : actual));
         }
     });
 
@@ -420,6 +458,8 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
                 avisoEtapas={avisoEtapas}
                 errorEtapa={errorEtapa}
                 onCambioEtapa={() => setErrorEtapa(null)}
+                errorPeso={errorPeso}
+                onCambioPeso={() => setErrorPeso(null)}
                 guardando={ocupado}
                 inicial={editando === 'nuevo' ? requisitoVacio(plantilla.motor, uso) : formularioRequisito(editando, plantilla.motor, uso)}
                 onGuardar={guardar}
@@ -433,6 +473,7 @@ const PlantillaRequisitos = ({ plantilla, version, requisitos, onCambio }) => {
             key={r.id}
             requisito={r}
             motor={plantilla.motor}
+            contratacion={contratacion}
             editable={editable}
             ocupado={ocupado}
             primero={primero}

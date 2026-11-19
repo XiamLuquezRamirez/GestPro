@@ -47,6 +47,14 @@ export const agruparPorEtapa = (filas) => {
     return [...conEtapa, ...sinEtapa].map((g) => ({ ...g, ...conteo(g.filas) }));
 };
 
+export const NOTA_PONDERADO = 'El porcentaje pondera cada requisito por su peso.';
+
+/**
+ * Si el porcentaje del expediente está ponderado de verdad: algún requisito que cuenta pesa
+ * distinto de 1. Con todos en 1 es el mismo que el conteo, y en viabilización las filas no traen peso.
+ */
+export const pondera = (filas) => (filas ?? []).some((f) => f.cuenta && f.peso !== undefined && f.peso !== null && Number(f.peso) !== 1);
+
 /** El avance por etapa de la API (`avance_por_etapa`, ya en el orden del catálogo), para sus barras. */
 export const avanceEtapas = (avance) => (avance ?? []).map((a) => ({
     clave: claveEtapa(a.etapa),

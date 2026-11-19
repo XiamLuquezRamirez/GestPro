@@ -14,6 +14,7 @@
     border-radius: var(--exv-radio);
 }
 .exc-etapas .exv-medidor-top b { font-size: .88rem; }
+.exc-medidor-pie { display: block; margin-top: .35rem; font-size: .78rem; color: var(--exv-tinta-tenue); }
 
 .exc-crear { text-align: left; }
 .exc-plantillas {

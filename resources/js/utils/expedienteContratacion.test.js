@@ -10,7 +10,9 @@ import {
     esIdProceso,
     formularioPropioContratacion,
     htmlPendientesCierre,
+    NOTA_PONDERADO,
     opcionesEtapaPropio,
+    pondera,
     propioCompleto,
     seleccionInicial,
     textoEstadoExpediente,
@@ -302,5 +304,25 @@ describe('avisoIncompatiblesProceso', () => {
     it('sin incompatibles, null', () => {
         expect(avisoIncompatiblesProceso([{ nombre: 'A', compatible: true }])).toBeNull();
         expect(avisoIncompatiblesProceso(undefined)).toBeNull();
+    });
+});
+
+describe('pondera', () => {
+    it('el texto de la nota bajo el medidor general', () => {
+        expect(NOTA_PONDERADO).toBe('El porcentaje pondera cada requisito por su peso.');
+    });
+
+    it('sí si algún requisito que cuenta pesa distinto de 1', () => {
+        expect(pondera([fila(1, null, { peso: 1 }), fila(2, null, { peso: 3 })])).toBe(true);
+    });
+
+    it('no si todos los que cuentan pesan 1, aunque uno que no cuenta pese más', () => {
+        expect(pondera([fila(1, null, { peso: 1 }), fila(2, null, { peso: 3, cuenta: false })])).toBe(false);
+    });
+
+    it('no en viabilización (sus filas no traen peso) ni sin filas', () => {
+        expect(pondera([fila(1, null), fila(2, null)])).toBe(false);
+        expect(pondera([])).toBe(false);
+        expect(pondera(undefined)).toBe(false);
     });
 });

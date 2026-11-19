@@ -23,6 +23,7 @@ import {
 import {
     agruparPorEtapa, formularioPropioContratacion, opcionesEtapaPropio, propioCompleto,
 } from '../utils/expedienteContratacion';
+import { etiquetaPeso } from '../utils/plantillasChecklist';
 import ExpedienteHistorialRequisito from './ExpedienteHistorialRequisito';
 
 const TIPOS_SOPORTE = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx';
@@ -195,6 +196,8 @@ const ItemRequisito = ({
                             <span className={`exv-estado exv-estado-${fila.estado}`}>{ETIQUETA_ESTADO_REQUISITO[fila.estado]}</span>
                         )}
                         {fila.caracter !== 'obligatorio' && <span className="exv-estado">{fila.caracter === 'opcional' ? 'Opcional' : 'Condicionado'}</span>}
+                        {/* Solo las filas de contratación traen peso; las de viabilización no muestran nada. */}
+                        {etiquetaPeso(fila.peso) && <span className="exv-estado">{etiquetaPeso(fila.peso)}</span>}
                     </div>
                     <div className="exv-item-texto">
                         {contenido.texto}

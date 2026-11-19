@@ -173,9 +173,31 @@ const PERSONAS = [
 // En el formulario, la persona que el requisito ya tenía: conserva su opción aunque esté inactiva.
 const personaDelFormulario = (campoObjeto) => campoObjeto.replace('responsable_', 'persona_');
 
+/** Límites del peso de un requisito de contratación (CatalogoRequisitosController::reglasRequisito). */
+export const PESO_MINIMO = 1;
+export const PESO_MAXIMO = 100;
+
+/** "Peso 3" para la lista y el expediente; null si pesa 1 (o no trae peso): todos valen lo mismo. */
+export const etiquetaPeso = (peso) => {
+    if (peso === null || peso === undefined || Number(peso) === 1) return null;
+    return `Peso ${peso}`;
+};
+
+/**
+ * El peso que se envía: un entero; vacío, el de por defecto (1). Lo que no es un número entero
+ * viaja tal cual para que el servidor lo objete bajo el campo, sin redondearlo en silencio.
+ */
+const pesoParaEnviar = (valor) => {
+    const texto = String(valor ?? '').trim();
+    if (texto === '') return PESO_MINIMO;
+    const numero = Number(texto);
+    return Number.isNaN(numero) ? texto : numero;
+};
+
 /**
  * Un requisito nuevo. En una plantilla de contratación (`uso`) lleva además su etapa: el id del
- * select y, en `etapa_actual`, la que el requisito ya tiene (conserva su opción aunque esté inactiva).
+ * select y, en `etapa_actual`, la que el requisito ya tiene (conserva su opción aunque esté inactiva);
+ * y su peso, como texto del input (1 por defecto).
  */
 export const requisitoVacio = (motor, uso = USO_VIABILIZACION) => ({
     ...Object.fromEntries(CAMPOS_TEXTO.map((c) => [c, ''])),
@@ -188,7 +210,7 @@ export const requisitoVacio = (motor, uso = USO_VIABILIZACION) => ({
     sector_id: '',
     tipo_id: '',
     ...(motor === 'sgr' ? { seccion: 'A', fuente: 'a12', condicion: 'siempre' } : {}),
-    ...(uso === USO_CONTRATACION ? { etapa_id: '', etapa_actual: null } : {}),
+    ...(uso === USO_CONTRATACION ? { etapa_id: '', etapa_actual: null, peso: String(PESO_MINIMO) } : {}),
 });
 
 /** La etapa que el requisito ya tiene, para el formulario; sin el objeto de la API, solo su id. */
@@ -220,6 +242,7 @@ export const formularioRequisito = (requisito, motor, uso = USO_VIABILIZACION) =
         ...(uso === USO_CONTRATACION ? {
             etapa_id: requisito.etapa_id === null || requisito.etapa_id === undefined ? '' : String(requisito.etapa_id),
             etapa_actual: etapaActual(requisito),
+            peso: String(requisito.peso ?? base.peso),
         } : {}),
     };
 };
@@ -253,8 +276,8 @@ export const opcionesResponsable = (responsables, actual = {}) => {
 /**
  * Lo que espera la API según el motor. Los textos vacíos viajan como null. Con `conPersonas`
  * (el catálogo de responsables cargó y se eligieron en selects) van los ids de las personas; sin
- * él solo viaja el cargo escrito y las personas del requisito no cambian. La etapa solo viaja en
- * una plantilla de contratación (`uso`): la de viabilización la rechaza.
+ * él solo viaja el cargo escrito y las personas del requisito no cambian. La etapa y el peso solo
+ * viajan en una plantilla de contratación (`uso`): la de viabilización los rechaza.
  */
 export const datosRequisito = (formulario, motor, conPersonas = false, uso = USO_VIABILIZACION) => {
     const texto = (campo) => (String(formulario[campo] ?? '').trim() || null);
@@ -279,7 +302,7 @@ export const datosRequisito = (formulario, motor, conPersonas = false, uso = USO
         activo: formulario.activo,
         codigo_comun: texto('codigo_comun'),
         ...personas,
-        ...(uso === USO_CONTRATACION ? { etapa_id: Number(formulario.etapa_id) || null } : {}),
+        ...(uso === USO_CONTRATACION ? { etapa_id: Number(formulario.etapa_id) || null, peso: pesoParaEnviar(formulario.peso) } : {}),
     };
 
     if (motor === 'sgr') {
@@ -504,6 +527,18 @@ export const erroresDeEtapa = (error) => {
         return { etapa, mensaje: datos.mensaje ?? 'El requisito no es válido.', otros: lista.filter((e) => !etapa.includes(e)) };
     }
     return { etapa, mensaje: 'El requisito no es válido.', otros: Object.values(resto).flat().map(String) };
+};
+
+/**
+ * Como erroresDeEtapa, pero reparte también los del peso (`errors.peso`), para mostrarlos bajo su
+ * input: { etapa, peso, mensaje, otros }. Los dos campos se quitan de la lista del aviso. null si no es 422.
+ */
+export const erroresDelRequisito = (error) => {
+    const base = erroresDeEtapa(error);
+    if (!base) return null;
+    const errores = error.response.data?.errors;
+    const peso = [].concat((errores && typeof errores === 'object' ? errores.peso : null) ?? []).map(String);
+    return { etapa: base.etapa, peso, mensaje: base.mensaje, otros: base.otros.filter((e) => !peso.includes(e)) };
 };
 
 /** El mensaje y la lista de un 422 de reglas de negocio ({ mensaje, errores }); null si el error es de otra clase. */

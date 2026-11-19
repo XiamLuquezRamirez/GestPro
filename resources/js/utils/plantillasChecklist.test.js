@@ -49,6 +49,10 @@ import {
     agruparPorEtapa,
     compararEtapas,
     erroresDeEtapa,
+    erroresDelRequisito,
+    etiquetaPeso,
+    PESO_MAXIMO,
+    PESO_MINIMO,
     mismaEtapa,
     nombreEtapa,
     ordenTrasMoverEnEtapa,
@@ -653,6 +657,51 @@ describe('etapa del requisito de contratación', () => {
     });
 });
 
+describe('peso del requisito de contratación', () => {
+    it('los límites coinciden con CatalogoRequisitosController (1 a 100)', () => {
+        expect([PESO_MINIMO, PESO_MAXIMO]).toEqual([1, 100]);
+    });
+
+    it('un requisito nuevo de contratación pesa 1; uno de viabilización no lleva peso', () => {
+        expect(requisitoVacio('simple', USO_CONTRATACION)).toMatchObject({ peso: '1' });
+        expect(requisitoVacio('simple')).not.toHaveProperty('peso');
+        expect(requisitoVacio('sgr', USO_VIABILIZACION)).not.toHaveProperty('peso');
+    });
+
+    it('lee el peso del requisito; sin él, 1', () => {
+        expect(formularioRequisito({ texto: 'x', etapa_id: 11, peso: 3 }, 'simple', USO_CONTRATACION)).toMatchObject({ peso: '3' });
+        expect(formularioRequisito({ texto: 'x', etapa_id: 11 }, 'simple', USO_CONTRATACION)).toMatchObject({ peso: '1' });
+        expect(formularioRequisito({ texto: 'x', etapa_id: 11, peso: null }, 'simple', USO_CONTRATACION)).toMatchObject({ peso: '1' });
+        expect(formularioRequisito({ texto: 'x', peso: 3 }, 'simple')).not.toHaveProperty('peso');
+    });
+
+    it('envía el peso como entero solo en contratación', () => {
+        const formulario = formularioRequisito({ texto: 'Estudios previos', etapa_id: 11, peso: 3 }, 'simple', USO_CONTRATACION);
+        expect(datosRequisito(formulario, 'simple', false, USO_CONTRATACION).peso).toBe(3);
+        expect(datosRequisito({ ...formulario, peso: ' 7 ' }, 'simple', false, USO_CONTRATACION).peso).toBe(7);
+        expect(datosRequisito({ ...formulario, peso: 12 }, 'sgr', true, USO_CONTRATACION).peso).toBe(12);
+        // Vacío vuelve al valor por defecto.
+        expect(datosRequisito({ ...formulario, peso: '' }, 'simple', false, USO_CONTRATACION).peso).toBe(1);
+        expect(datosRequisito(formulario, 'simple')).not.toHaveProperty('peso');
+        expect(datosRequisito(formulario, 'sgr', true, USO_VIABILIZACION)).not.toHaveProperty('peso');
+    });
+
+    it('no redondea un peso que no es entero: lo envía para que el servidor lo objete', () => {
+        const formulario = requisitoVacio('simple', USO_CONTRATACION);
+        expect(datosRequisito({ ...formulario, peso: '2.5' }, 'simple', false, USO_CONTRATACION).peso).toBe(2.5);
+        expect(datosRequisito({ ...formulario, peso: 'abc' }, 'simple', false, USO_CONTRATACION).peso).toBe('abc');
+    });
+
+    it('la lista dice "Peso N" solo si N no es 1', () => {
+        expect(etiquetaPeso(3)).toBe('Peso 3');
+        expect(etiquetaPeso('100')).toBe('Peso 100');
+        expect(etiquetaPeso(1)).toBeNull();
+        expect(etiquetaPeso('1')).toBeNull();
+        expect(etiquetaPeso(undefined)).toBeNull();
+        expect(etiquetaPeso(null)).toBeNull();
+    });
+});
+
 describe('requisitos por etapa', () => {
     const planeacion = { id: 10, nombre: 'Planeación', orden: 1, activo: true };
     const seleccion = { id: 12, nombre: 'Selección', orden: 3, activo: false };
@@ -788,6 +837,53 @@ describe('errores de la etapa al guardar un requisito', () => {
             .toEqual({ etapa: [], mensaje: 'El requisito no pertenece a esta versión.', otros: [] });
         expect(erroresDeEtapa(respuesta(500, {}))).toBeNull();
         expect(erroresDeEtapa(new Error('x'))).toBeNull();
+    });
+});
+
+describe('errores de la etapa y del peso al guardar un requisito', () => {
+    const respuesta = (status, data) => ({ response: { status, data } });
+    const sinPeso = 'Los requisitos de una plantilla de viabilización no llevan peso.';
+
+    it('de una regla de negocio reparte etapa y peso, cada uno en su campo, y deja el resto para el aviso', () => {
+        const error = respuesta(422, {
+            mensaje: 'El requisito no es válido.',
+            errores: ['Elige la etapa de contratación del requisito.', sinPeso, 'Un requisito condicionado necesita describir cuándo aplica.'],
+            errors: { etapa_id: ['Elige la etapa de contratación del requisito.'], peso: [sinPeso] },
+        });
+        expect(erroresDelRequisito(error)).toEqual({
+            etapa: ['Elige la etapa de contratación del requisito.'],
+            peso: [sinPeso],
+            mensaje: 'El requisito no es válido.',
+            otros: ['Un requisito condicionado necesita describir cuándo aplica.'],
+        });
+    });
+
+    it('separa el peso de la validación de Laravel', () => {
+        const error = respuesta(422, {
+            message: 'Revisa el peso: el máximo es 100.',
+            errors: { peso: ['Revisa el peso: el máximo es 100.'], texto: ['Escribe el nombre del requisito.'] },
+        });
+        expect(erroresDelRequisito(error)).toEqual({
+            etapa: [],
+            peso: ['Revisa el peso: el máximo es 100.'],
+            mensaje: 'El requisito no es válido.',
+            otros: ['Escribe el nombre del requisito.'],
+        });
+    });
+
+    it('sin errores de campo todo queda para el aviso; otro estado no se reparte', () => {
+        expect(erroresDelRequisito(respuesta(422, { mensaje: 'El requisito no pertenece a esta versión.' })))
+            .toEqual({ etapa: [], peso: [], mensaje: 'El requisito no pertenece a esta versión.', otros: [] });
+        expect(erroresDelRequisito(respuesta(500, {}))).toBeNull();
+        expect(erroresDelRequisito(new Error('x'))).toBeNull();
+    });
+
+    it('erroresDeEtapa no cambia: los del peso quedan para el aviso', () => {
+        const error = respuesta(422, {
+            message: 'Revisa el peso: el mínimo es 1.',
+            errors: { peso: ['Revisa el peso: el mínimo es 1.'] },
+        });
+        expect(erroresDeEtapa(error)).toEqual({ etapa: [], mensaje: 'El requisito no es válido.', otros: ['Revisa el peso: el mínimo es 1.'] });
     });
 });
 

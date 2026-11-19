@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { faArrowLeft, faArrowsRotate, faClockRotateLeft, faLock, faPlus } from '@fortawesome/free-solid-svg-icons';
@@ -12,7 +12,7 @@ import {
 } from '../utils/expedienteChecklist';
 import {
     alternarPlantillaNueva, avanceEtapas, avisoIncompatiblesProceso, conAvance, datosPropioContratacion, errorDeProceso,
-    esIdProceso, htmlPendientesCierre, seleccionInicial, textoEstadoExpediente, textoSinPlantillas,
+    esIdProceso, htmlPendientesCierre, NOTA_PONDERADO, pondera, seleccionInicial, textoEstadoExpediente, textoSinPlantillas,
 } from '../utils/expedienteContratacion';
 import { etiquetaEstadoProceso, numeroProceso, tonoEstado } from '../utils/contratacion';
 import { RUTA_PLANTILLAS, rutaFichaProyecto } from '../utils/navegacion';
@@ -27,8 +27,13 @@ import '../../css/ExpedienteContratacion.css';
 const ROLES_EDICION = ['Administrador', 'Gestor'];
 const ID_HISTORIAL = 'exc-historial-expediente';
 
-/** Barra de avance con sus cifras: "3 / 8 requisitos cumplidos" y el porcentaje, por separado. */
-const Medidor = ({ titulo, cumplidos, total, porcentaje, nota }) => (
+/**
+ * Barra de avance con sus cifras: "3 / 8 requisitos cumplidos" y el porcentaje, por separado.
+ * `pie`, si lo hay, va bajo la barra (cómo se calcula el porcentaje).
+ */
+const Medidor = ({ titulo, cumplidos, total, porcentaje, nota, pie }) => {
+    const pieId = useId();
+    return (
     <div className="exv-medidor">
         <div className="exv-medidor-top">
             <b>
@@ -45,11 +50,14 @@ const Medidor = ({ titulo, cumplidos, total, porcentaje, nota }) => (
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={porcentaje}
+            aria-describedby={pie ? pieId : undefined}
         >
             <div className={`exv-relleno${porcentaje === 100 && total > 0 ? ' completo' : ''}`} style={{ width: `${porcentaje}%` }} />
         </div>
+        {pie && <small id={pieId} className="exc-medidor-pie">{pie}</small>}
     </div>
-);
+    );
+};
 
 /** Página con el botón de volver: la usan la carga, los errores y el expediente. */
 const Pagina = ({ children }) => {
@@ -624,7 +632,13 @@ const Expediente = ({ procesoId, user }) => {
             ) : (
                 <main className="exv-tablero">
                     <div className="exv-barra">
-                        <Medidor cumplidos={cumplidos} total={total} porcentaje={porcentaje} nota={avisoOpcionales} />
+                        <Medidor
+                            cumplidos={cumplidos}
+                            total={total}
+                            porcentaje={porcentaje}
+                            nota={avisoOpcionales}
+                            pie={pondera(expediente.requisitos) ? NOTA_PONDERADO : null}
+                        />
                         <div className="exv-barra-acciones">
                             <button
                                 type="button"
