@@ -1,0 +1,29 @@
+/* Expediente de contratación de un proceso (/contratacion/:procesoId). Usa los estilos del
+   expediente de viabilización (exv-*); aquí solo lo propio: avance por etapa y elegir plantillas. */
+
+.exc-volver { margin-bottom: 1rem; }
+
+.exc-etapas {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+    gap: .75rem 1.5rem;
+    margin: 0 0 1rem;
+    padding: .9rem 1rem;
+    background: var(--exv-tarjeta);
+    border: 1px solid var(--exv-linea-suave);
+    border-radius: var(--exv-radio);
+}
+.exc-etapas .exv-medidor-top b { font-size: .88rem; }
+
+.exc-crear { text-align: left; }
+.exc-plantillas {
+    display: grid;
+    gap: .5rem;
+    margin: 0 0 1rem;
+    padding: 0;
+    border: 0;
+}
+.exc-plantillas legend { font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--exv-tinta-tenue); margin-bottom: .4rem; }
+.exc-plantillas label { display: flex; gap: .6rem; align-items: flex-start; cursor: pointer; font-size: .9rem; }
+.exc-plantillas label small { display: block; color: var(--exv-tinta-suave); }
+.exc-principal { margin-left: .5rem; }

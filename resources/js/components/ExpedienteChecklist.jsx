@@ -20,6 +20,9 @@ import {
     textoAvisosDuplicados,
     textoPorDefinir,
 } from '../utils/expedienteChecklist';
+import {
+    agruparPorEtapa, formularioPropioContratacion, opcionesEtapaPropio, propioCompleto,
+} from '../utils/expedienteContratacion';
 import ExpedienteHistorialRequisito from './ExpedienteHistorialRequisito';
 
 const TIPOS_SOPORTE = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx';
@@ -53,9 +56,13 @@ export const AvisosDuplicados = ({ avisos, total }) => {
     );
 };
 
-/** Formulario de un requisito propio, para agregarlo o editarlo. */
-const FormularioPropio = ({ fila, ocupado, onGuardar, onCancelar }) => {
-    const [formulario, setFormulario] = useState(() => formularioPropio(fila));
+/**
+ * Formulario de un requisito propio, para agregarlo o editarlo. Con `conEtapa` (expediente de
+ * contratación) pide además la etapa, obligatoria, entre `etapas` (GET /etapasContratacion, o
+ * null si no llegó) y la que el propio ya tiene. Sin `conEtapa` es el de siempre.
+ */
+const FormularioPropio = ({ fila, ocupado, onGuardar, onCancelar, conEtapa = false, etapas = null }) => {
+    const [formulario, setFormulario] = useState(() => (conEtapa ? formularioPropioContratacion(fila) : formularioPropio(fila)));
     const titulo = useRef(null);
     const prefijo = `exv-propio-${fila?.id ?? 'nuevo'}`;
     const cambiar = (campo, valor) => setFormulario((f) => ({ ...f, [campo]: valor }));
@@ -97,6 +104,20 @@ const FormularioPropio = ({ fila, ocupado, onGuardar, onCancelar }) => {
                     onChange={(e) => cambiar('descripcion', e.target.value)}
                 />
             </label>
+            {conEtapa && (
+                <label className="exv-campo" htmlFor={`${prefijo}-etapa`}>
+                    <span>Etapa</span>
+                    <select
+                        id={`${prefijo}-etapa`}
+                        required
+                        value={formulario.etapa_propia_id}
+                        onChange={(e) => cambiar('etapa_propia_id', e.target.value)}
+                    >
+                        <option value="">Elige la etapa</option>
+                        {opcionesEtapaPropio(etapas, fila).map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+                    </select>
+                </label>
+            )}
             <label className="exv-campo" htmlFor={`${prefijo}-categoria`}>
                 <span>Categoría</span>
                 <select id={`${prefijo}-categoria`} value={formulario.categoria} onChange={(e) => cambiar('categoria', e.target.value)}>
@@ -119,12 +140,18 @@ const FormularioPropio = ({ fila, ocupado, onGuardar, onCancelar }) => {
                     </label>
                 ))}
                 <p id={`${prefijo}-ayuda`} className="exv-campo-ayuda">
-                    Un requisito opcional se puede marcar, pero no cuenta en el avance ni bloquea la radicación.
+                    {conEtapa
+                        ? 'Un requisito opcional se puede marcar, pero no cuenta en el avance.'
+                        : 'Un requisito opcional se puede marcar, pero no cuenta en el avance ni bloquea la radicación.'}
                 </p>
             </fieldset>
             <div className="exv-propio-acciones">
                 <button type="button" className="exv-btn" onClick={onCancelar} disabled={ocupado}>Cancelar</button>
-                <button type="submit" className="exv-btn exv-btn-primario" disabled={ocupado || !formulario.titulo.trim()}>
+                <button
+                    type="submit"
+                    className="exv-btn exv-btn-primario"
+                    disabled={ocupado || !(conEtapa ? propioCompleto(formulario) : formulario.titulo.trim())}
+                >
                     {fila ? 'Guardar cambios' : 'Agregar requisito'}
                 </button>
             </div>
@@ -428,16 +455,14 @@ const BloqueSimple = ({ bloque, renderFila }) => {
     );
 };
 
-const ExpedienteChecklist = ({ expediente, editable, ocupado, onGuardarPropio, onEliminarPropio, ...acciones }) => {
-    const bloques = useMemo(() => agruparChecklist(expediente.requisitos), [expediente.requisitos]);
+/**
+ * El formulario de propios del checklist: cuál está abierto (null, 'nuevo' o el id de la fila
+ * propia que se edita), y el foco de vuelta al botón que lo abrió al cerrarlo.
+ */
+const useFormularioPropios = (expediente, onGuardarPropio) => {
     const [formulario, setFormulario] = useState(null); // null, 'nuevo' o el id de la fila propia que se edita
     const contenedor = useRef(null);
     const retorno = useRef(null); // data-foco del botón que abrió el formulario
-    const sectores = expediente.configuracion.sectores;
-    const deCatalogo = bloques.filter((b) => b.tipo !== 'propios');
-    const propios = bloques.find((b) => b.tipo === 'propios');
-    // Con una sola plantilla el checklist se ve como siempre; con varias, cada una lleva su nombre.
-    const conCabecera = expediente.plantillas.length > 1 || deCatalogo.length > 1;
 
     // Otro expediente: el formulario abierto era del anterior. Se cierra sin devolver el foco.
     useEffect(() => {
@@ -470,28 +495,48 @@ const ExpedienteChecklist = ({ expediente, editable, ocupado, onGuardarPropio, o
         if (await onGuardarPropio(fila, datos)) setFormulario(null);
     };
 
-    const renderFila = (fila) => (
-        formulario === fila.id ? (
-            <FormularioPropio
-                key={fila.id}
-                fila={fila}
-                ocupado={ocupado}
-                onGuardar={(datos) => guardar(fila, datos)}
-                onCancelar={() => setFormulario(null)}
-            />
-        ) : (
-            <ItemRequisito
-                key={fila.id}
-                fila={fila}
-                editable={editable}
-                ocupado={ocupado}
-                formularioAbierto={formulario !== null}
-                onEditarPropio={abrir}
-                onEliminarPropio={onEliminarPropio}
-                {...acciones}
-            />
-        )
-    );
+    const cerrar = () => setFormulario(null);
+
+    return { formulario, contenedor, abrir, guardar, cerrar };
+};
+
+/** Dibuja una fila del checklist, o el formulario del propio si es el que se edita. */
+const dibujarFila = ({ formulario, abrir, guardar, cerrar }, { editable, ocupado, onEliminarPropio, acciones, conEtapa, etapas }) => (fila) => (
+    formulario === fila.id ? (
+        <FormularioPropio
+            key={fila.id}
+            fila={fila}
+            ocupado={ocupado}
+            conEtapa={conEtapa}
+            etapas={etapas}
+            onGuardar={(datos) => guardar(fila, datos)}
+            onCancelar={cerrar}
+        />
+    ) : (
+        <ItemRequisito
+            key={fila.id}
+            fila={fila}
+            editable={editable}
+            ocupado={ocupado}
+            formularioAbierto={formulario !== null}
+            onEditarPropio={abrir}
+            onEliminarPropio={onEliminarPropio}
+            {...acciones}
+        />
+    )
+);
+
+const ExpedienteChecklist = ({ expediente, editable, ocupado, onGuardarPropio, onEliminarPropio, ...acciones }) => {
+    const bloques = useMemo(() => agruparChecklist(expediente.requisitos), [expediente.requisitos]);
+    const propiosAbiertos = useFormularioPropios(expediente, onGuardarPropio);
+    const { formulario, contenedor, abrir, guardar, cerrar } = propiosAbiertos;
+    const sectores = expediente.configuracion.sectores;
+    const deCatalogo = bloques.filter((b) => b.tipo !== 'propios');
+    const propios = bloques.find((b) => b.tipo === 'propios');
+    // Con una sola plantilla el checklist se ve como siempre; con varias, cada una lleva su nombre.
+    const conCabecera = expediente.plantillas.length > 1 || deCatalogo.length > 1;
+
+    const renderFila = dibujarFila(propiosAbiertos, { editable, ocupado, onEliminarPropio, acciones });
 
     return (
         <div ref={contenedor}>
@@ -534,7 +579,7 @@ const ExpedienteChecklist = ({ expediente, editable, ocupado, onGuardarPropio, o
                         <FormularioPropio
                             ocupado={ocupado}
                             onGuardar={(datos) => guardar(null, datos)}
-                            onCancelar={() => setFormulario(null)}
+                            onCancelar={cerrar}
                         />
                     ) : (
                         <button
@@ -547,6 +592,71 @@ const ExpedienteChecklist = ({ expediente, editable, ocupado, onGuardarPropio, o
                             <FontAwesomeIcon icon={faPlus} /> Agregar requisito propio
                         </button>
                     ))}
+                </section>
+            )}
+        </div>
+    );
+};
+
+/**
+ * El checklist de un expediente de contratación: por etapa, en el orden del catálogo y "Sin etapa"
+ * al final (agruparPorEtapa). Cada propio va en su etapa, que es obligatoria; al final, quien
+ * edita agrega uno nuevo eligiendo la etapa entre `etapas` (GET /etapasContratacion).
+ */
+export const ChecklistPorEtapa = ({ expediente, editable, ocupado, etapas, onGuardarPropio, onEliminarPropio, ...acciones }) => {
+    const grupos = useMemo(() => agruparPorEtapa(expediente.requisitos), [expediente.requisitos]);
+    const propiosAbiertos = useFormularioPropios(expediente, onGuardarPropio);
+    const { formulario, contenedor, abrir, guardar, cerrar } = propiosAbiertos;
+    const renderFila = dibujarFila(propiosAbiertos, { editable, ocupado, onEliminarPropio, acciones, conEtapa: true, etapas });
+
+    return (
+        <div ref={contenedor}>
+            <AvisosDuplicados avisos={expediente.avisos_duplicados} total={expediente.avisos_duplicados_total} />
+
+            {grupos.length === 0 && (
+                <div className="exv-vacio">
+                    <b>Sin requisitos que mostrar</b>
+                    <p>Las plantillas del expediente no tienen requisitos activos.{editable ? ' Puedes agregar requisitos propios.' : ''}</p>
+                </div>
+            )}
+
+            {grupos.map((grupo) => (
+                <section key={grupo.clave} className="exv-seccion exv-bloque" aria-labelledby={`exv-${grupo.clave}-titulo`}>
+                    <div className="exv-plantilla-titulo">
+                        <h3 id={`exv-${grupo.clave}-titulo`}>{grupo.titulo}</h3>
+                        <span className="exv-cita">{grupo.cumplidos}/{grupo.total}</span>
+                    </div>
+                    {grupo.filas.map(renderFila)}
+                </section>
+            ))}
+
+            {editable && (
+                <section className="exv-seccion exv-bloque exv-propios exv-no-imprimir" aria-labelledby="exv-propios-titulo">
+                    <div className="exv-plantilla-titulo">
+                        <h3 id="exv-propios-titulo">Requisitos propios del proceso</h3>
+                    </div>
+                    <p className="exv-propios-vacio">
+                        Agrega lo que el proceso debe cumplir y no trae ninguna plantilla; queda en la etapa que elijas. No cambia ninguna plantilla.
+                    </p>
+                    {formulario === 'nuevo' ? (
+                        <FormularioPropio
+                            ocupado={ocupado}
+                            conEtapa
+                            etapas={etapas}
+                            onGuardar={(datos) => guardar(null, datos)}
+                            onCancelar={cerrar}
+                        />
+                    ) : (
+                        <button
+                            type="button"
+                            className="exv-btn"
+                            data-foco="agregar-propio"
+                            disabled={ocupado || formulario !== null}
+                            onClick={() => abrir(null)}
+                        >
+                            <FontAwesomeIcon icon={faPlus} /> Agregar requisito propio
+                        </button>
+                    )}
                 </section>
             )}
         </div>

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { DESTINOS, GRUPO, RUTA_CONTRATOS, RUTA_PLANTILLAS, SECCIONES_PARAMETROS, buscarEnPaleta, destinoActivo, destinosPara, puedeVer, rutaFichaProyecto, seccionDesdeSlug, tituloDeRuta } from './navegacion';
+import { DESTINOS, GRUPO, RUTA_CONTRATOS, RUTA_PLANTILLAS, SECCIONES_PARAMETROS, buscarEnPaleta, destinoActivo, destinosPara, puedeVer, rutaExpedienteContratacion, rutaFichaProyecto, seccionDesdeSlug, tituloDeRuta } from './navegacion';
 import { ICONOS } from './iconosNavegacion';
 
 const proyectos = [
@@ -203,6 +203,19 @@ describe('destinoActivo', () => {
         // GET /proyectos es de la API: el SPA no tiene /proyectos sin id.
         expect(destinoActivo('/proyectos', '')).toBeNull();
         expect(destinoActivo('/proyectosx/4', '')).toBeNull();
+    });
+
+    it('el expediente de contratación de un proceso pertenece a Proyectos', () => {
+        expect(destinoActivo('/contratacion/9', '')).toBe('proyectos');
+        expect(tituloDeRuta('/contratacion/9', '')).toBe('Proyectos');
+        expect(destinoActivo('/contratacion', '')).toBeNull();
+        expect(destinoActivo('/contratacionx/9', '')).toBeNull();
+    });
+});
+
+describe('rutaExpedienteContratacion', () => {
+    it('el expediente del proceso, siempre con id', () => {
+        expect(rutaExpedienteContratacion(9)).toBe('/contratacion/9');
     });
 });
 

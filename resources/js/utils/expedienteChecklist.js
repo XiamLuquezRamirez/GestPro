@@ -111,6 +111,7 @@ const EVENTOS = {
     configuracion_confirmada: 'Confirmó la configuración',
     configuracion_cambiada: 'Cambió la configuración',
     expediente_radicado: 'Radicó el expediente',
+    expediente_cerrado: 'Cerró el expediente',
     version_aplicada: 'Aplicó una versión nueva de una plantilla',
 };
 

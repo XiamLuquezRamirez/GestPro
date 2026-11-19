@@ -37,13 +37,14 @@ final class ExpedientesContratacion
     }
 
     /**
-     * Lo que se ofrece para crear el expediente del proceso.
+     * Lo que se ofrece para crear el expediente del proceso, con lo que la pantalla del expediente
+     * muestra del proceso cuando todavía no lo tiene (código, objeto, estado y proyecto).
      *
      * @return array{proceso: array, expediente_id: ?int, plantillas: list<array>}
      */
     public function disponibles(ProcesoLicitacion $proceso): array
     {
-        $proceso->loadMissing(['modalidadRel:id,nombre', 'fuente:id,nombre', 'proyectoRel:id,sector', 'proyectoRel.sectorRel:id,nombre']);
+        $proceso->loadMissing(['modalidadRel:id,nombre', 'fuente:id,nombre', 'proyectoRel:id,nombre,sector', 'proyectoRel.sectorRel:id,nombre']);
         $sector = $proceso->proyectoRel?->sectorRel;
         $opcion = fn ($fila) => $fila ? ['id' => $fila->id, 'nombre' => $fila->nombre] : null;
 
@@ -57,6 +58,10 @@ final class ExpedientesContratacion
         return [
             'proceso' => [
                 'id' => $proceso->id,
+                'codigo_proceso' => $proceso->codigo_proceso,
+                'objeto' => $proceso->objeto,
+                'estado' => $proceso->estado,
+                'proyecto' => $opcion($proceso->proyectoRel),
                 'modalidad' => $opcion($proceso->modalidadRel),
                 'fuente' => $opcion($proceso->fuente),
                 'sector' => $opcion($sector),

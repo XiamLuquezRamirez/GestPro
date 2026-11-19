@@ -200,7 +200,7 @@ class ExpedienteProcesoApiTest extends TestCase
     public function test_la_respuesta_describe_el_proceso_y_cada_plantilla(): void
     {
         $plantilla = $this->plantilla('Licitación pública', ['todas_fuentes' => false, 'fuente_ids' => [$this->sgr]]);
-        $proceso = $this->proceso(['fuente_id' => $this->sgr]);
+        $proceso = $this->proceso(['fuente_id' => $this->sgr, 'codigo_proceso' => 'LP-001-2026']);
         $version = $plantilla->versionVigente();
 
         $this->como(Rol::Consulta)->getJson("/GestPro/procesos/{$proceso->id}/plantillas-compatibles")
@@ -208,6 +208,10 @@ class ExpedienteProcesoApiTest extends TestCase
             ->assertExactJson([
                 'proceso' => [
                     'id' => $proceso->id,
+                    'codigo_proceso' => 'LP-001-2026',
+                    'objeto' => 'Construcción del acueducto',
+                    'estado' => 'preparacion',
+                    'proyecto' => ['id' => $this->proyecto->id, 'nombre' => $this->proyecto->nombre],
                     'modalidad' => ['id' => $this->modalidad(), 'nombre' => 'Licitación pública'],
                     'fuente' => ['id' => $this->sgr, 'nombre' => FuenteFinanciacion::find($this->sgr)->nombre],
                     'sector' => ['id' => $this->agua, 'nombre' => 'Agua Potable'],
