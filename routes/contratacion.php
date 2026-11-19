@@ -38,7 +38,7 @@ Route::get('/contratos/{contrato}/detalle', [ContratoController::class, 'detalle
 Route::get('/tablero/contratacion', [TableroContratacionController::class, 'index'])
     ->name('tablero.contratacion');
 
-// Procesos de contratación: Administrador o Gestor.
+// Procesos de contratación y cierre de contratos: Administrador o Gestor.
 Route::middleware('can:editar-datos')->group(function () {
     Route::post('/proyectos/{proyecto}/procesos', [ProcesoContratacionController::class, 'store'])
         ->name('procesos.store');
@@ -50,6 +50,14 @@ Route::middleware('can:editar-datos')->group(function () {
         ->name('procesos.destroy');
     Route::post('/procesos/{proceso}/expediente', [ProcesoContratacionController::class, 'crearExpediente'])
         ->name('procesos.expediente.store');
+
+    // Cierre del contrato (fase 7A): cada acción cambia el estado y guarda sus datos de una vez.
+    Route::post('/contratos/{contrato}/terminar', [ContratoController::class, 'terminar'])
+        ->whereNumber('contrato')
+        ->name('contratos.terminar');
+    Route::post('/contratos/{contrato}/liquidar', [ContratoController::class, 'liquidar'])
+        ->whereNumber('contrato')
+        ->name('contratos.liquidar');
 });
 
 // SECOP II (datos abiertos): consultar para importar contratos. Administrador o Gestor, con

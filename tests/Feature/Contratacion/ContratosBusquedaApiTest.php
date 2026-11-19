@@ -88,7 +88,9 @@ class ContratosBusquedaApiTest extends TestCase
         $fila = $filas[0];
         $this->assertSame(
             ['id', 'n_contrato', 'objeto', 'contratista', 'contratante', 'estado', 'valor', 'valor_inicial', 'fecha_inicio', 'fecha_fin',
-                'avance_fisico', 'avance_financiero', 'tipo_contrato', 'proyecto', 'proceso', 'aviso_proceso', 'secop_id_contrato', 'updated_at'],
+                // Fase 7A: datos de cierre y su aviso.
+                'fecha_terminacion_real', 'fecha_liquidacion', 'valor_liquidado',
+                'avance_fisico', 'avance_financiero', 'tipo_contrato', 'proyecto', 'proceso', 'aviso_proceso', 'aviso_cierre', 'secop_id_contrato', 'updated_at'],
             array_keys($fila),
         );
         $this->assertSame($c->id, $fila['id']);

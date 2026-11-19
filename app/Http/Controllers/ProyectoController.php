@@ -43,7 +43,9 @@ class ProyectoController extends Controller
                     'proyecto', 'proceso_licitacion', 'valor_inicial', 'fecha_fin_inicial',
                     'tipo_contrato_id', 'contratista_identificacion', 'fecha_suscripcion', 'supervisor', 'numero_rp', 'fecha_rp',
                     'fecha_acta_inicio', 'estado_original', 'usuario_creo_id', 'created_at', 'updated_at',
-                    'contratante_nit', 'secop_id_contrato', 'secop_proceso', 'url_secop', 'secop_consultado_at'
+                    'contratante_nit', 'secop_id_contrato', 'secop_proceso', 'url_secop', 'secop_consultado_at',
+                    // Fase 7A: los datos de cierre (con ellos, aviso_cierre).
+                    'fecha_terminacion_real', 'fecha_liquidacion', 'valor_liquidado'
                 )
                 ->where('proyecto', $proyecto->id)
                 ->get();
@@ -94,7 +96,10 @@ class ProyectoController extends Controller
         }
 
         // El proceso de cada contrato, resumido: una sola consulta para todos los proyectos.
-        app(ContratosService::class)->agregarProcesos($proyectos->flatMap(fn ($proyecto) => $proyecto->contratos));
+        $todos = $proyectos->flatMap(fn ($proyecto) => $proyecto->contratos);
+        app(ContratosService::class)->agregarProcesos($todos);
+        // Los datos de cierre que faltan, como en el detalle y en /listarContratos (sin consultas).
+        app(ContratosService::class)->agregarAvisoCierre($todos);
 
         return response()->json($proyectos);
     }
@@ -1126,8 +1131,9 @@ class ProyectoController extends Controller
     {
         $proyecto = $request->all();
         $contratos = DB::table('contratos')->where('proyecto', $proyecto['proyecto'])->get();
-        // Con lo que avisa el proceso de cada contrato, como en el detalle.
+        // Con lo que avisa el proceso de cada contrato y los datos de cierre que faltan, como en el detalle.
         app(ContratosService::class)->agregarProcesos($contratos, true);
+        app(ContratosService::class)->agregarAvisoCierre($contratos);
         app(ContratosService::class)->agregarDetalle($contratos);
 
         return response()->json($contratos);

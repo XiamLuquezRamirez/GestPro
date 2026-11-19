@@ -30,6 +30,7 @@ class Contrato extends Model
         'tipo_contrato_id', 'contratista_identificacion', 'fecha_suscripcion', 'supervisor',
         'numero_rp', 'fecha_rp', 'fecha_acta_inicio', 'usuario_creo_id',
         'contratante_nit', 'secop_id_contrato', 'secop_proceso', 'url_secop', 'secop_consultado_at',
+        'fecha_terminacion_real', 'fecha_liquidacion', 'valor_liquidado',
     ];
 
     protected $casts = [
@@ -42,6 +43,9 @@ class Contrato extends Model
         'fecha_rp' => 'date',
         'fecha_acta_inicio' => 'date',
         'secop_consultado_at' => 'datetime',
+        'fecha_terminacion_real' => 'date',
+        'fecha_liquidacion' => 'date',
+        'valor_liquidado' => 'decimal:2',
         'anticipo' => 'boolean',
         'tipo_contrato_id' => 'integer',
         'usuario_creo_id' => 'integer',

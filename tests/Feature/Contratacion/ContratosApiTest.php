@@ -205,6 +205,11 @@ class ContratosApiTest extends TestCase
                 'interventoria' => 'Interventoría Andina',
                 'estado' => 'celebrado',
                 'estado_original' => null,
+                // Fase 7A: datos de cierre (los escriben «Terminar» y «Liquidar», no el formulario).
+                'fecha_terminacion_real' => null,
+                'fecha_liquidacion' => null,
+                'valor_liquidado' => null,
+                'aviso_cierre' => null,
                 'anticipo' => true,
                 'porcentaje_anticipo' => 30,
                 'avance_fisico' => 10,

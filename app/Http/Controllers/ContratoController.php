@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Contrato;
+use App\Services\Contratacion\CierreContratos;
+use App\Services\Contratacion\CierreGuardado;
 use App\Services\Contratacion\ContratosService;
 use Closure;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -13,7 +15,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Guardar y eliminar contratos (can:editar-datos). Lectura: buscar y detalle (cualquier usuario
+ * Guardar, eliminar, terminar y liquidar contratos (can:editar-datos). Lectura: buscar y detalle (cualquier usuario
  * autenticado); los listados por proyecto siguen en ProyectoController (GET /proyectos y
  * GET /listarContratos).
  */
@@ -60,6 +62,13 @@ class ContratoController extends Controller
         'id.required' => 'Falta el contrato que quieres eliminar.',
         'q.max' => 'En la búsqueda caben hasta 100 caracteres.',
         'q.string' => 'Revisa la búsqueda: debe ser un texto.',
+        'fecha_terminacion_real.required' => 'Escribe la fecha de terminación real.',
+        'fecha_liquidacion.required' => 'Escribe la fecha de liquidación.',
+        'valor_liquidado.required' => 'Escribe el valor liquidado.',
+        'valor_liquidado.numeric' => 'Escribe el valor liquidado como un número.',
+        'valor_liquidado.min' => 'El valor liquidado no puede ser negativo.',
+        'valor_liquidado.decimal' => 'El valor liquidado admite hasta 2 decimales.',
+        'observacion.max' => 'La observación admite hasta 2000 caracteres.',
     ];
 
     private const ATRIBUTOS = [
@@ -99,10 +108,18 @@ class ContratoController extends Controller
         'anexos.*.nombreArchivo' => 'el nombre del archivo del anexo',
         'anexos.*.rutaArchivo' => 'el archivo del anexo',
         'anexos.*.fecha' => 'la fecha del anexo',
+        'fecha_terminacion_real' => 'la fecha de terminación real',
+        'fecha_liquidacion' => 'la fecha de liquidación',
+        'valor_liquidado' => 'el valor liquidado',
+        'observacion' => 'la observación',
     ];
 
     // Las columnas de valor son decimal(15, 2): 13 cifras enteras y 2 decimales.
     private const CIFRAS_ENTERAS = 13;
+
+    // El `actualizado` del contrato que tenía la pantalla: siempre presente; null solo para un
+    // contrato antiguo, sin fechas. Con otro valor, el servicio responde 409.
+    private const VERSION = ['present', 'nullable', 'bail', 'string', 'date'];
 
     // El ID de un contrato en SECOP II (sin distinguir mayúsculas) y su enlace.
     private const FORMATO_SECOP = '/^CO1\.PCCNTR\.\d+$/i';
@@ -113,8 +130,10 @@ class ContratoController extends Controller
     // al eliminar el contrato se borra el archivo.
     private const RUTA_ANEXO = '#^anexos_contratos/[^/\\\\]+$#';
 
-    public function __construct(private readonly ContratosService $contratos)
-    {
+    public function __construct(
+        private readonly ContratosService $contratos,
+        private readonly CierreContratos $cierre,
+    ) {
     }
 
     /**
@@ -220,6 +239,68 @@ class ContratoController extends Controller
         $this->contratos->eliminar($contrato, $request->user());
 
         return response()->json(['success' => true, 'mensaje' => 'Contrato eliminado.']);
+    }
+
+    /**
+     * Termina el contrato (o corrige su fecha de terminación): `fecha_terminacion_real`,
+     * `observacion` opcional y `actualizado`. Responde el contrato y los avisos.
+     */
+    public function terminar(Request $request, string $contrato): JsonResponse
+    {
+        $datos = $request->validate([
+            'fecha_terminacion_real' => ['bail', 'required', 'string', 'date_format:Y-m-d'],
+            'observacion' => ['sometimes', 'nullable', 'bail', 'string', 'max:2000'],
+            'actualizado' => self::VERSION,
+        ], self::MENSAJES, self::ATRIBUTOS);
+        $fila = Contrato::find($contrato);
+        if ($fila === null) {
+            return response()->json(['mensaje' => 'El contrato no existe.'], 404);
+        }
+
+        return $this->cerrado($this->cierre->terminar(
+            $fila, $datos['fecha_terminacion_real'], $datos['observacion'] ?? null, $datos['actualizado'], $request->user()
+        ));
+    }
+
+    /**
+     * Liquida el contrato (o completa y corrige su liquidación): `fecha_liquidacion`,
+     * `valor_liquidado`, `fecha_terminacion_real` si no la tiene o se corrige, `observacion`
+     * opcional y `actualizado`. Responde el contrato y los avisos.
+     */
+    public function liquidar(Request $request, string $contrato): JsonResponse
+    {
+        $cifras = fn (string $atributo, mixed $valor, Closure $falla) => strlen(ltrim(explode('.', ltrim((string) $valor, '+-'))[0], '0')) <= self::CIFRAS_ENTERAS
+            || $falla('El valor liquidado admite hasta ' . self::CIFRAS_ENTERAS . ' cifras enteras y 2 decimales.');
+        $datos = $request->validate([
+            'fecha_terminacion_real' => ['sometimes', 'nullable', 'bail', 'string', 'date_format:Y-m-d'],
+            'fecha_liquidacion' => ['bail', 'required', 'string', 'date_format:Y-m-d'],
+            'valor_liquidado' => ['bail', 'required', 'numeric', 'min:0', 'decimal:0,2', $cifras],
+            'observacion' => ['sometimes', 'nullable', 'bail', 'string', 'max:2000'],
+            'actualizado' => self::VERSION,
+        ], self::MENSAJES, self::ATRIBUTOS);
+        $fila = Contrato::find($contrato);
+        if ($fila === null) {
+            return response()->json(['mensaje' => 'El contrato no existe.'], 404);
+        }
+
+        return $this->cerrado($this->cierre->liquidar(
+            $fila,
+            $datos['fecha_terminacion_real'] ?? null,
+            $datos['fecha_liquidacion'],
+            (string) $datos['valor_liquidado'],
+            $datos['observacion'] ?? null,
+            $datos['actualizado'],
+            $request->user()
+        ));
+    }
+
+    private function cerrado(CierreGuardado $guardado): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'contrato' => $this->contratos->presentar($guardado->contrato),
+            'avisos' => $guardado->avisos,
+        ]);
     }
 
     /**

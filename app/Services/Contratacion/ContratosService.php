@@ -51,6 +51,13 @@ use Illuminate\Validation\ValidationException;
  * - La búsqueda, el detalle y el listado por proyecto traen `aviso_proceso`: lo que avisa el
  *   proceso del contrato (etapas vencidas, cierre vencido o sin actualización), o null si no
  *   tiene proceso o este no avisa nada (ExpedientesContratacion::resumenDeProcesos).
+ * - Al crear se admite cualquier estado (un contrato de SECOP II puede llegar ya liquidado). Al
+ *   editar, el estado no pasa a terminado ni a liquidado desde otro: eso lo hacen «Terminar» y
+ *   «Liquidar» (CierreContratos), con sus fechas y su valor. Salir de esos estados sí se permite.
+ *   El formulario no escribe los datos de cierre (fecha de terminación real, fecha de liquidación
+ *   y valor liquidado): se conservan.
+ * - presentar(), la búsqueda, el detalle y el listado por proyecto traen los datos de cierre y
+ *   `aviso_cierre` (CierreContratos::aviso), calculado con la fila, sin consultas.
  */
 final class ContratosService
 {
@@ -111,7 +118,14 @@ final class ContratosService
 
     public const FIN_ANTERIOR = 'La fecha de fin no puede ser anterior a la de inicio.';
 
+    public const INICIO_POSTERIOR_TERMINACION = 'La fecha de inicio no puede ser posterior a la de terminación real.';
+
     public const SIN_PROYECTO = 'El contrato debe seguir en un proyecto.';
+
+    public const CIERRE_POR_FORMULARIO = 'Para terminar o liquidar el contrato usa «Terminar» o «Liquidar».';
+
+    // Estados a los que solo se llega con su acción (CierreContratos), no con el formulario.
+    private const ESTADOS_DE_CIERRE = [Contrato::TERMINADO, Contrato::LIQUIDADO];
 
     private const CARPETA_ANEXOS = 'anexos_contratos';
 
@@ -170,6 +184,10 @@ final class ContratosService
             // Se decide con la fila bloqueada: el tipo, el proceso y las fechas que tiene ahora.
             $actual = $this->bloquear($contrato);
             $this->exigirVersion($actual, $actualizado, self::DESACTUALIZADO);
+            $nuevoEstado = $valores['estado'] ?? $actual->estado;
+            if ($nuevoEstado !== $actual->estado && in_array($nuevoEstado, self::ESTADOS_DE_CIERRE, true)) {
+                throw ValidationException::withMessages(['estado' => self::CIERRE_POR_FORMULARIO]);
+            }
             $this->exigirTipo($valores, $actual);
             [$valores] = $this->exigirVinculos($valores, $actual);
             // Sin proceso que lo dé, un proyecto null quitaría el que tiene.
@@ -177,7 +195,7 @@ final class ContratosService
                 throw ValidationException::withMessages(['proyecto' => self::SIN_PROYECTO]);
             }
             $antes = $this->valoresDe($actual);
-            $this->exigirFechas([...$antes, ...$valores]);
+            $this->exigirFechas([...$antes, ...$valores], $actual->fecha_terminacion_real?->format('Y-m-d'));
 
             $cambios = array_filter($valores, fn ($valor, string $campo) => $valor !== $antes[$campo], ARRAY_FILTER_USE_BOTH);
             $anexosAntes = $this->anexosDe($actual);
@@ -231,6 +249,10 @@ final class ContratosService
                 ...$this->valoresDe($actual),
                 'valor' => $actual->valor,
                 'fecha_fin' => $actual->fecha_fin?->format('Y-m-d'),
+                // Fase 7A: los datos de cierre, que el formulario no edita.
+                'fecha_terminacion_real' => $actual->fecha_terminacion_real?->format('Y-m-d'),
+                'fecha_liquidacion' => $actual->fecha_liquidacion?->format('Y-m-d'),
+                'valor_liquidado' => $actual->valor_liquidado !== null ? (string) BigDecimal::of((string) $actual->valor_liquidado)->toScale(2) : null,
                 'anexos' => $anexos,
             ], [], $usuario);
             $actual->anexos()->delete();
@@ -321,6 +343,12 @@ final class ContratosService
             'interventoria' => $contrato->interventoria,
             'estado' => $contrato->estado,
             'estado_original' => $contrato->estado_original,
+            'fecha_terminacion_real' => $fecha($contrato->fecha_terminacion_real),
+            'fecha_liquidacion' => $fecha($contrato->fecha_liquidacion),
+            'valor_liquidado' => $contrato->valor_liquidado,
+            'aviso_cierre' => CierreContratos::aviso(
+                $contrato->estado, $contrato->fecha_terminacion_real, $contrato->fecha_liquidacion, $contrato->valor_liquidado
+            ),
             'anticipo' => (bool) $contrato->anticipo,
             'porcentaje_anticipo' => $this->entero($contrato->porcentaje_anticipo),
             'avance_fisico' => $this->entero($contrato->avance_fisico),
@@ -373,6 +401,19 @@ final class ContratosService
             if ($conAviso) {
                 $fila->aviso_proceso = $proceso ? $this->avisoProceso($proceso->id, $resumenes[$proceso->id]['avisos']) : null;
             }
+        }
+    }
+
+    /**
+     * Completa las filas de contratos de los listados (consultas con DB::table que traen el estado
+     * y los datos de cierre) con `aviso_cierre` (CierreContratos::aviso), sin consultas.
+     *
+     * @param iterable<object> $filas
+     */
+    public function agregarAvisoCierre(iterable $filas): void
+    {
+        foreach ($filas as $fila) {
+            $fila->aviso_cierre = CierreContratos::aviso($fila->estado, $fila->fecha_terminacion_real, $fila->fecha_liquidacion, $fila->valor_liquidado);
         }
     }
 
@@ -459,6 +500,7 @@ final class ContratosService
                 'contratos.estado', 'contratos.valor', 'contratos.valor_inicial', 'contratos.fecha_inicio', 'contratos.fecha_fin',
                 'contratos.avance_fisico', 'contratos.avance_financiero', 'contratos.secop_id_contrato', 'contratos.updated_at',
                 'contratos.proceso_licitacion',
+                'contratos.fecha_terminacion_real', 'contratos.fecha_liquidacion', 'contratos.valor_liquidado',
                 'contratos.proyecto as proyecto_id', 'proyectos.nombre as proyecto_nombre',
                 'contratos.tipo_contrato_id', 'tipos_procesos.nombre as tipo_nombre',
             ])
@@ -488,6 +530,7 @@ final class ContratosService
 
         $filas = $consulta->get();
         $this->agregarProcesos($filas, true, $resumenes);
+        $this->agregarAvisoCierre($filas);
 
         return $filas->map(fn ($f) => [
             'id' => (int) $f->id,
@@ -500,19 +543,23 @@ final class ContratosService
             'valor_inicial' => $f->valor_inicial,
             'fecha_inicio' => $f->fecha_inicio,
             'fecha_fin' => $f->fecha_fin,
+            'fecha_terminacion_real' => $f->fecha_terminacion_real,
+            'fecha_liquidacion' => $f->fecha_liquidacion,
+            'valor_liquidado' => $f->valor_liquidado,
             'avance_fisico' => $this->entero($f->avance_fisico),
             'avance_financiero' => $this->entero($f->avance_financiero),
             'tipo_contrato' => $f->tipo_contrato_id !== null ? ['id' => (int) $f->tipo_contrato_id, 'nombre' => $f->tipo_nombre] : null,
             'proyecto' => $f->proyecto_id !== null ? ['id' => (int) $f->proyecto_id, 'nombre' => $f->proyecto_nombre] : null,
             'proceso' => $f->proceso,
             'aviso_proceso' => $f->aviso_proceso,
+            'aviso_cierre' => $f->aviso_cierre,
             'secop_id_contrato' => $f->secop_id_contrato,
             'updated_at' => $f->updated_at,
         ])->all();
     }
 
     /**
-     * El contrato con la misma forma que un elemento de GET /listarContratos (con `aviso_proceso`),
+     * El contrato con la misma forma que un elemento de GET /listarContratos (con `aviso_proceso` y `aviso_cierre`),
      * más `proyecto_nombre`, o null si no existe.
      */
     public function detalle(int $id): ?object
@@ -527,6 +574,7 @@ final class ContratosService
         }
         $filas = [$fila];
         $this->agregarProcesos($filas, true);
+        $this->agregarAvisoCierre($filas);
         $this->agregarDetalle($filas);
 
         return $fila;
@@ -673,12 +721,16 @@ final class ContratosService
     }
 
     /** La fecha fin inicial no es anterior a la de inicio; `$valores` trae las dos, como quedarían. */
-    private function exigirFechas(array $valores): void
+    /** @param ?string $terminacion la fecha de terminación real que conserva el contrato (año-mes-día), si la tiene */
+    private function exigirFechas(array $valores, ?string $terminacion = null): void
     {
         $inicio = $valores['fecha_inicio'] ?? null;
         $fin = $valores['fecha_fin_inicial'] ?? null;
         if ($inicio !== null && $fin !== null && $fin < $inicio) {
             throw ValidationException::withMessages(['fecha_fin_inicial' => self::FIN_ANTERIOR]);
+        }
+        if ($inicio !== null && $terminacion !== null && $inicio > $terminacion) {
+            throw ValidationException::withMessages(['fecha_inicio' => self::INICIO_POSTERIOR_TERMINACION]);
         }
     }
 
