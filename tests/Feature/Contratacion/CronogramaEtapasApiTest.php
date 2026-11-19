@@ -131,6 +131,15 @@ class CronogramaEtapasApiTest extends TestCase
         return collect($avance)->firstWhere('etapa.id', $this->etapa($clave)->id);
     }
 
+    /** Las claves de la revisión (fase 5) de una etapa sin revisar: su estado visible y el aviso de la etapa anterior. */
+    private function sinRevisar(string $estado, bool $avisoAnterior = false): array
+    {
+        return [
+            'revision' => ['estado' => $estado, 'usuario' => null, 'fecha' => null, 'observacion' => null, 'pendientes_al_aprobar' => null, 'devuelta_at' => null],
+            'aviso_etapa_anterior' => $avisoAnterior,
+        ];
+    }
+
     private function viabilizacion(): ProyectoExpediente
     {
         $this->proyecto->fuentes()->sync([FuenteFinanciacion::where('clave', FuenteFinanciacion::SGR)->value('id')]);
@@ -151,7 +160,7 @@ class CronogramaEtapasApiTest extends TestCase
             'etapa' => ['id' => $planeacion->id, 'nombre' => $planeacion->nombre, 'orden' => $planeacion->orden],
             'total' => 2, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 2, 'peso_cumplido' => 0,
             'fecha_programada' => '2026-11-25', 'fecha_real' => null, 'fecha_real_sugerida' => false,
-            'completa' => false, 'alerta' => 'al_dia',
+            'completa' => false, 'alerta' => 'al_dia', ...$this->sinRevisar('pendiente'),
         ]);
         $this->assertSame(['etapa', 'avisos'], array_keys($r->json()));
 
@@ -244,7 +253,7 @@ class CronogramaEtapasApiTest extends TestCase
         $this->assertSame(['vencida', 'proxima', 'al_dia'], array_column($avance, 'alerta'));
         $this->assertSame([
             'etapa', 'total', 'cumplidos', 'porcentaje', 'peso_total', 'peso_cumplido',
-            'fecha_programada', 'fecha_real', 'fecha_real_sugerida', 'completa', 'alerta',
+            'fecha_programada', 'fecha_real', 'fecha_real_sugerida', 'completa', 'alerta', 'revision', 'aviso_etapa_anterior',
         ], array_keys($avance[0]));
         $r->assertJsonPath('avisos.etapas_vencidas', 1)
             ->assertJsonPath('avisos.etapas_proximas', 1)
@@ -292,6 +301,7 @@ class CronogramaEtapasApiTest extends TestCase
         $r = $this->marcar($expediente, 'CDP');
         $this->assertSame([
             'fecha_programada' => null, 'fecha_real' => self::HOY, 'fecha_real_sugerida' => true, 'completa' => true, 'alerta' => 'completa',
+            ...$this->sinRevisar('lista'),
         ], array_slice($r->json('avance_por_etapa.0'), 6));
         $this->assertSame(0, $r->json('avisos.etapas_vencidas'));
         $fila = ExpedienteEtapa::sole();

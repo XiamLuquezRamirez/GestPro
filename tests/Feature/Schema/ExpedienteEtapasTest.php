@@ -43,7 +43,9 @@ class ExpedienteEtapasTest extends TestCase
         $columnas = collect(Schema::getColumns('expediente_etapas'))->keyBy('name');
 
         $this->assertSame(
-            ['id', 'expediente_id', 'etapa_id', 'fecha_programada', 'fecha_real', 'fecha_real_sugerida', 'usuario_actualizo_id', 'created_at', 'updated_at'],
+            ['id', 'expediente_id', 'etapa_id', 'fecha_programada', 'fecha_real', 'fecha_real_sugerida', 'usuario_actualizo_id', 'created_at', 'updated_at',
+                // Migración 23: la revisión de la etapa (en SQLite, al final).
+                'estado_revision', 'usuario_reviso_id', 'fecha_revision', 'observacion_revision', 'pendientes_al_aprobar'],
             $columnas->keys()->all()
         );
         $this->assertTrue($columnas['fecha_programada']['nullable']);

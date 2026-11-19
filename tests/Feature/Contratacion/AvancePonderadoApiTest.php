@@ -146,6 +146,15 @@ class AvancePonderadoApiTest extends TestCase
         return ['total' => $total, 'cumplidos' => $cumplidos, 'porcentaje' => $porcentaje, 'peso_total' => $pesoTotal, 'peso_cumplido' => $pesoCumplido];
     }
 
+    /** Las claves de la revisión (fase 5) de una etapa sin revisar: su estado visible y el aviso de la etapa anterior. */
+    private function sinRevisar(string $estado, bool $avisoAnterior = false): array
+    {
+        return [
+            'revision' => ['estado' => $estado, 'usuario' => null, 'fecha' => null, 'observacion' => null, 'pendientes_al_aprobar' => null, 'devuelta_at' => null],
+            'aviso_etapa_anterior' => $avisoAnterior,
+        ];
+    }
+
     // ------------------------------------------------------------ criterio 9
 
     public function test_criterio_9_cumplir_el_requisito_de_peso_3_de_cinco_da_43_por_ciento(): void
@@ -203,7 +212,7 @@ class AvancePonderadoApiTest extends TestCase
 
         $this->como()->patchJson("/GestPro/expedientes/{$expediente->id}/requisitos/{$r->json('requisito.id')}", ['cumplido' => true])->assertOk()
             ->assertJsonPath('progreso', $this->progreso(2, 1, 25, 4, 1))
-            ->assertJsonPath('avance_por_etapa.1', ['etapa' => $this->etapaJson('adjudicacion'), ...$this->progreso(1, 1, 100, 1, 1), 'fecha_programada' => null, 'fecha_real' => now()->toDateString(), 'fecha_real_sugerida' => true, 'completa' => true, 'alerta' => 'completa']);
+            ->assertJsonPath('avance_por_etapa.1', ['etapa' => $this->etapaJson('adjudicacion'), ...$this->progreso(1, 1, 100, 1, 1), 'fecha_programada' => null, 'fecha_real' => now()->toDateString(), 'fecha_real_sugerida' => true, 'completa' => true, 'alerta' => 'completa', ...$this->sinRevisar('lista', true)]);
     }
 
     public function test_el_avance_por_etapa_tambien_se_pondera(): void
@@ -215,8 +224,8 @@ class AvancePonderadoApiTest extends TestCase
             ['etapa' => $this->etapaJson('pliego_definitivo'), ...$this->progreso(1, 0, 0, 1, 0)],
             ['etapa' => $this->etapaJson('cierre'), ...$this->progreso(1, 0, 0, 1, 0)],
         ];
-        // La API agrega a cada etapa sus fechas y su semáforo.
-        $conFechas = array_map(fn (array $a) => [...$a, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha'], $avance);
+        // La API agrega a cada etapa sus fechas, su semáforo y su revisión.
+        $conFechas = array_map(fn (array $a) => [...$a, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha', ...$this->sinRevisar('pendiente')], $avance);
         $this->assertSame($conFechas, $this->cumplir($expediente, 'Estudios previos')->json('avance_por_etapa'));
         $this->assertSame($conFechas, $this->leer($expediente)->json('avance_por_etapa'));
         $this->assertSame($avance, app(ExpedienteService::class)->avancePorEtapaDe($expediente));

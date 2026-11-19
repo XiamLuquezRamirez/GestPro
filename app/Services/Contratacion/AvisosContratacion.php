@@ -2,6 +2,7 @@
 
 namespace App\Services\Contratacion;
 
+use App\Models\ExpedienteEtapa;
 use App\Models\ProcesoLicitacion;
 use App\Models\ProyectoExpediente;
 use Carbon\CarbonInterface;
@@ -30,6 +31,12 @@ use Illuminate\Support\Facades\DB;
  *   expediente cerrado.
  * - Hitos: etapas completas de las que tienen requisitos que cuentan. Las filas sin etapa no son
  *   una etapa: no cuentan como hito ni avisan.
+ * - Revisión de una etapa (R15, solo avisa), el estado que ve la pantalla: aprobada, o aprobada
+ *   con cambios si después de aprobarla hubo un evento del checklist en un requisito de la etapa
+ *   o un cambio de los requisitos del expediente (una versión nueva); devuelta, mientras no haya
+ *   un evento del checklist de la etapa después de devolverla; si no, pendiente (le faltan
+ *   requisitos que cuentan) o lista (no le falta nada). Ni la aprobación ni la devolución se
+ *   pierden por los cambios: solo cambia lo que se muestra.
  */
 final class AvisosContratacion
 {
@@ -40,6 +47,13 @@ final class AvisosContratacion
     public const SIN_FECHA = 'sin_fecha';
     /** Etapa que no se completó en un expediente ya cerrado. */
     public const SIN_COMPLETAR = 'sin_completar';
+
+    /** Estados visibles de la revisión de una etapa. */
+    public const REVISION_PENDIENTE = 'pendiente';
+    public const REVISION_LISTA = 'lista';
+    public const REVISION_APROBADA = 'aprobada';
+    public const REVISION_CON_CAMBIOS = 'aprobada_con_cambios';
+    public const REVISION_DEVUELTA = 'devuelta';
 
     /** Estados en los que el proceso ya terminó: no avisa etapas vencidas ni próximas ni que está sin actualización. */
     public const ESTADOS_FINALES = [
@@ -107,6 +121,43 @@ final class AvisosContratacion
         }
 
         return $programada <= $hoy->copy()->addDays($this->diasProxima())->toDateString() ? self::PROXIMA : self::AL_DIA;
+    }
+
+    /**
+     * La revisión de una etapa, con su estado visible. Espera cargado `usuarioReviso` en la fila.
+     *
+     * @param array{total: int, cumplidos: int} $avance el de la etapa en avance_por_etapa
+     * @param ?ExpedienteEtapa $fila la de la etapa en el cronograma, o null si no tiene
+     * @param ?CarbonInterface $cambioEtapa el último evento del checklist en un requisito de la etapa, después de su revisión
+     * @param ?CarbonInterface $cambioRequisitos el último cambio de los requisitos del expediente (versión nueva), después de su revisión
+     * @return array{estado: string, usuario: ?string, fecha: ?string, observacion: ?string, pendientes_al_aprobar: ?int, devuelta_at: ?string}
+     */
+    public function revision(array $avance, ?ExpedienteEtapa $fila, ?CarbonInterface $cambioEtapa = null, ?CarbonInterface $cambioRequisitos = null): array
+    {
+        $fecha = $fila?->fecha_revision;
+        $despues = fn (?CarbonInterface $cambio) => $cambio !== null && $fecha !== null && $cambio->greaterThan($fecha);
+        if ($fila?->aprobada()) {
+            $estado = $despues($cambioEtapa) || $despues($cambioRequisitos) ? self::REVISION_CON_CAMBIOS : self::REVISION_APROBADA;
+        } elseif ($fila?->devuelta() && ! $despues($cambioEtapa)) {
+            $estado = self::REVISION_DEVUELTA;
+        } else {
+            $estado = $avance['total'] > $avance['cumplidos'] ? self::REVISION_PENDIENTE : self::REVISION_LISTA;
+        }
+
+        return [
+            'estado' => $estado,
+            'usuario' => $fila?->usuarioReviso?->name,
+            'fecha' => $fecha?->toIso8601String(),
+            'observacion' => $fila?->observacion_revision,
+            'pendientes_al_aprobar' => $fila?->pendientes_al_aprobar,
+            'devuelta_at' => $fila?->devuelta() ? $fecha?->toIso8601String() : null,
+        ];
+    }
+
+    /** La revisión dice que la etapa está aprobada (con o sin cambios después). */
+    public function aprobada(?array $revision): bool
+    {
+        return in_array($revision['estado'] ?? null, [self::REVISION_APROBADA, self::REVISION_CON_CAMBIOS], true);
     }
 
     /**

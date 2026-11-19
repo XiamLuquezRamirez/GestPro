@@ -13,6 +13,7 @@ use App\Http\Controllers\NoAplicaRequisitoController;
 use App\Http\Controllers\PlantillaChecklistController;
 use App\Http\Controllers\PlantillasExpedienteController;
 use App\Http\Controllers\RequisitoPropioController;
+use App\Http\Controllers\RevisionEtapasController;
 use Illuminate\Support\Facades\Route;
 
 // Lectura: cualquier usuario autenticado.
@@ -51,6 +52,11 @@ Route::middleware('can:editar-datos')->group(function () {
     // Solo los de contratación: fechas programada y real de una etapa.
     Route::put('/expedientes/{expediente}/etapas/{etapa}', [CronogramaExpedienteController::class, 'update'])
         ->whereNumber('etapa')->name('expedientes.etapas.update');
+    // Solo los de contratación: revisión de una etapa (solo avisa).
+    Route::post('/expedientes/{expediente}/etapas/{etapa}/aprobar', [RevisionEtapasController::class, 'aprobar'])
+        ->whereNumber('etapa')->name('expedientes.etapas.aprobar');
+    Route::post('/expedientes/{expediente}/etapas/{etapa}/devolver', [RevisionEtapasController::class, 'devolver'])
+        ->whereNumber('etapa')->name('expedientes.etapas.devolver');
     Route::delete('/expedientes/{expediente}', [ExpedienteController::class, 'destroy'])
         ->name('expedientes.destroy');
 

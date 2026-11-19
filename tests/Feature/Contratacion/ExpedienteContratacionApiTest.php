@@ -69,6 +69,15 @@ class ExpedienteContratacionApiTest extends TestCase
         return ['id' => $etapa->id, 'nombre' => $etapa->nombre, 'orden' => $etapa->orden];
     }
 
+    /** Las claves de la revisión (fase 5) de una etapa sin revisar: su estado visible y el aviso de la etapa anterior. */
+    private function sinRevisar(string $estado, bool $avisoAnterior = false): array
+    {
+        return [
+            'revision' => ['estado' => $estado, 'usuario' => null, 'fecha' => null, 'observacion' => null, 'pendientes_al_aprobar' => null, 'devuelta_at' => null],
+            'aviso_etapa_anterior' => $avisoAnterior,
+        ];
+    }
+
     /**
      * Plantilla de contratación publicada, por la API: licitación pública, todas las fuentes y
      * todos los sectores. Por defecto, tres requisitos: dos de planeación (uno opcional) y uno
@@ -183,8 +192,8 @@ class ExpedienteContratacionApiTest extends TestCase
         ], $etapas);
         // En el orden del catálogo de etapas, no en el de los requisitos.
         $this->assertSame([
-            ['etapa' => $this->etapaJson('planeacion'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha'],
-            ['etapa' => $this->etapaJson('pliego_definitivo'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha'],
+            ['etapa' => $this->etapaJson('planeacion'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha', ...$this->sinRevisar('pendiente')],
+            ['etapa' => $this->etapaJson('pliego_definitivo'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha', ...$this->sinRevisar('pendiente')],
         ], $r->json('avance_por_etapa'));
     }
 
@@ -215,9 +224,9 @@ class ExpedienteContratacionApiTest extends TestCase
         $r = $this->leer($expediente);
 
         $this->assertSame([
-            ['etapa' => $this->etapaJson('planeacion'), 'total' => 2, 'cumplidos' => 1, 'porcentaje' => 50, 'peso_total' => 2, 'peso_cumplido' => 1, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha'],
-            ['etapa' => $this->etapaJson('pliego_definitivo'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha'],
-            ['etapa' => null, 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha'],
+            ['etapa' => $this->etapaJson('planeacion'), 'total' => 2, 'cumplidos' => 1, 'porcentaje' => 50, 'peso_total' => 2, 'peso_cumplido' => 1, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha', ...$this->sinRevisar('pendiente')],
+            ['etapa' => $this->etapaJson('pliego_definitivo'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha', ...$this->sinRevisar('pendiente')],
+            ['etapa' => null, 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha', 'revision' => null, 'aviso_etapa_anterior' => false],
         ], $r->json('avance_por_etapa'));
         $r->assertJsonPath('progreso', ['total' => 4, 'cumplidos' => 1, 'porcentaje' => 25, 'peso_total' => 4, 'peso_cumplido' => 1]);
         $this->assertSame(
@@ -233,7 +242,7 @@ class ExpedienteContratacionApiTest extends TestCase
         $this->cumplir($expediente, $this->fila($expediente, 'Estudios previos'))
             ->assertJsonPath('requisito.etapa', $this->etapaJson('planeacion'))
             ->assertJsonPath('progreso', ['total' => 2, 'cumplidos' => 1, 'porcentaje' => 50, 'peso_total' => 2, 'peso_cumplido' => 1])
-            ->assertJsonPath('avance_por_etapa.0', ['etapa' => $this->etapaJson('planeacion'), 'total' => 1, 'cumplidos' => 1, 'porcentaje' => 100, 'peso_total' => 1, 'peso_cumplido' => 1, 'fecha_programada' => null, 'fecha_real' => now()->toDateString(), 'fecha_real_sugerida' => true, 'completa' => true, 'alerta' => 'completa']);
+            ->assertJsonPath('avance_por_etapa.0', ['etapa' => $this->etapaJson('planeacion'), 'total' => 1, 'cumplidos' => 1, 'porcentaje' => 100, 'peso_total' => 1, 'peso_cumplido' => 1, 'fecha_programada' => null, 'fecha_real' => now()->toDateString(), 'fecha_real_sugerida' => true, 'completa' => true, 'alerta' => 'completa', ...$this->sinRevisar('lista')]);
     }
 
     public function test_la_api_de_viabilizacion_no_trae_las_claves_de_contratacion(): void
@@ -281,7 +290,7 @@ class ExpedienteContratacionApiTest extends TestCase
         $this->como()->postJson($url, ['titulo' => 'Póliza', 'etapa_propia_id' => $this->etapa('adjudicacion')->id])
             ->assertCreated()
             ->assertJsonPath('requisito.etapa', $this->etapaJson('adjudicacion'))
-            ->assertJsonPath('avance_por_etapa.2', ['etapa' => $this->etapaJson('adjudicacion'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha']);
+            ->assertJsonPath('avance_por_etapa.2', ['etapa' => $this->etapaJson('adjudicacion'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha', ...$this->sinRevisar('pendiente')]);
 
         $propio = $expediente->requisitos()->whereNull('requisito_catalogo_id')->sole();
         $this->assertSame($this->etapa('adjudicacion')->id, $propio->etapa_propia_id);

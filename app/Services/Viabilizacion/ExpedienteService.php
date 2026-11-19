@@ -22,9 +22,11 @@ use App\Models\Responsable;
 use App\Models\User;
 use App\Services\Contratacion\AvisosContratacion;
 use App\Services\Contratacion\PlantillasContratacion;
+use Carbon\CarbonInterface;
 use Closure;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -63,6 +65,10 @@ use Illuminate\Validation\ValidationException;
  *   se vuelve a sugerir mientras lo siga (fechasTrasElAvance, el único lugar). El avance
  *   por etapa presentado trae sus fechas y su semáforo, y el expediente sus avisos
  *   (AvisosContratacion).
+ * - Revisión por etapa (solo contratación, RevisionEtapas): el avance por etapa presentado trae
+ *   la revisión de cada etapa con su estado visible, calculado en lote con los eventos del
+ *   checklist posteriores a la revisión (cambiosTrasLaRevision), y el aviso de la etapa anterior
+ *   sin aprobar. Nada de la revisión bloquea las acciones del checklist ni el cierre.
  */
 final class ExpedienteService
 {
@@ -844,7 +850,7 @@ final class ExpedienteService
                 'tipologias' => $this->opciones($expediente->tipologias),
             ]]),
             'progreso' => $contratacion ? $this->progresoPonderado($filas, $posiciones) : $this->progresoDe($expediente),
-            ...($contratacion ? $this->cronogramaYAvisos($expediente, $this->avancePorEtapa($filas, $posiciones), $this->cronogramaDe($expediente)) : []),
+            ...($contratacion ? $this->cronogramaYAvisos($expediente, $this->avancePorEtapa($filas, $posiciones), $this->cronogramaDe($expediente), $posiciones) : []),
             'requisitos' => $filas->map(fn (ProyectoRequisito $f) => $this->presentarFila($f, $posiciones))->values(),
             // Los más parecidos, hasta MAX_AVISOS; el total dice cuántos hay en realidad.
             'avisos_duplicados' => $avisos['avisos'],
@@ -1055,7 +1061,7 @@ final class ExpedienteService
 
         return [
             'progreso' => $this->progresoPonderado($filas, $posiciones),
-            ...$this->cronogramaYAvisos($expediente, $avance, $cronograma),
+            ...$this->cronogramaYAvisos($expediente, $avance, $cronograma, $posiciones),
         ];
     }
 
@@ -1103,13 +1109,20 @@ final class ExpedienteService
      */
     public function cronogramaDeContratacion(ProyectoExpediente $expediente): array
     {
-        return $this->cronogramaYAvisos($expediente, $this->avancePorEtapaDe($expediente), $this->cronogramaDe($expediente));
+        $posiciones = $this->posiciones($this->plantillas->versionesDe($expediente));
+
+        return $this->cronogramaYAvisos(
+            $expediente,
+            $this->avancePorEtapa($this->filasDelAvance($expediente), $posiciones),
+            $this->cronogramaDe($expediente),
+            $posiciones
+        );
     }
 
-    /** @return Collection<int, ExpedienteEtapa> etapa_id => fechas de la etapa */
+    /** @return Collection<int, ExpedienteEtapa> etapa_id => fechas y revisión de la etapa, con quién la revisó */
     private function cronogramaDe(ProyectoExpediente $expediente): Collection
     {
-        return $expediente->etapasCronograma()->get()->keyBy('etapa_id');
+        return $expediente->etapasCronograma()->with('usuarioReviso:id,name')->get()->keyBy('etapa_id');
     }
 
     /**
@@ -1183,15 +1196,18 @@ final class ExpedienteService
     }
 
     /**
-     * El avance por etapa con las fechas y el semáforo de cada etapa, y los avisos del expediente.
+     * El avance por etapa con las fechas, el semáforo y la revisión de cada etapa, y los avisos
+     * del expediente.
      *
      * @param list<array> $avance el de avancePorEtapa()
      * @param Collection<int, ExpedienteEtapa> $cronograma el de cronogramaDe()
+     * @param array<int, int> $posiciones las del expediente, para la etapa de las filas con cambios
      * @return array{avance_por_etapa: list<array>, avisos: array}
      */
-    private function cronogramaYAvisos(ProyectoExpediente $expediente, array $avance, Collection $cronograma): array
+    private function cronogramaYAvisos(ProyectoExpediente $expediente, array $avance, Collection $cronograma, array $posiciones): array
     {
-        $presentado = $this->presentarCronograma($avance, $cronograma, $expediente->esBorrador());
+        $cambios = $this->cambiosTrasLaRevision([$expediente->id => ['posiciones' => $posiciones, 'cronograma' => $cronograma]]);
+        $presentado = $this->presentarCronograma($avance, $cronograma, $expediente->esBorrador(), $cambios[$expediente->id] ?? []);
         $expediente->loadMissing('proceso');
 
         return [
@@ -1207,28 +1223,110 @@ final class ExpedienteService
 
     /**
      * Cada etapa del avance con `fecha_programada`, `fecha_real`, `fecha_real_sugerida`,
-     * `completa` y `alerta` (AvisosContratacion::alerta). Las filas sin etapa no tienen fechas.
+     * `completa`, `alerta` (AvisosContratacion::alerta), `revision` (AvisosContratacion::revision)
+     * y `aviso_etapa_anterior`: alguna etapa anterior con requisitos que cuentan no está aprobada
+     * y esta ya tiene algún requisito cumplido. Las filas sin etapa no tienen fechas ni revisión
+     * (`revision` null) ni avisan de la etapa anterior.
      *
      * @param list<array> $avance el de avancePorEtapa()
-     * @param Collection<int, ExpedienteEtapa> $cronograma etapa_id => fechas
+     * @param Collection<int, ExpedienteEtapa> $cronograma etapa_id => fechas y revisión
      * @param bool $vigila el expediente está en borrador: avisa vencimientos
+     * @param array{etapas?: array<int, CarbonInterface>, requisitos?: ?CarbonInterface} $cambios los de cambiosTrasLaRevision()
      * @return list<array>
      */
-    public function presentarCronograma(array $avance, Collection $cronograma, bool $vigila): array
+    public function presentarCronograma(array $avance, Collection $cronograma, bool $vigila, array $cambios = []): array
     {
-        return array_map(function (array $etapa) use ($cronograma, $vigila) {
+        $presentado = [];
+        $anteriorSinAprobar = false;
+        foreach ($avance as $etapa) {
             $fila = $etapa['etapa'] !== null ? $cronograma->get($etapa['etapa']['id']) : null;
             $programada = $fila?->fecha_programada?->format('Y-m-d');
+            $revision = $etapa['etapa'] !== null
+                ? $this->avisos->revision($etapa, $fila, $cambios['etapas'][$etapa['etapa']['id']] ?? null, $cambios['requisitos'] ?? null)
+                : null;
 
-            return [
+            $presentado[] = [
                 ...$etapa,
                 'fecha_programada' => $programada,
                 'fecha_real' => $fila?->fecha_real?->format('Y-m-d'),
                 'fecha_real_sugerida' => (bool) $fila?->sugerida(),
                 'completa' => $this->avisos->completa($etapa),
                 'alerta' => $this->avisos->alerta($etapa, $programada, $vigila),
+                'revision' => $revision,
+                'aviso_etapa_anterior' => $revision !== null && $anteriorSinAprobar && $etapa['cumplidos'] > 0,
             ];
-        }, $avance);
+            if ($revision !== null && $etapa['total'] > 0 && ! $this->avisos->aprobada($revision)) {
+                $anteriorSinAprobar = true;
+            }
+        }
+
+        return $presentado;
+    }
+
+    /**
+     * Lo que cambió en el checklist de cada expediente después de revisar sus etapas, en lote
+     * (las consultas no crecen con los expedientes ni con las etapas): por etapa, el último
+     * evento del historial en un requisito cuya etapa mostrada es esa (también los de filas ya
+     * eliminadas o que cambiaron de etapa, por la etapa propia que guarda el registro), y el
+     * último cambio de los requisitos de todo el expediente (una versión nueva aplicada). Solo
+     * mira los expedientes con alguna etapa revisada y los eventos posteriores a la primera
+     * revisión entre todos ellos.
+     *
+     * @param array<int, array{posiciones: array<int, int>, cronograma: Collection<int, ExpedienteEtapa>}> $expedientes expediente_id => datos
+     * @return array<int, array{etapas: array<int, CarbonInterface>, requisitos: ?CarbonInterface}> expediente_id => cambios; sin revisiones, no aparece
+     */
+    private function cambiosTrasLaRevision(array $expedientes): array
+    {
+        $desde = [];
+        foreach ($expedientes as $id => $datos) {
+            $primera = $datos['cronograma']
+                ->filter(fn (ExpedienteEtapa $f) => $f->estado_revision !== ExpedienteEtapa::SIN_REVISAR && $f->fecha_revision !== null)
+                ->min('fecha_revision');
+            if ($primera !== null) {
+                $desde[$id] = $primera;
+            }
+        }
+        if ($desde === []) {
+            return [];
+        }
+
+        $eventos = DB::table('checklist_historial')
+            ->whereIn('expediente_id', array_keys($desde))
+            ->where('created_at', '>', min($desde))
+            ->where(fn ($q) => $q->where('entidad_tipo', HistorialChecklist::REQUISITO)
+                ->orWhere(fn ($q) => $q->where('entidad_tipo', HistorialChecklist::EXPEDIENTE)->where('evento', 'version_aplicada')))
+            ->get(['expediente_id', 'entidad_tipo', 'entidad_id', 'antes', 'despues', 'created_at']);
+        $idsFilas = $eventos->where('entidad_tipo', HistorialChecklist::REQUISITO)->pluck('entidad_id')->unique()->values();
+        $filas = $idsFilas->isEmpty() ? collect() : ProyectoRequisito::query()
+            ->whereIn('id', $idsFilas)
+            ->with(['requisito', 'origenes.version:id,plantilla_id', ...self::RELACIONES_ETAPA])
+            ->get()
+            ->keyBy('id');
+
+        $cambios = [];
+        $mas = fn (?CarbonInterface $a, CarbonInterface $b) => $a === null || $b->greaterThan($a) ? $b : $a;
+        foreach ($eventos as $evento) {
+            $id = (int) $evento->expediente_id;
+            $momento = Carbon::parse($evento->created_at);
+            $cambios[$id] ??= ['etapas' => [], 'requisitos' => null];
+            if ($evento->entidad_tipo === HistorialChecklist::EXPEDIENTE) {
+                $cambios[$id]['requisitos'] = $mas($cambios[$id]['requisitos'], $momento);
+                continue;
+            }
+            $etapas = [];
+            $fila = $filas->get((int) $evento->entidad_id);
+            if ($fila) {
+                $etapas[] = $this->etapaDe($fila, $expedientes[$id]['posiciones'])?->id;
+            }
+            foreach ([$evento->antes, $evento->despues] as $datos) {
+                $etapas[] = json_decode((string) $datos, true)['etapa_propia_id'] ?? null;
+            }
+            foreach (array_unique(array_filter($etapas)) as $etapaId) {
+                $cambios[$id]['etapas'][(int) $etapaId] = $mas($cambios[$id]['etapas'][(int) $etapaId] ?? null, $momento);
+            }
+        }
+
+        return $cambios;
     }
 
     /** @return list<array{etapa: ?array, total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}> el de avancePorEtapa() */
@@ -1259,18 +1357,24 @@ final class ExpedienteService
             ->with(['requisito', 'origenes.version:id,plantilla_id', ...self::RELACIONES_ETAPA])
             ->get()
             ->groupBy('expediente_id');
-        $cronogramas = ExpedienteEtapa::query()->whereIn('expediente_id', $ids)->get()->groupBy('expediente_id');
+        $cronogramas = ExpedienteEtapa::query()->whereIn('expediente_id', $ids)->with('usuarioReviso:id,name')->get()->groupBy('expediente_id');
+        $datos = $expedientes->mapWithKeys(fn (ProyectoExpediente $e) => [$e->id => [
+            'posiciones' => $this->posiciones($this->plantillas->ordenar($e->versionesPlantilla)),
+            'cronograma' => $cronogramas->get($e->id, collect())->keyBy('etapa_id'),
+        ]])->all();
+        $cambios = $this->cambiosTrasLaRevision($datos);
 
-        return $expedientes->mapWithKeys(function (ProyectoExpediente $e) use ($filas, $cronogramas) {
+        return $expedientes->mapWithKeys(function (ProyectoExpediente $e) use ($filas, $datos, $cambios) {
             $deEste = $filas->get($e->id, collect());
-            $posiciones = $this->posiciones($this->plantillas->ordenar($e->versionesPlantilla));
+            $posiciones = $datos[$e->id]['posiciones'];
 
             return [$e->id => [
                 'progreso' => $this->progresoPonderado($deEste, $posiciones),
                 'avance_por_etapa' => $this->presentarCronograma(
                     $this->avancePorEtapa($deEste, $posiciones),
-                    $cronogramas->get($e->id, collect())->keyBy('etapa_id'),
-                    $e->esBorrador()
+                    $datos[$e->id]['cronograma'],
+                    $e->esBorrador(),
+                    $cambios[$e->id] ?? []
                 ),
             ]];
         })->all();
