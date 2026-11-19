@@ -231,25 +231,29 @@ final class VersionesExpediente
     private function foto(ProyectoExpediente $expediente): Collection
     {
         $posiciones = $this->expedientes->posiciones($this->plantillas->versionesDe($expediente));
+        $contratacion = $expediente->esContratacion();
 
         return $expediente->requisitos()
-            ->with(['requisito', 'origenes.version:id,plantilla_id'])
+            ->with(['requisito', 'origenes.version:id,plantilla_id', ...($contratacion ? ExpedienteService::RELACIONES_ETAPA : [])])
             ->orderBy('orden')
             ->orderBy('id')
             ->get()
-            ->mapWithKeys(fn (ProyectoRequisito $f) => [$f->id => ['aplica' => $f->aplica, 'fila' => $this->resumen($f, $posiciones)]]);
+            ->mapWithKeys(fn (ProyectoRequisito $f) => [$f->id => ['aplica' => $f->aplica, 'fila' => $this->resumen($f, $posiciones, $contratacion)]]);
     }
 
     /** Lo que muestra la fila, como presentarFila(): el requisito del primer origen o, sin orígenes, el ancla. */
-    private function resumen(ProyectoRequisito $fila, array $posiciones): array
+    private function resumen(ProyectoRequisito $fila, array $posiciones, bool $contratacion): array
     {
         if ($fila->esPropio()) {
             // Como en la pantalla, un propio se muestra por su título y no tiene código.
-            return ['id' => $fila->id, 'codigo' => null, 'texto' => $fila->titulo_propio, 'caracter' => $fila->caracter, 'titulo' => $fila->titulo_propio];
+            $resumen = ['id' => $fila->id, 'codigo' => null, 'texto' => $fila->titulo_propio, 'caracter' => $fila->caracter, 'titulo' => $fila->titulo_propio];
+        } else {
+            $requisito = $this->expedientes->requisitoMostrado($fila, $posiciones);
+            $resumen = ['id' => $fila->id, 'codigo' => $requisito->codigo, 'texto' => $requisito->texto, 'caracter' => $fila->caracter];
         }
-        $requisito = $this->expedientes->requisitoMostrado($fila, $posiciones);
 
-        return ['id' => $fila->id, 'codigo' => $requisito->codigo, 'texto' => $requisito->texto, 'caracter' => $fila->caracter];
+        // En contratación también el peso y la etapa: un cambio solo de ellos es un cambio. La viabilización no cambia.
+        return $contratacion ? [...$resumen, ...$this->expedientes->etapaYPesoDe($fila, $posiciones)] : $resumen;
     }
 
     /** @return array{plantilla_id: int, plantilla: string, version: int, catalogo_version_id: int} */

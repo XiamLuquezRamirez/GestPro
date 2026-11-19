@@ -49,7 +49,9 @@ use Illuminate\Validation\ValidationException;
  *   contratación (de un proceso) nace con crearDeProceso(), ya configurado: comparte el
  *   checklist, pero no se configura ni se radica. Sus filas llevan la etapa de contratación
  *   (la del requisito mostrado, o la elegida en un propio), con el avance por etapa, y se
- *   cierra con cerrar(): solo avisa de los pendientes. Cerrado, queda congelado como uno
+ *   cierra con cerrar(): solo avisa de los pendientes. Su porcentaje de avance es ponderado:
+ *   cada fila que cuenta pesa lo del requisito que muestra (un propio pesa 1); `total` y
+ *   `cumplidos` siguen siendo conteos. En viabilización el peso no se usa. Cerrado, queda congelado como uno
  *   radicado. La fecha y el usuario del cierre se guardan en fecha_radicado y
  *   usuario_radicado_id: los del acto que termina el trámite del expediente.
  */
@@ -88,7 +90,10 @@ final class ExpedienteService
     ];
 
     // Solo en los de contratación: la etapa de cada fila.
-    private const RELACIONES_ETAPA = ['requisito.etapa', 'origenes.etapa', 'etapaPropia'];
+    public const RELACIONES_ETAPA = ['requisito.etapa', 'origenes.etapa', 'etapaPropia'];
+
+    // Lo que se acumula del avance ponderado de un expediente de contratación o de una etapa.
+    private const SUMA_VACIA = ['total' => 0, 'cumplidos' => 0, 'peso_total' => 0, 'peso_cumplido' => 0];
 
     public function __construct(
         private readonly EvaluadorRequisitos $evaluador,
@@ -509,7 +514,7 @@ final class ExpedienteService
     /**
      * Lo que falta en cada etapa del avance, solo las etapas con algo pendiente.
      *
-     * @param list<array{etapa: ?array, total: int, cumplidos: int, porcentaje: int}> $avance el de avancePorEtapa()
+     * @param list<array{etapa: ?array, total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}> $avance el de avancePorEtapa()
      * @return array{total: int, por_etapa: list<array{etapa: ?array, pendientes: int}>}
      */
     private function pendientes(array $avance): array
@@ -813,7 +818,7 @@ final class ExpedienteService
                 'componentes' => $this->opciones($expediente->componentes),
                 'tipologias' => $this->opciones($expediente->tipologias),
             ]]),
-            'progreso' => $this->progresoDe($expediente),
+            'progreso' => $contratacion ? $this->progresoPonderado($filas, $posiciones) : $this->progresoDe($expediente),
             ...($contratacion ? ['avance_por_etapa' => $this->avancePorEtapa($filas, $posiciones)] : []),
             'requisitos' => $filas->map(fn (ProyectoRequisito $f) => $this->presentarFila($f, $posiciones))->values(),
             // Los más parecidos, hasta MAX_AVISOS; el total dice cuántos hay en realidad.
@@ -991,8 +996,16 @@ final class ExpedienteService
         ];
     }
 
+    /**
+     * Progreso del expediente: el de progreso() en viabilización; ponderado en contratación (el
+     * de progresoPonderado()).
+     */
     public function progresoDe(ProyectoExpediente $expediente): array
     {
+        if ($expediente->esContratacion()) {
+            return $this->progresoPonderado($this->filasDelAvance($expediente, false), $this->posiciones($this->plantillas->versionesDe($expediente)));
+        }
+
         return $this->progreso(
             $expediente->requisitos()->cuenta()->count(),
             $expediente->requisitos()->cumplidaQueCuenta()->count()
@@ -1001,34 +1014,141 @@ final class ExpedienteService
 
     /**
      * El avance que acompaña la respuesta de una acción sobre el checklist: el progreso y, en
-     * uno de contratación, también el avance por etapa.
+     * uno de contratación, también el avance por etapa, ambos de las mismas filas.
      */
     public function avanceDe(ProyectoExpediente $expediente): array
     {
+        if (! $expediente->esContratacion()) {
+            return ['progreso' => $this->progresoDe($expediente)];
+        }
+        $filas = $this->filasDelAvance($expediente);
+        $posiciones = $this->posiciones($this->plantillas->versionesDe($expediente));
+
         return [
-            'progreso' => $this->progresoDe($expediente),
-            ...($expediente->esContratacion() ? ['avance_por_etapa' => $this->avancePorEtapaDe($expediente)] : []),
+            'progreso' => $this->progresoPonderado($filas, $posiciones),
+            'avance_por_etapa' => $this->avancePorEtapa($filas, $posiciones),
         ];
     }
 
-    /** @return list<array{etapa: ?array, total: int, cumplidos: int, porcentaje: int}> el de avancePorEtapa() */
+    /** @return list<array{etapa: ?array, total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}> el de avancePorEtapa() */
     public function avancePorEtapaDe(ProyectoExpediente $expediente): array
     {
-        $filas = $expediente->requisitos()
-            ->where('aplica', true)
-            ->with(['requisito', 'origenes.version:id,plantilla_id', ...self::RELACIONES_ETAPA])
-            ->get();
-
-        return $this->avancePorEtapa($filas, $this->posiciones($this->plantillas->versionesDe($expediente)));
+        return $this->avancePorEtapa($this->filasDelAvance($expediente), $this->posiciones($this->plantillas->versionesDe($expediente)));
     }
 
     /**
-     * Avance de cada etapa con filas en el checklist, con la misma definición del progreso: cuentan
-     * las que cuentan y, entre ellas, las cumplidas. En el orden del catálogo de etapas; las filas
-     * sin etapa, al final. Espera cargadas las relaciones de etapa y `origenes.version`.
+     * Progreso ponderado de varios expedientes de contratación, con consultas que no crecen con
+     * los expedientes: todas sus filas que cuentan se leen juntas. Espera cargadas sus
+     * `versionesPlantilla`, que deciden el requisito que muestra cada fila.
+     *
+     * @param Collection<int, ProyectoExpediente> $expedientes
+     * @return array<int, array{total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}> expediente_id => progreso
+     */
+    public function progresoPonderadoDe(Collection $expedientes): array
+    {
+        $filas = $expedientes->isEmpty() ? collect() : ProyectoRequisito::query()
+            ->cuenta()
+            ->whereIn('expediente_id', $expedientes->pluck('id'))
+            ->with(['requisito', 'origenes.version:id,plantilla_id'])
+            ->get()
+            ->groupBy('expediente_id');
+
+        return $expedientes->mapWithKeys(fn (ProyectoExpediente $e) => [$e->id => $this->progresoPonderado(
+            $filas->get($e->id, collect()),
+            $this->posiciones($this->plantillas->ordenar($e->versionesPlantilla))
+        )])->all();
+    }
+
+    /**
+     * La etapa y el peso de una fila de contratación. Espera cargadas las relaciones de etapa.
+     *
+     * @return array{etapa: ?array{id: int, nombre: string, orden: int}, peso: int}
+     */
+    public function etapaYPesoDe(ProyectoRequisito $fila, array $posiciones): array
+    {
+        return ['etapa' => $this->presentarEtapa($this->etapaDe($fila, $posiciones)), 'peso' => $this->pesoDe($fila, $posiciones)];
+    }
+
+    /** Filas que aplican, con lo que necesitan para el requisito que muestran y su peso (con `$conEtapa`, también su etapa). */
+    private function filasDelAvance(ProyectoExpediente $expediente, bool $conEtapa = true): Collection
+    {
+        return $expediente->requisitos()
+            ->where('aplica', true)
+            ->with(['requisito', 'origenes.version:id,plantilla_id', ...($conEtapa ? self::RELACIONES_ETAPA : [])])
+            ->get();
+    }
+
+    /**
+     * Progreso de un expediente de contratación, de sus filas que aplican: `total` y `cumplidos`
+     * son conteos, como en progreso(); el porcentaje pondera cada fila por su peso (pesoDe()).
+     * Con todos los pesos en 1 es el mismo de progreso(). Espera cargados `requisito` y
+     * `origenes.version`.
+     *
+     * @param Collection<int, ProyectoRequisito> $filas
+     * @return array{total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}
+     */
+    private function progresoPonderado(Collection $filas, array $posiciones): array
+    {
+        $suma = self::SUMA_VACIA;
+        foreach ($filas as $fila) {
+            $this->sumarFila($suma, $fila, $posiciones);
+        }
+
+        return $this->progresoConPeso($suma);
+    }
+
+    /**
+     * Suma la fila al avance si cuenta: uno al total y su peso al peso total; si está cumplida,
+     * también a los cumplidos y al peso cumplido.
+     *
+     * @param array{total: int, cumplidos: int, peso_total: int, peso_cumplido: int} $suma
+     */
+    private function sumarFila(array &$suma, ProyectoRequisito $fila, array $posiciones): void
+    {
+        if (! $fila->cuenta()) {
+            return;
+        }
+        $peso = $this->pesoDe($fila, $posiciones);
+        $suma['total']++;
+        $suma['peso_total'] += $peso;
+        if ($fila->cumplidaQueCuenta()) {
+            $suma['cumplidos']++;
+            $suma['peso_cumplido'] += $peso;
+        }
+    }
+
+    /**
+     * Peso de una fila de contratación en el avance: el del requisito que muestra, el mismo que
+     * da su etapa; un propio pesa siempre 1.
+     */
+    private function pesoDe(ProyectoRequisito $fila, array $posiciones): int
+    {
+        return $fila->esPropio() ? 1 : (int) ($this->requisitoMostrado($fila, $posiciones)?->peso ?? 1);
+    }
+
+    /**
+     * @param array{total: int, cumplidos: int, peso_total: int, peso_cumplido: int} $suma
+     * @return array{total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}
+     */
+    private function progresoConPeso(array $suma): array
+    {
+        return [
+            'total' => $suma['total'],
+            'cumplidos' => $suma['cumplidos'],
+            'porcentaje' => $suma['peso_total'] > 0 ? (int) round($suma['peso_cumplido'] / $suma['peso_total'] * 100) : 0,
+            'peso_total' => $suma['peso_total'],
+            'peso_cumplido' => $suma['peso_cumplido'],
+        ];
+    }
+
+    /**
+     * Avance de cada etapa con filas en el checklist, con la misma definición del progreso
+     * ponderado: cuentan las que cuentan y, entre ellas, las cumplidas, cada una con su peso. En
+     * el orden del catálogo de etapas; las filas sin etapa, al final. Espera cargadas las
+     * relaciones de etapa, `requisito` y `origenes.version`.
      *
      * @param Collection<int, ProyectoRequisito> $filas las que aplican
-     * @return list<array{etapa: ?array{id: int, nombre: string, orden: int}, total: int, cumplidos: int, porcentaje: int}>
+     * @return list<array{etapa: ?array{id: int, nombre: string, orden: int}, total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}>
      */
     private function avancePorEtapa(Collection $filas, array $posiciones): array
     {
@@ -1036,14 +1156,13 @@ final class ExpedienteService
         foreach ($filas as $fila) {
             $etapa = $this->etapaDe($fila, $posiciones);
             $clave = $etapa?->id ?? 0;
-            $grupos[$clave] ??= ['etapa' => $etapa, 'total' => 0, 'cumplidos' => 0];
-            $grupos[$clave]['total'] += $fila->cuenta() ? 1 : 0;
-            $grupos[$clave]['cumplidos'] += $fila->cumplidaQueCuenta() ? 1 : 0;
+            $grupos[$clave] ??= ['etapa' => $etapa, 'suma' => self::SUMA_VACIA];
+            $this->sumarFila($grupos[$clave]['suma'], $fila, $posiciones);
         }
 
         return collect($grupos)
             ->sortBy(fn (array $g) => [$g['etapa'] === null ? 1 : 0, $g['etapa']?->orden ?? 0, $g['etapa']?->id ?? 0])
-            ->map(fn (array $g) => ['etapa' => $this->presentarEtapa($g['etapa']), ...$this->progreso($g['total'], $g['cumplidos'])])
+            ->map(fn (array $g) => ['etapa' => $this->presentarEtapa($g['etapa']), ...$this->progresoConPeso($g['suma'])])
             ->values()
             ->all();
     }
@@ -1132,8 +1251,12 @@ final class ExpedienteService
             'categoria' => $fila->esPropio() ? $fila->categoria_propia : $r->categoria,
         ];
 
-        // La etapa solo en los de contratación: la respuesta de viabilización no cambia.
-        return $contratacion ? [...$presentada, 'etapa' => $this->presentarEtapa($this->etapaDe($fila, $posiciones))] : $presentada;
+        // La etapa y el peso solo en los de contratación: la respuesta de viabilización no cambia.
+        return $contratacion ? [
+            ...$presentada,
+            'etapa' => $this->presentarEtapa($this->etapaDe($fila, $posiciones)),
+            'peso' => $this->pesoDe($fila, $posiciones),
+        ] : $presentada;
     }
 
     /**

@@ -198,13 +198,13 @@ final class ExpedientesContratacion
     }
 
     /**
-     * El expediente de cada proceso, resumido para la API del proceso: su estado, su avance y el
-     * aviso si ninguna de sus plantillas le sirve ya (no corresponde a la modalidad, la fuente o
-     * el sector, está inactiva o no tiene versión publicada). Las consultas no crecen con los
-     * procesos.
+     * El expediente de cada proceso, resumido para la API del proceso: su estado, su avance
+     * ponderado (ExpedienteService::progresoPonderadoDe) y el aviso si ninguna de sus plantillas
+     * le sirve ya (no corresponde a la modalidad, la fuente o el sector, está inactiva o no tiene
+     * versión publicada). Las consultas no crecen con los procesos.
      *
      * @param Collection<int, ProcesoLicitacion> $procesos
-     * @return array<int, ?array{id: int, estado: string, progreso: array{total: int, cumplidos: int, porcentaje: int}, aviso_plantilla: ?string}> proceso_id => resumen; null sin expediente
+     * @return array<int, ?array{id: int, estado: string, progreso: array{total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}, aviso_plantilla: ?string}> proceso_id => resumen; null sin expediente
      */
     public function resumenDeProcesos(Collection $procesos): array
     {
@@ -212,19 +212,16 @@ final class ExpedientesContratacion
             ->contratacion()
             ->whereIn('proceso_id', $procesos->pluck('id'))
             ->with('versionesPlantilla')
-            ->withCount([
-                'requisitos as requisitos_aplican' => fn ($q) => $q->cuenta(),
-                'requisitos as requisitos_cumplidos' => fn ($q) => $q->cumplidaQueCuenta(),
-            ])
             ->get()
             ->keyBy('proceso_id');
+        $progresos = $this->expedientes->progresoPonderadoDe($expedientes->values());
         $estados = $this->plantillas->estadoPorProceso(
             $procesos->filter(fn (ProcesoLicitacion $p) => $expedientes->has($p->id))->values(),
             $expedientes->flatMap(fn (ProyectoExpediente $e) => $e->versionesPlantilla->pluck('plantilla_id'))
                 ->map(fn ($id) => (int) $id)->unique()->values()->all()
         );
 
-        return $procesos->mapWithKeys(function (ProcesoLicitacion $proceso) use ($expedientes, $estados) {
+        return $procesos->mapWithKeys(function (ProcesoLicitacion $proceso) use ($expedientes, $estados, $progresos) {
             $expediente = $expedientes->get($proceso->id);
             if (! $expediente) {
                 return [$proceso->id => null];
@@ -236,7 +233,7 @@ final class ExpedientesContratacion
             return [$proceso->id => [
                 'id' => $expediente->id,
                 'estado' => $expediente->estado,
-                'progreso' => $this->expedientes->progreso((int) $expediente->requisitos_aplican, (int) $expediente->requisitos_cumplidos),
+                'progreso' => $progresos[$expediente->id],
                 'aviso_plantilla' => $this->avisoPlantilla($razones),
             ]];
         })->all();
