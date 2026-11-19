@@ -106,6 +106,7 @@ const Procesos = ({ procesos, onAbrir }) => {
                                 <th>Estado</th>
                                 <th>Valor</th>
                                 <th>Contratos</th>
+                                <th>Expediente</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -123,6 +124,12 @@ const Procesos = ({ procesos, onAbrir }) => {
                                     <td data-etiqueta="Estado"><span className={`ct-estado ct-estado-${f.tono}`}>{f.estado}</span></td>
                                     <td data-etiqueta="Valor" className="numero">{f.monto}</td>
                                     <td data-etiqueta="Contratos">{f.contratos}</td>
+                                    <td data-etiqueta="Expediente">
+                                        {f.expediente.texto}{f.expediente.cerrado ? ' · Cerrado' : ''}
+                                        {f.expediente.aviso && <span className="fp-nota"> {f.expediente.aviso}</span>}
+                                        {' '}
+                                        <Link to={f.rutaChecklist} className="ct-enlace">Checklist</Link>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>

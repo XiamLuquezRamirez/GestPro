@@ -37,6 +37,7 @@ import {
     puedeRegistrarContrato,
     modoTrasGuardarContrato,
     textoContratos,
+    avanceExpediente,
     textoValor,
     tonoEstado,
     validarProceso,
@@ -701,5 +702,31 @@ describe('opcionesEtapa', () => {
     it('sin el catálogo cargado solo ofrece la actual, sin marca', () => {
         expect(opcionesEtapa(null, { id: 11, nombre: 'Precontractual', orden: 2 })).toEqual([{ valor: '11', etiqueta: '2. Precontractual' }]);
         expect(opcionesEtapa(undefined, null)).toEqual([]);
+    });
+});
+
+describe('avanceExpediente', () => {
+    it('sin expediente', () => {
+        expect(avanceExpediente(null)).toEqual({ tiene: false, texto: 'Sin expediente', porcentaje: null, cerrado: false, aviso: null });
+        expect(avanceExpediente(undefined).texto).toBe('Sin expediente');
+    });
+
+    it('el avance del expediente: cumplidos de total y porcentaje', () => {
+        expect(avanceExpediente({ id: 3, estado: 'borrador', progreso: { total: 10, cumplidos: 3, porcentaje: 30 }, aviso_plantilla: null })).toEqual({
+            tiene: true, texto: '3 de 10 requisitos · 30 %', porcentaje: 30, cerrado: false, aviso: null,
+        });
+    });
+
+    it('un solo requisito va en singular', () => {
+        expect(avanceExpediente({ id: 3, estado: 'borrador', progreso: { total: 1, cumplidos: 0, porcentaje: 0 } }).texto).toBe('0 de 1 requisito · 0 %');
+    });
+
+    it('cerrado se marca y el aviso de plantilla se conserva', () => {
+        const avance = avanceExpediente({ id: 3, estado: 'cerrado', progreso: { total: 4, cumplidos: 4, porcentaje: 100 }, aviso_plantilla: 'Hay una versión nueva.' });
+        expect(avance).toMatchObject({ cerrado: true, aviso: 'Hay una versión nueva.', porcentaje: 100 });
+    });
+
+    it('sin progreso cuenta cero y un aviso vacío no se muestra', () => {
+        expect(avanceExpediente({ id: 3, estado: 'borrador', aviso_plantilla: '  ' })).toMatchObject({ texto: '0 de 0 requisitos · 0 %', aviso: null });
     });
 });

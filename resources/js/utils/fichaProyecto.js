@@ -5,8 +5,9 @@
 // probadas en fichaProyecto.test.js.
 
 import { esIdContrato } from './contratosModulo';
-import { etiquetaEstadoProceso, numeroProceso, textoContratos, textoFecha, textoValor, tonoEstado } from './contratacion';
+import { avanceExpediente, etiquetaEstadoProceso, numeroProceso, textoContratos, textoFecha, textoValor, tonoEstado } from './contratacion';
 import { faseLegible } from './expedienteChecklist';
+import { rutaExpedienteContratacion } from './navegacion';
 import { mensajeApi } from './plantillasChecklist';
 
 /** Si el `:proyectoId` de la ruta es un id: la misma regla que el de un contrato (lo que acepta la API). */
@@ -104,5 +105,7 @@ export const filaProceso = (proceso) => {
         tono: tonoEstado(proceso.estado),
         monto: textoValor(proceso.monto),
         contratos: textoContratos(proceso.contratos),
+        expediente: avanceExpediente(proceso.expediente),
+        rutaChecklist: rutaExpedienteContratacion(proceso.id),
     };
 };

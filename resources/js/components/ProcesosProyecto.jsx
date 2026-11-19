@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
-import { faArrowRightArrowLeft, faArrowUpRightFromSquare, faFileSignature, faGavel, faPen, faPlus, faTrash, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRightArrowLeft, faArrowUpRightFromSquare, faClipboardCheck, faFileSignature, faGavel, faPen, faPlus, faTrash, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { Link } from 'react-router-dom';
 import axios from '../axios';
 import { avisarError } from '../utils/avisosPlantillas';
+import { rutaExpedienteContratacion } from '../utils/navegacion';
 import { mensajeApi } from '../utils/plantillasChecklist';
 import {
-    CAMPOS_PROCESO, ESTADOS_PROCESO, MAXIMO_OBSERVACION, MAXIMO_OBSERVACIONES_PROCESO, PLATAFORMAS, avisoCambioEstado, datosEstado, datosProceso,
+    avanceExpediente, CAMPOS_PROCESO, ESTADOS_PROCESO, MAXIMO_OBSERVACION, MAXIMO_OBSERVACIONES_PROCESO, PLATAFORMAS, avisoCambioEstado, datosEstado, datosProceso,
     erroresPorCampo, esEdicionDesactualizada, etiquetaEstadoProceso, etiquetaPlataforma, formularioProceso,
     modoTrasGuardarContrato, numeroProceso, opcionesConActual, opcionesFuenteProceso, ordenarCatalogo, puedeEditarProcesos, puedeRegistrarContrato,
     textoContratos, textoFecha, textoValor, tonoEstado, validarProceso, valorEnEdicion,
@@ -285,6 +287,30 @@ const NumeroProceso = ({ proceso }) => {
 };
 
 /**
+ * El avance del expediente del proceso (su propio conteo de requisitos), su estado si está
+ * cerrado, el aviso de plantilla y el enlace al checklist. Al navegar, la página que abrió el
+ * diálogo se desmonta y con ella el diálogo, que devuelve el foco y se cierra limpio.
+ */
+const ExpedienteProceso = ({ proceso }) => {
+    const avance = avanceExpediente(proceso.expediente);
+    return (
+        <>
+            <div>
+                <dt>Expediente</dt>
+                <dd>
+                    {avance.texto}{avance.cerrado ? ' · Cerrado' : ''}
+                    {' '}
+                    <Link to={rutaExpedienteContratacion(proceso.id)} className="ct-enlace">
+                        <FontAwesomeIcon icon={faClipboardCheck} aria-hidden="true" /> Checklist
+                    </Link>
+                </dd>
+            </div>
+            {avance.aviso && <div><dt>Plantilla</dt><dd>{avance.aviso}</dd></div>}
+        </>
+    );
+};
+
+/**
  * Procesos de contratación de un proyecto (la obra, la interventoría…), en un diálogo que abre
  * Parámetros → Proyectos. Un Administrador o Gestor los crea, edita, cambia de estado y elimina;
  * los demás solo los consultan. El backend aplica los mismos permisos y reglas.
@@ -544,6 +570,7 @@ const ProcesosProyecto = ({ proyecto, user, onCerrar, onCambio }) => {
                                                 <div><dt>Apertura</dt><dd>{textoFecha(p.fecha_apertura)}</dd></div>
                                                 <div><dt>Cierre</dt><dd>{textoFecha(p.fecha_cierre)}</dd></div>
                                                 <div><dt>Contratos vinculados</dt><dd>{textoContratos(p.contratos)}</dd></div>
+                                                <ExpedienteProceso proceso={p} />
                                             </dl>
                                             {p.observaciones && <p className="pl-ayuda">{p.observaciones}</p>}
                                             {modo?.tipo === 'estado' && modo.proceso.id === p.id ? (

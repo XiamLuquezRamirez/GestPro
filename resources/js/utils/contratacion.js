@@ -268,6 +268,22 @@ export const textoContratos = (cantidad) => {
     return n === 1 ? '1 contrato' : `${n} contratos`;
 };
 
+/**
+ * El avance del expediente de un proceso (el `expediente` de la API del proceso, o null): su
+ * propio conteo de requisitos, nunca sumado con el de la formulación ni el de un contrato.
+ */
+export const avanceExpediente = (expediente) => {
+    if (!expediente) return { tiene: false, texto: 'Sin expediente', porcentaje: null, cerrado: false, aviso: null };
+    const { total = 0, cumplidos = 0, porcentaje = 0 } = expediente.progreso ?? {};
+    return {
+        tiene: true,
+        texto: `${cumplidos} de ${total} ${total === 1 ? 'requisito' : 'requisitos'} · ${porcentaje} %`,
+        porcentaje,
+        cerrado: expediente.estado === 'cerrado',
+        aviso: String(expediente.aviso_plantilla ?? '').trim() || null,
+    };
+};
+
 /** Solo un enlace http(s) completo se muestra como enlace: nunca javascript: ni rutas relativas. */
 export const esEnlaceWeb = (texto) => {
     const valor = String(texto ?? '').trim();

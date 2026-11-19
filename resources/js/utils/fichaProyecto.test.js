@@ -186,6 +186,8 @@ describe('filaProceso', () => {
             estado: 'Adjudicado',
             tono: 'verde',
             contratos: '1 contrato',
+            expediente: { tiene: false, texto: 'Sin expediente', cerrado: false, aviso: null },
+            rutaChecklist: '/contratacion/4',
         });
         expect(normal(fila.monto)).toBe('$ 1.500.000');
     });
@@ -193,5 +195,11 @@ describe('filaProceso', () => {
     it('sin número, modalidad ni monto', () => {
         const fila = filaProceso({ id: 5, objeto: '', modalidad: null, codigo_proceso: null, url_proceso: null, monto: null, estado: 'preparacion', contratos: 0 });
         expect(fila).toMatchObject({ numero: '—', enlace: null, objeto: '—', modalidad: '—', monto: '—', estado: 'En preparación', contratos: 'Sin contratos' });
+    });
+
+    it('el avance del expediente del proceso va aparte, sin tocar los demás datos', () => {
+        const fila = filaProceso({ ...proceso, expediente: { id: 9, estado: 'cerrado', progreso: { total: 5, cumplidos: 2, porcentaje: 40 }, aviso_plantilla: 'Versión nueva.' } });
+        expect(fila.expediente).toMatchObject({ tiene: true, texto: '2 de 5 requisitos · 40 %', cerrado: true, aviso: 'Versión nueva.' });
+        expect(fila.contratos).toBe('1 contrato');
     });
 });
