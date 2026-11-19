@@ -125,3 +125,30 @@
     /* Sobre la barra inferior del armazón. */
     .ct-editor .modal-actions { bottom: calc(var(--gp-barra-inferior) + env(safe-area-inset-bottom)); }
 }
+
+/* ---------- Cierre del contrato: terminar y liquidar (fase 7A) ---------- */
+
+/* Botones junto al título del editor, con la nota de cambios sin guardar debajo. */
+.ct-cierre-acciones { display: flex; flex-wrap: wrap; gap: .4rem .5rem; align-items: center; margin-left: auto; }
+.ct-cierre-nota { flex-basis: 100%; font-size: .78rem; color: var(--gp-texto-3); text-align: right; }
+/* Con cambios sin guardar: se ve deshabilitado pero sigue enfocable (aria-disabled), con la nota. */
+.ct-cierre-acciones .gp-boton[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+/* Bloque "Cierre" de la pestaña de información, de solo lectura. */
+.ct-cierre { display: grid; gap: .45rem; margin: 0 0 1rem; }
+.ct-cierre-cabecera { display: flex; flex-wrap: wrap; gap: .4rem .8rem; align-items: center; }
+.ct-cierre-cabecera h4 { margin: 0; font-size: .95rem; }
+.ct-cierre-datos { margin: 0; }
+/* Chip de datos de cierre que faltan, en las listas, bajo el estado. */
+.ct-aviso-cierre { display: block; width: fit-content; max-width: 12rem; margin-top: .25rem; white-space: normal; border-radius: .5rem; }
+/* Diálogo de terminar o liquidar: un formulario corto. */
+.ct-dialogo.ct-dialogo-estrecho { width: min(36rem, 100%); }
+.ct-cierre-formulario { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: .9rem 1.1rem; }
+.ct-cierre-explicacion, .ct-cierre-ancho, .ct-cierre-saldo { grid-column: 1 / -1; margin: 0; }
+.ct-cierre-saldo { font-size: .86rem; color: var(--gp-texto-2); }
+.ct-cierre-supera { padding: .45rem .7rem; color: var(--gp-texto); background: var(--gp-ambar-suave); border-left: 3px solid var(--gp-ambar); border-radius: var(--gp-radio); }
+
+@media (max-width: 720px) {
+    .ct-cierre-acciones { width: 100%; margin-left: 0; }
+    .ct-cierre-acciones .gp-boton { flex: 1 1 auto; justify-content: center; }
+    .ct-cierre-nota { text-align: left; }
+}

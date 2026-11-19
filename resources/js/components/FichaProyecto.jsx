@@ -5,6 +5,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
 import { datosGenerales, errorDeFicha, esIdProyecto, filaProceso, resumenFormulacion } from '../utils/fichaProyecto';
 import { estadoDesdeFicha, estadoNuevoContratoDeProyecto, filaContrato, puedeEditarContratos, rutaContrato } from '../utils/contratosModulo';
+import { textoAvisoCierre } from '../utils/contratos';
 import { RUTA_CONTRATOS } from '../utils/navegacion';
 import ChipsAvisosProceso from './ChipsAvisosProceso';
 import ProcesosProyecto from './ProcesosProyecto';
@@ -144,7 +145,8 @@ const Procesos = ({ procesos, onAbrir }) => {
 };
 
 const Contratos = ({ proyecto, contratos, edita }) => {
-    const filas = contratos.map(filaContrato);
+    // Como en la lista del módulo Contratos: con el aviso de datos de cierre que faltan.
+    const filas = contratos.map((c) => ({ ...filaContrato(c), avisoCierre: textoAvisoCierre(c.aviso_cierre) }));
     return (
         <Bloque
             titulo="Contratos"
@@ -172,7 +174,10 @@ const Contratos = ({ proyecto, contratos, edita }) => {
                                 <tr key={f.id}>
                                     <td data-etiqueta="Número"><Link to={rutaContrato(f.id)} state={estadoDesdeFicha(proyecto.id)} className="ct-enlace">{f.numero}</Link></td>
                                     <td data-etiqueta="Objeto"><span className="ct-objeto" title={f.objeto}>{f.objeto}</span></td>
-                                    <td data-etiqueta="Estado"><span className={`ct-estado ct-estado-${f.tono}`}>{f.estado}</span></td>
+                                    <td data-etiqueta="Estado">
+                                        <span className={`ct-estado ct-estado-${f.tono}`}>{f.estado}</span>
+                                        {f.avisoCierre && <span className="ct-aviso-cierre ct-estado ct-estado-ambar">{f.avisoCierre}</span>}
+                                    </td>
                                     <td data-etiqueta="Valor vigente" className="numero">{f.valor}</td>
                                     <td data-etiqueta="Físico" className="numero">{f.avanceFisico}</td>
                                     <td data-etiqueta="Financiero" className="numero">{f.avanceFinanciero}</td>

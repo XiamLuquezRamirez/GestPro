@@ -34,6 +34,27 @@ import {
     valorVigente,
     vigentesDistintos,
 } from './contratos';
+import {
+    CAMPOS_LIQUIDAR,
+    CAMPOS_TERMINAR,
+    accionesCierre,
+    notaSinEstadoCierre,
+    avisoEstadoCierreSecop,
+    cambiosSinGuardar,
+    contratoTrasCierre,
+    datosLiquidar,
+    datosTerminar,
+    erroresCierre,
+    erroresLiquidar,
+    erroresTerminar,
+    estadoCierreBloqueado,
+    formularioLiquidar,
+    formularioTerminar,
+    muestraBloqueCierre,
+    opcionesEstadoContrato,
+    saldoLiquidacion,
+    textoAvisoCierre,
+} from './contratos';
 
 // Un contrato como lo devuelve presentar (POST /guardarContrato).
 const presentado = {
@@ -574,5 +595,376 @@ describe('pestañas del contrato', () => {
         expect(etiquetaTipoModificacion('adicion')).toBe('Adición');
         expect(etiquetaTipoModificacion('prorroga')).toBe('Prórroga');
         expect(etiquetaTipoModificacion('adicion_prorroga')).toBe('Adición y Prórroga');
+    });
+});
+
+// ---------- Cierre del contrato (fase 7A) ----------
+
+describe('accionesCierre', () => {
+    const con = (estado) => accionesCierre({ ...presentado, estado });
+
+    it('un contrato celebrado, en ejecución o suspendido se termina y se liquida', () => {
+        ['celebrado', 'en_ejecucion', 'suspendido'].forEach((estado) => {
+            expect(con(estado)).toEqual({ terminar: true, liquidar: true, etiquetaTerminar: 'Terminar', etiquetaLiquidar: 'Liquidar' });
+        });
+    });
+
+    it('uno terminado corrige su terminación y se liquida', () => {
+        expect(con('terminado')).toEqual({ terminar: true, liquidar: true, etiquetaTerminar: 'Corregir terminación', etiquetaLiquidar: 'Liquidar' });
+    });
+
+    it('uno liquidado no se termina: corrige su liquidación', () => {
+        expect(con('liquidado')).toEqual({ terminar: false, liquidar: true, etiquetaTerminar: 'Terminar', etiquetaLiquidar: 'Corregir liquidación' });
+    });
+
+    it('uno anulado no ofrece ninguna', () => {
+        expect(con('anulado')).toMatchObject({ terminar: false, liquidar: false });
+    });
+
+    it('un estado antiguo fuera de la lista se liquida pero no se termina, como en el servidor', () => {
+        expect(con('Vigente')).toMatchObject({ terminar: false, liquidar: true });
+    });
+
+    it('un contrato nuevo (sin id) o ninguno no ofrece nada', () => {
+        expect(accionesCierre({ ...presentado, id: undefined })).toMatchObject({ terminar: false, liquidar: false });
+        expect(accionesCierre(null)).toMatchObject({ terminar: false, liquidar: false });
+    });
+});
+
+describe('notaSinEstadoCierre', () => {
+    const nota = 'Elige un estado para el contrato y guárdalo para poder terminarlo.';
+
+    it('un contrato guardado sin estado o con uno fuera de la lista: elegir y guardar el estado', () => {
+        expect(notaSinEstadoCierre({ ...presentado, estado: null })).toBe(nota);
+        expect(notaSinEstadoCierre({ ...presentado, estado: '' })).toBe(nota);
+        expect(notaSinEstadoCierre({ ...presentado, estado: 'Vigente' })).toBe(nota);
+    });
+
+    it('con un estado de la lista, o sin contrato guardado, no hay nota', () => {
+        ESTADOS_CONTRATO.forEach(([estado]) => expect(notaSinEstadoCierre({ ...presentado, estado })).toBeNull());
+        expect(notaSinEstadoCierre({ ...presentado, id: undefined, estado: null })).toBeNull();
+        expect(notaSinEstadoCierre(null)).toBeNull();
+    });
+
+    it('esos contratos se liquidan (el servidor lo acepta) pero no se terminan', () => {
+        expect(accionesCierre({ ...presentado, estado: null })).toMatchObject({ terminar: false, liquidar: true });
+    });
+});
+
+describe('textoAvisoCierre', () => {
+    it('sin aviso o sin faltantes, null', () => {
+        expect(textoAvisoCierre(null)).toBeNull();
+        expect(textoAvisoCierre(undefined)).toBeNull();
+        expect(textoAvisoCierre({ faltan: [] })).toBeNull();
+    });
+
+    it('si falta algo de la liquidación', () => {
+        expect(textoAvisoCierre({ faltan: ['fecha_terminacion_real', 'fecha_liquidacion', 'valor_liquidado'] })).toBe('Faltan datos de liquidación');
+        expect(textoAvisoCierre({ faltan: ['valor_liquidado'] })).toBe('Faltan datos de liquidación');
+        expect(textoAvisoCierre({ faltan: ['fecha_liquidacion'] })).toBe('Faltan datos de liquidación');
+    });
+
+    it('si solo falta la fecha de terminación', () => {
+        expect(textoAvisoCierre({ faltan: ['fecha_terminacion_real'] })).toBe('Falta la fecha de terminación');
+    });
+});
+
+describe('saldoLiquidacion', () => {
+    it('el valor vigente menos el liquidado, en centavos exactos', () => {
+        expect(saldoLiquidacion({ valor: '1500000.50', valor_liquidado: '1250000.25' })).toBe('250000.25');
+        // Con coma flotante, 0.3 - 0.1 daría 0.19999999999999998.
+        expect(saldoLiquidacion({ valor: '0.30', valor_liquidado: '0.10' })).toBe('0.20');
+        expect(saldoLiquidacion({ valor: '9999999999999.99', valor_liquidado: '0.01' })).toBe('9999999999999.98');
+        expect(saldoLiquidacion({ valor: '1000', valor_liquidado: '1000.00' })).toBe('0.00');
+    });
+
+    it('negativo si lo liquidado supera lo vigente', () => {
+        expect(saldoLiquidacion({ valor: '1000000.00', valor_liquidado: '1000000.50' })).toBe('-0.50');
+        expect(saldoLiquidacion({ valor: '100', valor_liquidado: '250.5' })).toBe('-150.50');
+    });
+
+    it('acepta números y textos de la API con uno o dos decimales', () => {
+        expect(saldoLiquidacion({ valor: 1500000.5, valor_liquidado: '500000.5' })).toBe('1000000.00');
+    });
+
+    it('sin valor vigente o sin valor liquidado (o con uno ilegible), null', () => {
+        expect(saldoLiquidacion({ valor: '1000.00', valor_liquidado: null })).toBeNull();
+        expect(saldoLiquidacion({ valor: null, valor_liquidado: '10.00' })).toBeNull();
+        expect(saldoLiquidacion({ valor: '1000.00', valor_liquidado: '' })).toBeNull();
+        expect(saldoLiquidacion({ valor: 'mil', valor_liquidado: '10.00' })).toBeNull();
+        expect(saldoLiquidacion({ valor: '10.001', valor_liquidado: '10.00' })).toBeNull();
+        expect(saldoLiquidacion(null)).toBeNull();
+    });
+});
+
+describe('opcionesEstadoContrato', () => {
+    const deshabilitados = (opciones) => opciones.filter((o) => o.deshabilitado).map((o) => o.valor);
+
+    it('todos los estados, en el orden de la lista', () => {
+        expect(opcionesEstadoContrato('en_ejecucion', false).map((o) => o.valor)).toEqual(ESTADOS_CONTRATO.map(([v]) => v));
+    });
+
+    it('al editar, terminado y liquidado se deshabilitan y dicen qué acción usar', () => {
+        const opciones = opcionesEstadoContrato('en_ejecucion', false);
+        expect(deshabilitados(opciones)).toEqual(['terminado', 'liquidado']);
+        expect(opciones.find((o) => o.valor === 'terminado').etiqueta).toBe('Terminado (usa «Terminar»)');
+        expect(opciones.find((o) => o.valor === 'liquidado').etiqueta).toBe('Liquidado (usa «Liquidar»)');
+        expect(opciones.find((o) => o.valor === 'en_ejecucion')).toEqual({ valor: 'en_ejecucion', etiqueta: 'En ejecución', deshabilitado: false });
+    });
+
+    it('el estado guardado sigue habilitado: un terminado puede quedarse así, pero no pasar a liquidado', () => {
+        expect(deshabilitados(opcionesEstadoContrato('terminado', false))).toEqual(['liquidado']);
+        expect(deshabilitados(opcionesEstadoContrato('liquidado', false))).toEqual(['terminado']);
+        expect(opcionesEstadoContrato('liquidado', false).find((o) => o.valor === 'liquidado').etiqueta).toBe('Liquidado');
+    });
+
+    it('un contrato nuevo puede llegar en cualquier estado', () => {
+        expect(deshabilitados(opcionesEstadoContrato('', true))).toEqual([]);
+    });
+});
+
+describe('formularios y datos de terminar y liquidar', () => {
+    const terminado = { ...presentado, estado: 'terminado', fecha_terminacion_real: '2026-10-31', fecha_liquidacion: null, valor_liquidado: null };
+
+    it('el formulario de terminar empieza con la fecha guardada, si la hay', () => {
+        expect(formularioTerminar(presentado)).toEqual({ fecha_terminacion_real: '', observacion: '' });
+        expect(formularioTerminar(terminado)).toEqual({ fecha_terminacion_real: '2026-10-31', observacion: '' });
+    });
+
+    it('el formulario de liquidar empieza con los datos guardados y el valor con los miles agrupados', () => {
+        expect(formularioLiquidar(terminado)).toEqual({ fecha_terminacion_real: '2026-10-31', fecha_liquidacion: '', valor_liquidado: '', observacion: '' });
+        expect(formularioLiquidar({ ...terminado, estado: 'liquidado', fecha_liquidacion: '2026-11-15 00:00:00', valor_liquidado: '1250000.50' }))
+            .toEqual({ fecha_terminacion_real: '2026-10-31', fecha_liquidacion: '2026-11-15', valor_liquidado: '1.250.000,50', observacion: '' });
+    });
+
+    it('lo que espera POST /contratos/{id}/terminar, con la versión del contrato', () => {
+        expect(datosTerminar({ fecha_terminacion_real: '2026-11-19', observacion: '  Acta final  ' }, presentado))
+            .toEqual({ fecha_terminacion_real: '2026-11-19', observacion: 'Acta final', actualizado: '2026-11-18 09:00:00' });
+        expect(datosTerminar({ fecha_terminacion_real: '2026-11-19', observacion: ' ' }, { ...presentado, updated_at: null }))
+            .toEqual({ fecha_terminacion_real: '2026-11-19', observacion: null, actualizado: null });
+    });
+
+    it('lo que espera POST /contratos/{id}/liquidar: el valor como número de la API', () => {
+        expect(datosLiquidar({
+            fecha_terminacion_real: '2026-10-31', fecha_liquidacion: '2026-11-15', valor_liquidado: '1.250.000,5', observacion: '',
+        }, terminado)).toEqual({
+            fecha_terminacion_real: '2026-10-31', fecha_liquidacion: '2026-11-15', valor_liquidado: '1250000.5', observacion: null, actualizado: '2026-11-18 09:00:00',
+        });
+    });
+});
+
+describe('erroresTerminar', () => {
+    const hoy = '2026-11-19';
+    const formulario = { fecha_terminacion_real: '2026-11-19', observacion: '' };
+
+    it('sin errores con una fecha entre el inicio y hoy', () => {
+        expect(erroresTerminar(formulario, presentado, hoy)).toEqual({});
+        expect(erroresTerminar({ ...formulario, fecha_terminacion_real: '2026-01-10' }, presentado, hoy)).toEqual({});
+    });
+
+    it('pide la fecha', () => {
+        expect(erroresTerminar({ ...formulario, fecha_terminacion_real: '' }, presentado, hoy))
+            .toEqual({ fecha_terminacion_real: 'Escribe la fecha de terminación real.' });
+    });
+
+    it('la fecha no es posterior a hoy ni anterior a la de inicio', () => {
+        expect(erroresTerminar({ ...formulario, fecha_terminacion_real: '2026-11-20' }, presentado, hoy))
+            .toEqual({ fecha_terminacion_real: 'La fecha de terminación no puede ser posterior a hoy.' });
+        expect(erroresTerminar({ ...formulario, fecha_terminacion_real: '2026-01-09' }, { ...presentado, fecha_inicio: '2026-01-10 00:00:00' }, hoy))
+            .toEqual({ fecha_terminacion_real: 'La fecha de terminación no puede ser anterior a la de inicio.' });
+        expect(erroresTerminar({ ...formulario, fecha_terminacion_real: '2020-01-01' }, { ...presentado, fecha_inicio: null }, hoy)).toEqual({});
+    });
+
+    it('la observación admite hasta 2000 caracteres', () => {
+        expect(erroresTerminar({ ...formulario, observacion: 'a'.repeat(2000) }, presentado, hoy)).toEqual({});
+        expect(erroresTerminar({ ...formulario, observacion: 'a'.repeat(2001) }, presentado, hoy))
+            .toEqual({ observacion: 'La observación admite hasta 2000 caracteres.' });
+    });
+});
+
+describe('erroresLiquidar', () => {
+    const hoy = '2026-11-19';
+    const formulario = { fecha_terminacion_real: '2026-10-31', fecha_liquidacion: '2026-11-15', valor_liquidado: '1.250.000,50', observacion: '' };
+
+    it('sin errores con los tres datos en orden', () => {
+        expect(erroresLiquidar(formulario, presentado, hoy)).toEqual({});
+        expect(erroresLiquidar({ ...formulario, fecha_liquidacion: '2026-10-31', valor_liquidado: '0' }, presentado, hoy)).toEqual({});
+    });
+
+    it('pide los tres datos', () => {
+        expect(erroresLiquidar({ fecha_terminacion_real: '', fecha_liquidacion: '', valor_liquidado: '', observacion: '' }, presentado, hoy)).toEqual({
+            fecha_terminacion_real: 'Escribe la fecha de terminación real.',
+            fecha_liquidacion: 'Escribe la fecha de liquidación.',
+            valor_liquidado: 'Escribe el valor liquidado.',
+        });
+    });
+
+    it('las fechas no son posteriores a hoy; la de terminación no es anterior al inicio ni la de liquidación a la de terminación', () => {
+        expect(erroresLiquidar({ ...formulario, fecha_terminacion_real: '2026-11-20', fecha_liquidacion: '2026-11-20' }, presentado, hoy)).toEqual({
+            fecha_terminacion_real: 'La fecha de terminación no puede ser posterior a hoy.',
+            fecha_liquidacion: 'La fecha de liquidación no puede ser posterior a hoy.',
+        });
+        expect(erroresLiquidar({ ...formulario, fecha_terminacion_real: '2026-01-01' }, presentado, hoy))
+            .toEqual({ fecha_terminacion_real: 'La fecha de terminación no puede ser anterior a la de inicio.' });
+        expect(erroresLiquidar({ ...formulario, fecha_liquidacion: '2026-10-30' }, presentado, hoy))
+            .toEqual({ fecha_liquidacion: 'La fecha de liquidación no puede ser anterior a la de terminación.' });
+    });
+
+    it('el valor admite hasta 13 cifras enteras', () => {
+        expect(erroresLiquidar({ ...formulario, valor_liquidado: '9.999.999.999.999,99' }, presentado, hoy)).toEqual({});
+        expect(erroresLiquidar({ ...formulario, valor_liquidado: '10.000.000.000.000' }, presentado, hoy))
+            .toEqual({ valor_liquidado: 'El valor liquidado admite hasta 13 cifras enteras y 2 decimales.' });
+    });
+
+    it('la observación admite hasta 2000 caracteres', () => {
+        expect(erroresLiquidar({ ...formulario, observacion: 'a'.repeat(2001) }, presentado, hoy))
+            .toEqual({ observacion: 'La observación admite hasta 2000 caracteres.' });
+    });
+});
+
+describe('erroresCierre', () => {
+    const error = (status, data) => ({ response: { status, data } });
+
+    it('un 422 por campo: los del diálogo junto a su campo y los demás aparte', () => {
+        expect(erroresCierre(error(422, { errors: { fecha_liquidacion: ['La fecha de liquidación no puede ser posterior a hoy.'], actualizado: ['Falta la versión.'] } }), CAMPOS_LIQUIDAR))
+            .toEqual({ campos: { fecha_liquidacion: 'La fecha de liquidación no puede ser posterior a hoy.' }, general: 'Falta la versión.' });
+    });
+
+    it('un 422 por estado trae `mensaje`: va como error general', () => {
+        expect(erroresCierre(error(422, { mensaje: 'El contrato está anulado.' }), CAMPOS_TERMINAR))
+            .toEqual({ campos: {}, general: 'El contrato está anulado.' });
+    });
+
+    it('los campos del diálogo de terminar no incluyen los de liquidar', () => {
+        expect(erroresCierre(error(422, { errors: { valor_liquidado: ['x'] } }), CAMPOS_TERMINAR)).toEqual({ campos: {}, general: 'x' });
+    });
+
+    it('otro error no es de validación: null', () => {
+        expect(erroresCierre(error(409, { mensaje: 'Otra persona…' }), CAMPOS_TERMINAR)).toBeNull();
+        expect(erroresCierre(error(500, {}), CAMPOS_TERMINAR)).toBeNull();
+    });
+});
+
+describe('cambiosSinGuardar', () => {
+    const anexos = [{ id: 1, descripcion: 'Póliza', nombre_archivo: 'p.pdf', ruta_archivo: 'anexos_contratos/p.pdf', fecha: '2026-01-05' }];
+    const contrato = { ...presentado, anexos };
+    const delContrato = anexosDelContrato(contrato);
+
+    it('el formulario recién abierto no tiene cambios, del listado o de presentar', () => {
+        expect(cambiosSinGuardar(formularioContrato(contrato), contrato, delContrato)).toBe(false);
+        expect(cambiosSinGuardar(formularioContrato({ ...listado, anexos }), { ...listado, anexos }, delContrato)).toBe(false);
+    });
+
+    it('un campo escrito es un cambio; volver a lo guardado, no', () => {
+        const formulario = formularioContrato(contrato);
+        expect(cambiosSinGuardar({ ...formulario, objeto: 'Otro objeto' }, contrato, delContrato)).toBe(true);
+        expect(cambiosSinGuardar({ ...formulario, objeto: 'Construcción del puente ' }, contrato, delContrato)).toBe(false);
+        expect(cambiosSinGuardar({ ...formulario, valor_inicial: '1.500.000,5' }, contrato, delContrato)).toBe(false);
+        expect(cambiosSinGuardar({ ...formulario, estado: 'suspendido' }, contrato, delContrato)).toBe(true);
+    });
+
+    it('el avance financiero que se recalcula solo con las actas no cuenta como cambio', () => {
+        expect(cambiosSinGuardar({ ...formularioContrato(contrato), avance_financiero: 31.5 }, contrato, delContrato)).toBe(false);
+    });
+
+    it('lo copiado de SECOP II o una desvinculación pendiente son cambios', () => {
+        expect(cambiosSinGuardar({ ...formularioContrato(contrato), secop_consultado: true }, contrato, delContrato)).toBe(true);
+        expect(cambiosSinGuardar({ ...formularioContrato(contrato), secop_desvincular: true }, contrato, delContrato)).toBe(true);
+    });
+
+    it('un anexo subido que el contrato no tiene es un cambio; uno eliminado ya se guardó', () => {
+        const nuevo = { id: 1700000000000, descripcion: 'Acta', nombreArchivo: 'a.pdf', rutaArchivo: 'anexos_contratos/a.pdf', fecha: '2026-11-19' };
+        expect(cambiosSinGuardar(formularioContrato(contrato), contrato, [...delContrato, nuevo])).toBe(true);
+        expect(cambiosSinGuardar(formularioContrato(contrato), contrato, [])).toBe(false);
+    });
+
+    it('sin contrato guardado, false', () => {
+        expect(cambiosSinGuardar(contratoVacio(), null, [])).toBe(false);
+    });
+});
+
+describe('contratoTrasCierre', () => {
+    it('toma del contrato presentado el estado, los datos de cierre, su aviso y la versión; lo demás se conserva', () => {
+        const abierto = { ...listado, anexos: [{ id: 1 }], modificaciones: [{ id: 2 }] };
+        const respuesta = {
+            ...presentado, estado: 'liquidado', fecha_terminacion_real: '2026-10-31', fecha_liquidacion: '2026-11-15',
+            valor_liquidado: '1250000.50', aviso_cierre: null, updated_at: '2026-11-19T15:00:00-05:00', objeto: 'No se toma',
+        };
+        expect(contratoTrasCierre(abierto, respuesta)).toEqual({
+            ...abierto, estado: 'liquidado', fecha_terminacion_real: '2026-10-31', fecha_liquidacion: '2026-11-15',
+            valor_liquidado: '1250000.50', aviso_cierre: null, updated_at: '2026-11-19T15:00:00-05:00',
+        });
+    });
+});
+
+describe('avisoEstadoCierreSecop', () => {
+    it('SECOP II propone terminado o liquidado y el contrato guardado no lo está', () => {
+        expect(avisoEstadoCierreSecop('liquidado', 'en_ejecucion'))
+            .toBe('SECOP II dice «Liquidado»: usa «Liquidar» para registrarlo con sus fechas y valor.');
+        expect(avisoEstadoCierreSecop('terminado', 'en_ejecucion'))
+            .toBe('SECOP II dice «Terminado»: usa «Terminar» para registrarlo con su fecha de terminación.');
+    });
+
+    it('un contrato liquidado al que SECOP II ve terminado: SECOP II va detrás, sin aviso', () => {
+        expect(avisoEstadoCierreSecop('terminado', 'liquidado')).toBeNull();
+    });
+
+    it('null si el contrato ya está en ese estado, si SECOP II propone otro o si el contrato es nuevo', () => {
+        expect(avisoEstadoCierreSecop('liquidado', 'liquidado')).toBeNull();
+        expect(avisoEstadoCierreSecop('en_ejecucion', 'liquidado')).toBeNull();
+        expect(avisoEstadoCierreSecop(undefined, 'en_ejecucion')).toBeNull();
+        expect(avisoEstadoCierreSecop('liquidado', null, true)).toBeNull();
+        expect(avisoEstadoCierreSecop('terminado', '', true)).toBeNull();
+    });
+
+    it('un contrato guardado sin estado también recibe el aviso: lo decide «es nuevo», no el estado vacío', () => {
+        expect(avisoEstadoCierreSecop('liquidado', null, false))
+            .toBe('SECOP II dice «Liquidado»: usa «Liquidar» para registrarlo con sus fechas y valor.');
+        expect(avisoEstadoCierreSecop('terminado', '', false))
+            .toBe('SECOP II dice «Terminado»: usa «Terminar» para registrarlo con su fecha de terminación.');
+        expect(avisoEstadoCierreSecop('liquidado', null))
+            .toBe('SECOP II dice «Liquidado»: usa «Liquidar» para registrarlo con sus fechas y valor.');
+    });
+});
+
+describe('estadoCierreBloqueado', () => {
+    it('SECOP II no cambia el estado de un contrato guardado a terminado ni a liquidado', () => {
+        expect(estadoCierreBloqueado('liquidado', 'en_ejecucion')).toBe(true);
+        expect(estadoCierreBloqueado('terminado', 'en_ejecucion')).toBe(true);
+        expect(estadoCierreBloqueado('terminado', 'liquidado')).toBe(true);
+        expect(estadoCierreBloqueado('liquidado', 'terminado')).toBe(true);
+    });
+
+    it('sí lo deja si ya está en ese estado, si es otro estado o si el contrato es nuevo', () => {
+        expect(estadoCierreBloqueado('liquidado', 'liquidado')).toBe(false);
+        expect(estadoCierreBloqueado('en_ejecucion', 'liquidado')).toBe(false);
+        expect(estadoCierreBloqueado(undefined, 'en_ejecucion')).toBe(false);
+        expect(estadoCierreBloqueado('liquidado', null, true)).toBe(false);
+        expect(estadoCierreBloqueado('terminado', '', true)).toBe(false);
+    });
+
+    it('un contrato guardado con estado null o vacío tampoco lo toma de SECOP II', () => {
+        expect(estadoCierreBloqueado('liquidado', null, false)).toBe(true);
+        expect(estadoCierreBloqueado('terminado', '', false)).toBe(true);
+        expect(estadoCierreBloqueado('liquidado', undefined)).toBe(true);
+        expect(estadoCierreBloqueado('en_ejecucion', null, false)).toBe(false);
+    });
+});
+
+describe('muestraBloqueCierre', () => {
+    it('terminado o liquidado, aunque no tenga datos', () => {
+        expect(muestraBloqueCierre({ ...presentado, estado: 'terminado' })).toBe(true);
+        expect(muestraBloqueCierre({ ...presentado, estado: 'liquidado', fecha_terminacion_real: null })).toBe(true);
+    });
+
+    it('en otro estado, solo si conserva algún dato de cierre (salió de terminado por el formulario)', () => {
+        expect(muestraBloqueCierre(presentado)).toBe(false);
+        expect(muestraBloqueCierre({ ...presentado, fecha_terminacion_real: null, fecha_liquidacion: null, valor_liquidado: null })).toBe(false);
+        expect(muestraBloqueCierre({ ...presentado, estado: 'en_ejecucion', fecha_terminacion_real: '2026-10-31' })).toBe(true);
+        expect(muestraBloqueCierre({ ...presentado, valor_liquidado: '0.00' })).toBe(true);
+    });
+
+    it('sin contrato, no', () => {
+        expect(muestraBloqueCierre(null)).toBe(false);
     });
 });

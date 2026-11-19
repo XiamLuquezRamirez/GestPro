@@ -467,3 +467,46 @@ describe('mensajeSecop', () => {
         expect(mensajeSecop({ request: {} })).toBe('No hay conexión con el servidor.');
     });
 });
+
+describe('estado de cierre que propone SECOP II (fase 7A)', () => {
+    const liquidadoEnSecop = { ...conContrato({ estado: 'liquidado' }), secop: { ...resultado.secop, estado_secop: 'Liquidado' } };
+    const terminadoEnSecop = { ...conContrato({ estado: 'terminado' }), secop: { ...resultado.secop, estado_secop: 'Terminado' } };
+
+    it('en un contrato guardado, el estado terminado o liquidado de SECOP II no se ofrece ni se copia', () => {
+        const formulario = formularioContrato(guardado);
+        expect(diferenciasSecop(formulario, liquidadoEnSecop, { tipos, contrato: guardado })).toEqual([]);
+        expect(diferenciasSecop({ ...formulario, objeto: 'X' }, terminadoEnSecop, { tipos, contrato: guardado }).map((d) => d.campo)).toEqual(['objeto']);
+        expect(aplicarDiferencias(formulario, liquidadoEnSecop, ['estado'], guardado).estado).toBe('en_ejecucion');
+    });
+
+    it('y avisa qué acción usar', () => {
+        expect(avisosSecop(liquidadoEnSecop, formularioContrato(guardado), guardado))
+            .toEqual(['SECOP II dice «Liquidado»: usa «Liquidar» para registrarlo con sus fechas y valor.']);
+        expect(avisosSecop(terminadoEnSecop, formularioContrato(guardado), guardado))
+            .toEqual(['SECOP II dice «Terminado»: usa «Terminar» para registrarlo con su fecha de terminación.']);
+    });
+
+    it('si el contrato guardado ya está en ese estado, nada cambia', () => {
+        const liquidado = { ...guardado, estado: 'liquidado' };
+        expect(diferenciasSecop(formularioContrato(liquidado), liquidadoEnSecop, { tipos, contrato: liquidado })).toEqual([]);
+        expect(avisosSecop(liquidadoEnSecop, formularioContrato(liquidado), liquidado)).toEqual([]);
+    });
+
+    it('un contrato guardado sin estado tampoco toma el estado de cierre de SECOP II, y se avisa', () => {
+        const sinEstado = { ...guardado, estado: null };
+        const formulario = formularioContrato(sinEstado);
+        expect(diferenciasSecop(formulario, liquidadoEnSecop, { tipos, contrato: sinEstado }).map((d) => d.campo)).not.toContain('estado');
+        expect(aplicarDiferencias(formulario, liquidadoEnSecop, ['estado'], sinEstado).estado).toBe('');
+        expect(avisosSecop(liquidadoEnSecop, formulario, sinEstado))
+            .toContain('SECOP II dice «Liquidado»: usa «Liquidar» para registrarlo con sus fechas y valor.');
+        expect(avisosSecop(terminadoEnSecop, formulario, sinEstado))
+            .toContain('SECOP II dice «Terminado»: usa «Terminar» para registrarlo con su fecha de terminación.');
+    });
+
+    it('un contrato nuevo sí toma el estado de cierre de SECOP II, sin aviso', () => {
+        const importado = importarSecop(contratoVacio(), liquidadoEnSecop);
+        expect(importado.estado).toBe('liquidado');
+        expect(avisosSecop(liquidadoEnSecop, importado)).toEqual([]);
+        expect(diferenciasSecop({ ...importado, estado: 'en_ejecucion' }, liquidadoEnSecop, { tipos }).map((d) => d.campo)).toEqual(['estado']);
+    });
+});

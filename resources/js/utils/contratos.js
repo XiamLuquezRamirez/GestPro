@@ -4,7 +4,7 @@
 // Funciones puras, probadas en contratos.test.js. Las reglas las valida el backend
 // (ContratoController y ContratosService); aquí se adelantan los mismos mensajes.
 
-import { erroresPorCampo, etiquetaEstadoProceso, etiquetaPlataforma, numeroProceso, valorDesdeApi, valorParaApi } from './contratacion';
+import { MAXIMO_OBSERVACION, erroresPorCampo, etiquetaEstadoProceso, etiquetaPlataforma, numeroProceso, valorDesdeApi, valorParaApi } from './contratacion';
 import { numeroDeMoneda } from './moneda';
 
 // Los valores son las constantes de Contrato (contratos.test.js lo comprueba).
@@ -446,4 +446,262 @@ export const etiquetaTipoModificacion = (tipo) => {
     if (tipo === 'adicion') return 'Adición';
     if (tipo === 'prorroga') return 'Prórroga';
     return 'Adición y Prórroga';
+};
+
+// ---------- Cierre del contrato: terminar y liquidar (fase 7A) ----------
+
+// Estados a los que solo se llega con su acción («Terminar», «Liquidar»), no con el formulario
+// (ContratosService::ESTADOS_DE_CIERRE).
+const ESTADOS_DE_CIERRE = ['terminado', 'liquidado'];
+// Estados desde los que se termina un contrato (CierreContratos::TERMINABLES).
+const TERMINABLES = ['celebrado', 'en_ejecucion', 'suspendido', 'terminado'];
+const ACCION_DE_ESTADO = { terminado: 'Terminar', liquidado: 'Liquidar' };
+
+/** Los campos de los diálogos de terminar y liquidar, con los nombres de la API. */
+export const CAMPOS_TERMINAR = ['fecha_terminacion_real', 'observacion'];
+export const CAMPOS_LIQUIDAR = ['fecha_terminacion_real', 'fecha_liquidacion', 'valor_liquidado', 'observacion'];
+
+// Los mensajes de CierreContratos y ContratoController.
+const MENSAJES_CIERRE = {
+    sinTerminacion: 'Escribe la fecha de terminación real.',
+    terminacionFutura: 'La fecha de terminación no puede ser posterior a hoy.',
+    terminacionAnterior: 'La fecha de terminación no puede ser anterior a la de inicio.',
+    sinLiquidacion: 'Escribe la fecha de liquidación.',
+    liquidacionFutura: 'La fecha de liquidación no puede ser posterior a hoy.',
+    liquidacionAnterior: 'La fecha de liquidación no puede ser anterior a la de terminación.',
+    sinValor: 'Escribe el valor liquidado.',
+    valorLargo: `El valor liquidado admite hasta ${CIFRAS_ENTERAS} cifras enteras y 2 decimales.`,
+    observacionLarga: `La observación admite hasta ${MAXIMO_OBSERVACION} caracteres.`,
+};
+
+/**
+ * Qué acciones de cierre ofrece un contrato guardado: terminar (celebrado, en ejecución,
+ * suspendido o terminado, para corregir la fecha) y liquidar (cualquier estado salvo anulado;
+ * liquidado, para completar o corregir), con la etiqueta de cada botón.
+ */
+export const accionesCierre = (contrato) => {
+    const existe = !vacio(contrato?.id);
+    const estado = contrato?.estado ?? null;
+    return {
+        terminar: existe && TERMINABLES.includes(estado),
+        liquidar: existe && estado !== 'anulado',
+        etiquetaTerminar: estado === 'terminado' ? 'Corregir terminación' : 'Terminar',
+        etiquetaLiquidar: estado === 'liquidado' ? 'Corregir liquidación' : 'Liquidar',
+    };
+};
+
+/**
+ * La nota junto a los botones de cierre de un contrato guardado sin estado o con uno fuera de la
+ * lista (un contrato antiguo sin convertir): no se puede terminar hasta elegir y guardar un estado
+ * (el servidor lo rechaza); liquidar sí, como en el servidor. null si no aplica.
+ */
+export const notaSinEstadoCierre = (contrato) => {
+    if (vacio(contrato?.id)) return null;
+    return ESTADOS_CONTRATO.some(([valor]) => valor === contrato.estado)
+        ? null
+        : 'Elige un estado para el contrato y guárdalo para poder terminarlo.';
+};
+
+/**
+ * El texto del aviso de datos de cierre que faltan (`aviso_cierre` de la API): "Faltan datos de
+ * liquidación" si falta la fecha de liquidación o el valor; "Falta la fecha de terminación" si
+ * solo falta esa. null si no falta nada.
+ */
+export const textoAvisoCierre = (aviso) => {
+    const faltan = Array.isArray(aviso?.faltan) ? aviso.faltan : [];
+    if (faltan.includes('fecha_liquidacion') || faltan.includes('valor_liquidado')) return 'Faltan datos de liquidación';
+    if (faltan.includes('fecha_terminacion_real')) return 'Falta la fecha de terminación';
+    return null;
+};
+
+// Un monto de la API ("1250000.50", "1000", 1500000.5) en centavos, como BigInt: así la resta es
+// exacta. null si no hay monto o no se puede leer (más de dos decimales, texto).
+const centavos = (monto) => {
+    if (vacio(monto)) return null;
+    const partes = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(String(monto).trim());
+    if (!partes) return null;
+    const valor = BigInt(partes[2]) * 100n + BigInt((partes[3] ?? '').padEnd(2, '0'));
+    return partes[1] ? -valor : valor;
+};
+
+const montoDeCentavos = (valor) => {
+    const absoluto = valor < 0n ? -valor : valor;
+    const centimos = String(absoluto % 100n).padStart(2, '0');
+    return `${valor < 0n ? '-' : ''}${absoluto / 100n}.${centimos}`;
+};
+
+/**
+ * El saldo de la liquidación: el valor vigente (`valor`) menos el liquidado, con dos decimales
+ * exactos ("250000.25"; negativo si lo liquidado supera lo vigente). null si falta alguno.
+ */
+export const saldoLiquidacion = (contrato) => {
+    const vigente = centavos(contrato?.valor);
+    const liquidado = centavos(contrato?.valor_liquidado);
+    if (vigente === null || liquidado === null) return null;
+    return montoDeCentavos(vigente - liquidado);
+};
+
+/** Si el contrato guardado muestra el bloque "Cierre": está terminado o liquidado, o tiene algún dato de cierre. */
+export const muestraBloqueCierre = (contrato) => Boolean(contrato) && (
+    ESTADOS_DE_CIERRE.includes(contrato.estado)
+    || [contrato.fecha_terminacion_real, contrato.fecha_liquidacion, contrato.valor_liquidado].some((valor) => !vacio(valor))
+);
+
+/**
+ * Las opciones del select de estado. Al editar, terminado y liquidado se deshabilitan (se llega a
+ * ellos con «Terminar» y «Liquidar») salvo el estado guardado; un contrato nuevo puede llegar en
+ * cualquiera (p. ej. uno de SECOP II ya liquidado).
+ */
+export const opcionesEstadoContrato = (estadoGuardado, esNuevo) => ESTADOS_CONTRATO.map(([valor, etiqueta]) => {
+    const deshabilitado = !esNuevo && ESTADOS_DE_CIERRE.includes(valor) && valor !== estadoGuardado;
+    return { valor, etiqueta: deshabilitado ? `${etiqueta} (usa «${ACCION_DE_ESTADO[valor]}»)` : etiqueta, deshabilitado };
+});
+
+/** El formulario del diálogo de terminar: la fecha guardada, si la hay. */
+export const formularioTerminar = (contrato) => ({
+    fecha_terminacion_real: comoFecha(contrato?.fecha_terminacion_real),
+    observacion: '',
+});
+
+/** El formulario del diálogo de liquidar: los datos guardados, el valor con los miles agrupados. */
+export const formularioLiquidar = (contrato) => ({
+    fecha_terminacion_real: comoFecha(contrato?.fecha_terminacion_real),
+    fecha_liquidacion: comoFecha(contrato?.fecha_liquidacion),
+    valor_liquidado: valorDesdeApi(contrato?.valor_liquidado),
+    observacion: '',
+});
+
+const observacionParaApi = (formulario) => (vacio(formulario?.observacion) ? null : String(formulario.observacion).trim());
+
+/** Lo que espera POST /contratos/{id}/terminar, con la versión (`updated_at`) del contrato abierto. */
+export const datosTerminar = (formulario, contrato) => ({
+    fecha_terminacion_real: comoFecha(formulario.fecha_terminacion_real),
+    observacion: observacionParaApi(formulario),
+    actualizado: contrato?.updated_at ?? null,
+});
+
+/** Lo que espera POST /contratos/{id}/liquidar: el valor como número de la API ("1250000.5"). */
+export const datosLiquidar = (formulario, contrato) => ({
+    fecha_terminacion_real: comoFecha(formulario.fecha_terminacion_real),
+    fecha_liquidacion: comoFecha(formulario.fecha_liquidacion),
+    valor_liquidado: valorParaApi(formulario.valor_liquidado),
+    observacion: observacionParaApi(formulario),
+    actualizado: contrato?.updated_at ?? null,
+});
+
+// La fecha de terminación: obligatoria, no posterior a hoy ni anterior a la de inicio.
+const errorTerminacion = (fecha, contrato, hoy) => {
+    if (!fecha) return MENSAJES_CIERRE.sinTerminacion;
+    if (fecha > hoy) return MENSAJES_CIERRE.terminacionFutura;
+    const inicio = comoFecha(contrato?.fecha_inicio);
+    if (inicio && fecha < inicio) return MENSAJES_CIERRE.terminacionAnterior;
+    return null;
+};
+
+const errorObservacion = (formulario) => (
+    String(formulario?.observacion ?? '').trim().length > MAXIMO_OBSERVACION ? MENSAJES_CIERRE.observacionLarga : null
+);
+
+const sinNulos = (errores) => Object.fromEntries(Object.entries(errores).filter(([, mensaje]) => mensaje));
+
+/**
+ * Errores del diálogo de terminar por campo, con los mensajes del servidor; {} si se puede
+ * enviar. `hoy` es el día (año-mes-día) en la zona de contratación.
+ */
+export const erroresTerminar = (formulario, contrato, hoy) => sinNulos({
+    fecha_terminacion_real: errorTerminacion(comoFecha(formulario?.fecha_terminacion_real), contrato, hoy),
+    observacion: errorObservacion(formulario),
+});
+
+/**
+ * Errores del diálogo de liquidar por campo; {} si se puede enviar. Las fechas no son posteriores
+ * a `hoy`; la de terminación no es anterior a la de inicio ni la de liquidación a la de terminación.
+ */
+export const erroresLiquidar = (formulario, contrato, hoy) => {
+    const terminacion = comoFecha(formulario?.fecha_terminacion_real);
+    const liquidacion = comoFecha(formulario?.fecha_liquidacion);
+    let errorLiquidacion = null;
+    if (!liquidacion) errorLiquidacion = MENSAJES_CIERRE.sinLiquidacion;
+    else if (liquidacion > hoy) errorLiquidacion = MENSAJES_CIERRE.liquidacionFutura;
+    else if (terminacion && liquidacion < terminacion) errorLiquidacion = MENSAJES_CIERRE.liquidacionAnterior;
+    const valor = valorParaApi(formulario?.valor_liquidado);
+    let errorValor = null;
+    if (valor === null) errorValor = MENSAJES_CIERRE.sinValor;
+    else if (valor.split('.')[0].length > CIFRAS_ENTERAS) errorValor = MENSAJES_CIERRE.valorLargo;
+    return sinNulos({
+        fecha_terminacion_real: errorTerminacion(terminacion, contrato, hoy),
+        fecha_liquidacion: errorLiquidacion,
+        valor_liquidado: errorValor,
+        observacion: errorObservacion(formulario),
+    });
+};
+
+/**
+ * Los errores de un 422 de terminar o liquidar: `campos`, los de los `campos` del diálogo, junto a
+ * su control, y `general`, el primero de los demás o el `mensaje` de un 422 por estado (anulado,
+ * liquidado). null si no es un 422.
+ */
+export const erroresCierre = (error, campos) => {
+    if (error?.response?.status !== 422) return null;
+    const porCampo = erroresPorCampo(error, campos);
+    if (porCampo) return { campos: porCampo.campos, general: porCampo.otros[0] ?? null };
+    const mensaje = error.response.data?.mensaje;
+    return { campos: {}, general: typeof mensaje === 'string' && mensaje.trim() ? mensaje : null };
+};
+
+/**
+ * El contrato abierto tras terminarlo o liquidarlo: del contrato presentado que responde la API
+ * toma el estado, los datos de cierre, su aviso y la versión nueva; lo demás (anexos, actas…) se
+ * conserva.
+ */
+export const contratoTrasCierre = (abierto, presentado) => ({
+    ...abierto,
+    estado: presentado.estado,
+    fecha_terminacion_real: presentado.fecha_terminacion_real,
+    fecha_liquidacion: presentado.fecha_liquidacion,
+    valor_liquidado: presentado.valor_liquidado,
+    aviso_cierre: presentado.aviso_cierre ?? null,
+    updated_at: presentado.updated_at,
+});
+
+// Campos que no cuentan como cambio: el avance financiero se recalcula solo con las actas.
+const SIN_COMPARAR = ['avance_financiero'];
+
+/**
+ * Si el formulario del contrato guardado tiene cambios sin guardar: lo que se enviaría a
+ * /guardarContrato difiere de lo del contrato (sin el avance financiero, que se recalcula solo),
+ * o hay anexos subidos que el contrato aún no tiene (los eliminados ya se borraron en el
+ * servidor). Un contrato nuevo (sin `contrato`) no cuenta.
+ */
+export const cambiosSinGuardar = (formulario, contrato, anexos = []) => {
+    if (!contrato) return false;
+    // El valor se compara en centavos: "1500000.5" y "1500000.50" son el mismo.
+    const comparable = (datos) => JSON.stringify(Object.fromEntries(Object.entries(datos)
+        .filter(([campo]) => !SIN_COMPARAR.includes(campo))
+        .map(([campo, valor]) => [campo, campo === 'valor_inicial' ? String(centavos(valor)) : valor])));
+    if (comparable(datosContrato(formulario, contrato)) !== comparable(datosContrato(formularioContrato(contrato), contrato))) return true;
+    const guardados = new Set((contrato.anexos ?? []).map((anexo) => String(anexo.id)));
+    return (anexos ?? []).some((anexo) => !guardados.has(String(anexo.id)));
+};
+
+/**
+ * Si SECOP II no puede cambiar el estado del contrato guardado: propone terminado o liquidado y
+ * el contrato no está en ese estado (a esos estados se llega con «Terminar» y «Liquidar»). Lo
+ * decide `esNuevo`, como en opcionesEstadoContrato: un contrato nuevo sí lo toma; uno guardado,
+ * aunque su estado esté vacío, no.
+ */
+export const estadoCierreBloqueado = (estadoSecop, estadoGuardado, esNuevo = false) => (
+    !esNuevo && ESTADOS_DE_CIERRE.includes(estadoSecop) && estadoSecop !== estadoGuardado
+);
+
+/**
+ * El aviso de "Actualizar desde SECOP II" cuando propone terminado o liquidado y el contrato
+ * guardado no lo está: qué acción usar. null si no aplica (contrato nuevo incluido), o si el
+ * contrato ya está liquidado y SECOP II lo ve terminado (va detrás).
+ */
+export const avisoEstadoCierreSecop = (estadoSecop, estadoGuardado, esNuevo = false) => {
+    if (!estadoCierreBloqueado(estadoSecop, estadoGuardado, esNuevo)) return null;
+    if (estadoSecop === 'liquidado') return 'SECOP II dice «Liquidado»: usa «Liquidar» para registrarlo con sus fechas y valor.';
+    if (estadoGuardado === 'liquidado') return null;
+    return 'SECOP II dice «Terminado»: usa «Terminar» para registrarlo con su fecha de terminación.';
 };

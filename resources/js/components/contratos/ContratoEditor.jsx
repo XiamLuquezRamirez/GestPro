@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import {
-    faArrowUpRightFromSquare, faCalculator, faEye, faFile, faInfo, faLinkSlash, faMagnifyingGlass, faPlus, faRotate, faSave, faTimes, faTrash,
+    faArrowUpRightFromSquare, faCalculator, faEye, faFile, faFileSignature, faFlagCheckered, faInfo, faLinkSlash, faMagnifyingGlass, faPlus, faRotate,
+    faSave, faTimes, faTrash,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
@@ -8,11 +9,11 @@ import axios from '../../axios';
 import { avisarError } from '../../utils/avisosPlantillas';
 import { datosEstado, esEdicionDesactualizada, textoFecha, textoValor, valorEnEdicion } from '../../utils/contratacion';
 import {
-    ACTA_VACIA, ACTIVIDAD_VACIA, ANEXO_VACIO, AVANCE_VACIO, ESTADOS_CONTRATO, MODIFICACION_VACIA, actividadConAvance, anexosDelContrato,
-    anexosParaGuardar, aplicarPrecarga, avanceFinancieroDeActas, avanceFisicoDeActividades, calculoActa, cambiarProyecto, contratoVacio,
-    datosActa, datosContrato, datosDelProceso, datosModificacion, erroresGuardarContrato, etiquetaTipoModificacion, formularioContrato,
-    notaProceso, opcionesProceso, opcionesTipoContrato, primerCampoConError, procesoDelContrato, procesoElegido, sumaPesos, validarContrato,
-    valorVigente, vigentesDistintos,
+    ACTA_VACIA, ACTIVIDAD_VACIA, ANEXO_VACIO, AVANCE_VACIO, MODIFICACION_VACIA, accionesCierre, actividadConAvance, anexosDelContrato,
+    anexosParaGuardar, aplicarPrecarga, avanceFinancieroDeActas, avanceFisicoDeActividades, calculoActa, cambiarProyecto, cambiosSinGuardar,
+    contratoTrasCierre, contratoVacio, datosActa, datosContrato, datosDelProceso, datosModificacion, erroresGuardarContrato,
+    etiquetaTipoModificacion, formularioContrato, muestraBloqueCierre, notaProceso, notaSinEstadoCierre, opcionesEstadoContrato, opcionesProceso,
+    opcionesTipoContrato, primerCampoConError, procesoDelContrato, procesoElegido, sumaPesos, validarContrato, valorVigente, vigentesDistintos,
 } from '../../utils/contratos';
 import { opcionesProyecto } from '../../utils/contratosModulo';
 import { formatoMoneda, limpiarMoneda, monedaEnEdicion, numeroDeMoneda } from '../../utils/moneda';
@@ -21,6 +22,7 @@ import {
     TEXTO_REEMPLAZAR_CON_SECOP, aplicarDiferencias, avisosSecop, camposCambiados, desvincularSecop, diferenciasSecop, formularioTieneDatos, importarSecop,
     mensajeSecop, referenciaSecop, vincularSecop,
 } from '../../utils/secop';
+import { BloqueCierre, DialogoCierre } from './CierreContrato';
 import { BuscarSecop, DiferenciasSecop } from './SecopContrato';
 import '../../../css/Parametros.css';
 import '../../../css/Contratacion.css';
@@ -28,6 +30,7 @@ import '../../../css/Contratacion.css';
 const MENSAJE_IMPORTADO_SECOP = 'Formulario lleno con los datos de SECOP II: revísalos y guarda el contrato.';
 const MENSAJE_COINCIDE_SECOP = 'Coincide con SECOP II: guarda el contrato para registrar la consulta.';
 const MENSAJE_VINCULADO_SECOP = 'Contrato vinculado a SECOP II: guárdalo para conservar el vínculo.';
+const NOTA_CAMBIOS_SIN_GUARDAR = 'Guarda o descarta tus cambios primero';
 
 /** Catálogo de tipos de contrato (GET /tiposProcesos); null si no se pudo traer. */
 export const pedirTiposContrato = async () => {
@@ -68,9 +71,13 @@ export const pedirProcesosProyecto = async (proyectoId) => {
  *   con proyecto puede cambiarlo, pero no quitarlo. Al cambiarlo se cargan los procesos del
  *   elegido. Sin la prop, el proyecto es el de `proyecto` o el del contrato, sin selector.
  * - `puedeEditar`: sin permiso, el contrato se ve sin controles para modificarlo.
+ *   Con permiso, un contrato guardado ofrece «Terminar» y «Liquidar» (o sus correcciones), cada uno
+ *   con su diálogo; quedan deshabilitados mientras el formulario tenga cambios sin guardar.
  *   Con permiso, el formulario ofrece SECOP II: "Buscar en SECOP II" (contrato nuevo o sin ID de
  *   SECOP II) y "Actualizar desde SECOP II" (con ID). Lo que se copia de SECOP II se guarda con el contrato.
  * - `recargar(id)`: vuelve a traer los contratos tras un cambio en las pestañas; resuelve el contrato `id` recargado o null.
+ * - `onCambio()` (opcional): tras terminar o liquidar el contrato, para que quien lo pinta (y quien
+ *   pinta a este) recargue lo suyo: el contrato tiene una versión nueva.
  * - `onGuardado(contrato)`: tras guardar (con los avisos ya mostrados); quien lo pinta cierra el editor.
  * - `onCancelar()`: "Cancelar" o "Volver a la lista".
  * - `onOcupado(ocupado)` (opcional): true al empezar a guardar y false al terminar (tras `onGuardado`,
@@ -78,7 +85,7 @@ export const pedirProcesosProyecto = async (proyectoId) => {
  */
 const ContratoEditor = ({
     proyecto = null, contrato = null, procesoInicial = null, importacionSecop = null, tiposContrato, procesosIniciales = null, proyectos, puedeEditar = true,
-    recargar, onGuardado, onCancelar, onOcupado,
+    recargar, onGuardado, onCancelar, onOcupado, onCambio,
 }) => {
     const [editingContrato, setEditingContrato] = useState(contrato);
     const [contratoActiveTab, setContratoActiveTab] = useState('informacion');
@@ -129,6 +136,9 @@ const ContratoEditor = ({
     const [mensajeDeSecop, setMensajeDeSecop] = useState(importadoDeSecop ? MENSAJE_IMPORTADO_SECOP : null);
     const [consultandoSecop, setConsultandoSecop] = useState(false);
     const turnoSecop = useRef(0);
+    // Cierre del contrato: el diálogo abierto ('terminar', 'liquidar' o null).
+    const [dialogoCierre, setDialogoCierre] = useState(null);
+    const idNotaCierre = useId();
     // El formulario del último render, para comparar con SECOP II cuando llega la respuesta.
     const formularioActual = useRef(formContrato);
     formularioActual.current = formContrato;
@@ -225,10 +235,10 @@ const ContratoEditor = ({
         if (!diferencias.length) {
             const consultado = aplicarDiferencias(formulario, resultado, [], editingContrato);
             setDialogoSecop(null);
-            copiarAlFormulario(consultado, avisosSecop(resultado, consultado), mensajeSinDiferencias);
+            copiarAlFormulario(consultado, avisosSecop(resultado, consultado, editingContrato), mensajeSinDiferencias);
             return;
         }
-        setDialogoSecop({ tipo: 'diferencias', titulo, resultado, diferencias, avisos: avisosSecop(resultado, formulario) });
+        setDialogoSecop({ tipo: 'diferencias', titulo, resultado, diferencias, avisos: avisosSecop(resultado, formulario, editingContrato) });
     };
 
     // "Usar este": un contrato nuevo se llena con lo de SECOP II (si ya tenía datos, se confirma);
@@ -236,7 +246,7 @@ const ContratoEditor = ({
     const usarResultadoSecop = async (resultado) => {
         if (editingContrato) {
             const vinculado = vincularSecop(formularioActual.current, resultado);
-            copiarAlFormulario(vinculado, avisosSecop(resultado, vinculado), MENSAJE_VINCULADO_SECOP);
+            copiarAlFormulario(vinculado, avisosSecop(resultado, vinculado, editingContrato), MENSAJE_VINCULADO_SECOP);
             mostrarDiferencias(vinculado, resultado, '¿Copiar también los demás datos?', MENSAJE_VINCULADO_SECOP);
             return;
         }
@@ -276,7 +286,7 @@ const ContratoEditor = ({
     const copiarDiferencias = (elegidos) => {
         const { resultado } = dialogoSecop;
         const aplicado = aplicarDiferencias(formularioActual.current, resultado, elegidos, editingContrato);
-        copiarAlFormulario(aplicado, avisosSecop(resultado, aplicado),
+        copiarAlFormulario(aplicado, avisosSecop(resultado, aplicado, editingContrato),
             'Datos de SECOP II copiados al formulario: guarda el contrato para conservarlos.');
         setDialogoSecop(null);
     };
@@ -724,6 +734,54 @@ const ContratoEditor = ({
         onGuardado(guardado);
     };
 
+    // ---------- Cierre del contrato: terminar y liquidar ----------
+
+    // Recarga los contratos de quien pinta el editor sin dejar una promesa rechazada: true si se
+    // recargaron, false si falló.
+    const recargarTrasCierre = async (id) => {
+        try {
+            await recargar?.(id);
+            return true;
+        } catch {
+            return false;
+        }
+    };
+
+    // Avisa a quien pinta el editor (p. ej. Parámetros recarga sus proyectos); un fallo suyo no
+    // deja una promesa sin manejar.
+    const avisarCambio = () => {
+        Promise.resolve().then(() => onCambio?.()).catch(() => {});
+    };
+
+    // Tras terminar o liquidar: el contrato abierto toma el estado, los datos de cierre y la
+    // versión nueva (así el formulario se puede seguir guardando sin 409), el select de estado
+    // lo sigue (no había cambios sin guardar), quien lo pinta recarga su lista y se avisa. Si la
+    // lista no se pudo recargar, se dice: al reabrir el contrato desde ella daría desactualizado.
+    const alCerrarContrato = async (tipo, data) => {
+        const { contrato: presentado, avisos = [] } = data ?? {};
+        setDialogoCierre(null);
+        if (!presentado) return;
+        setEditingContrato(prev => contratoTrasCierre(prev, presentado));
+        setFormContrato(prev => ({ ...prev, estado: presentado.estado ?? prev.estado }));
+        avisarCambio();
+        const titulo = tipo === 'terminar' ? 'Contrato terminado' : 'Contrato liquidado';
+        const recargado = await recargarTrasCierre(editingContrato.id);
+        const sinRecargar = recargado ? [] : ['No se pudo actualizar la lista de contratos: ciérrala y vuelve a abrirla para ver lo último.'];
+        const lista = [...avisos, ...sinRecargar];
+        await (lista.length
+            ? Swal.fire({ icon: 'warning', titleText: `${titulo}, con avisos`, html: htmlErrores('Revisa lo siguiente:', lista) })
+            : Swal.fire({ icon: 'success', title: titulo }));
+    };
+
+    // Otra persona cambió el contrato: como al guardar, se avisa y se recarga la lista.
+    const alCierreDesactualizado = async (error) => {
+        setDialogoCierre(null);
+        await Promise.all([
+            recargarTrasCierre(editingContrato?.id),
+            Swal.fire({ icon: 'warning', titleText: 'No se guardó el cierre', text: mensajeApi(error) }),
+        ]);
+    };
+
     // Refrescar los datos del contrato abierto tras registrar o eliminar una modificación
     const refrescarContratoAbierto = async () => {
         const actual = await recargar(formContrato.id);
@@ -800,6 +858,18 @@ const ContratoEditor = ({
     const referenciaContratoSecop = referenciaSecop(formContrato, editingContrato);
     const puedeBuscarSecop = puedeEditar && !editingContrato?.secop_id_contrato;
     const puedeActualizarSecop = puedeEditar && Boolean(editingContrato?.secop_id_contrato) && !referenciaContratoSecop.desvinculado;
+    // Cierre: qué acciones ofrece el contrato guardado y si el formulario tiene cambios sin guardar
+    // (terminar o liquidar cambia la versión: lo escrito ya no se podría guardar).
+    const cierre = accionesCierre(editingContrato);
+    const ofreceCierre = puedeEditar && (cierre.terminar || cierre.liquidar);
+    const conCambios = ofreceCierre && cambiosSinGuardar(formContrato, editingContrato, anexos);
+    // Un contrato guardado sin estado válido no se termina hasta elegirlo y guardarlo.
+    const notaSinEstado = ofreceCierre ? notaSinEstadoCierre(editingContrato) : null;
+    // Con cambios sin guardar, los botones siguen enfocables (aria-disabled) y la nota explica por
+    // qué no hacen nada; mientras se guarda, sí quedan deshabilitados.
+    const abrirCierre = (tipo) => {
+        if (!conCambios) setDialogoCierre(tipo);
+    };
 
     // Propiedades comunes de un control del formulario de contrato: valor, cambio y aviso de error.
     // Sin permiso para editar, el control queda deshabilitado.
@@ -825,6 +895,36 @@ const ContratoEditor = ({
             <div className="contratos-modal-body">
                 <div className="contrato-form-header">
                     <h3>{editingContrato ? 'Editar Contrato' : 'Agregar Nuevo Contrato'}</h3>
+                    {ofreceCierre && (
+                        <div className="ct-cierre-acciones">
+                            {cierre.terminar && (
+                                <button
+                                    type="button"
+                                    className="gp-boton"
+                                    onClick={() => abrirCierre('terminar')}
+                                    disabled={guardandoContrato}
+                                    aria-disabled={conCambios ? 'true' : undefined}
+                                    aria-describedby={conCambios ? idNotaCierre : undefined}
+                                >
+                                    <FontAwesomeIcon icon={faFlagCheckered} /> {cierre.etiquetaTerminar}
+                                </button>
+                            )}
+                            {cierre.liquidar && (
+                                <button
+                                    type="button"
+                                    className="gp-boton"
+                                    onClick={() => abrirCierre('liquidar')}
+                                    disabled={guardandoContrato}
+                                    aria-disabled={conCambios ? 'true' : undefined}
+                                    aria-describedby={conCambios ? idNotaCierre : undefined}
+                                >
+                                    <FontAwesomeIcon icon={faFileSignature} /> {cierre.etiquetaLiquidar}
+                                </button>
+                            )}
+                            {conCambios && <small id={idNotaCierre} className="ct-cierre-nota">{NOTA_CAMBIOS_SIN_GUARDAR}</small>}
+                            {notaSinEstado && <small className="ct-cierre-nota">{notaSinEstado}</small>}
+                        </div>
+                    )}
                     <button
                         onClick={onCancelar}
                         className="btn-back-to-list"
@@ -987,8 +1087,8 @@ const ContratoEditor = ({
                                 {campoContrato('estado', 'Estado *', (
                                     <select {...controlContrato('estado')}>
                                         <option value="">Elige el estado</option>
-                                        {ESTADOS_CONTRATO.map(([valor, etiqueta]) => (
-                                            <option key={valor} value={valor}>{etiqueta}</option>
+                                        {opcionesEstadoContrato(editingContrato?.estado, !editingContrato).map(o => (
+                                            <option key={o.valor} value={o.valor} disabled={o.deshabilitado}>{o.etiqueta}</option>
                                         ))}
                                     </select>
                                 ))}
@@ -1034,6 +1134,7 @@ const ContratoEditor = ({
                                     Los vigentes suman al valor inicial y a la fecha fin inicial las adiciones y prórrogas de la pestaña Modificaciones; se recalculan al guardar.
                                 </p>
                             )}
+                            {editingContrato && muestraBloqueCierre(editingContrato) && <BloqueCierre contrato={editingContrato} />}
                             <div className="form-row">
                                 {campoContrato('numero_rp', 'Número del RP', <input type="text" maxLength={40} {...controlContrato('numero_rp')} />)}
                                 {campoContrato('fecha_rp', 'Fecha del RP', <input type="date" {...controlContrato('fecha_rp')} />)}
@@ -1620,6 +1721,15 @@ const ContratoEditor = ({
                     avisos={dialogoSecop.avisos}
                     onCopiar={copiarDiferencias}
                     onCerrar={() => setDialogoSecop(null)}
+                />
+            )}
+            {dialogoCierre && editingContrato && (
+                <DialogoCierre
+                    tipo={dialogoCierre}
+                    contrato={editingContrato}
+                    onGuardado={(data) => alCerrarContrato(dialogoCierre, data)}
+                    onDesactualizado={alCierreDesactualizado}
+                    onCerrar={() => setDialogoCierre(null)}
                 />
             )}
 

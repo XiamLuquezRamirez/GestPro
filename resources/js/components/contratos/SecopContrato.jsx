@@ -12,9 +12,11 @@ import '../../../css/Contratacion.css';
 /**
  * Diálogo modal de SECOP II, en `document.body`: así queda encima del editor aunque este viva en
  * otro diálogo. Escape, la "×" y un clic en el fondo llaman a `onCerrar`. Escape y Tab no llegan al
- * diálogo de afuera (que cerraría el editor o movería el foco fuera de este).
+ * diálogo de afuera (que cerraría el editor o movería el foco fuera de este). Lo usan también los
+ * diálogos de cierre del contrato: `etiqueta` es el rótulo sobre el título y `estrecho`, para un
+ * formulario corto.
  */
-export const DialogoSecop = ({ titulo, onCerrar, children }) => {
+export const DialogoSecop = ({ titulo, etiqueta = 'SECOP II', estrecho = false, onCerrar, children }) => {
     const caja = useRef(null);
     const idTitulo = useId();
     const alPulsar = useDialogoModal(caja, onCerrar);
@@ -25,10 +27,10 @@ export const DialogoSecop = ({ titulo, onCerrar, children }) => {
 
     return createPortal(
         <div className="ct-dialogo-fondo" onMouseDown={(e) => { if (e.target === e.currentTarget) onCerrar(); }}>
-            <div ref={caja} className="ct-dialogo" role="dialog" aria-modal="true" aria-labelledby={idTitulo} tabIndex={-1} onKeyDown={pulsar}>
+            <div ref={caja} className={`ct-dialogo${estrecho ? ' ct-dialogo-estrecho' : ''}`} role="dialog" aria-modal="true" aria-labelledby={idTitulo} tabIndex={-1} onKeyDown={pulsar}>
                 <header className="ct-dialogo-cabecera">
                     <div>
-                        <span className="gp-etiqueta">SECOP II</span>
+                        <span className="gp-etiqueta">{etiqueta}</span>
                         <h2 id={idTitulo}>{titulo}</h2>
                     </div>
                     <button type="button" className="gp-icono" onClick={onCerrar} aria-label="Cerrar">

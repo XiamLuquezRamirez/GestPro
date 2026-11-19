@@ -10,6 +10,7 @@ import {
     rutaListaDesde, rutaVistaSecop, textoListaVacia, textoVolverDesde, vistaDeConsulta,
 } from '../../utils/contratosModulo';
 import { avisoProcesoContrato } from '../../utils/avisosContratacion';
+import { textoAvisoCierre } from '../../utils/contratos';
 import { RUTA_CONTRATOS } from '../../utils/navegacion';
 import { mensajeApi } from '../../utils/plantillasChecklist';
 import { mensajeSecop } from '../../utils/secop';
@@ -138,7 +139,9 @@ const ListaContratos = ({ edita, proyectos }) => {
     }, [clave]);
     useEffect(() => { cargar(); }, [cargar]);
 
-    const filas = useMemo(() => (contratos ?? []).map((c) => ({ ...filaContrato(c), avisoProceso: c.aviso_proceso })), [contratos]);
+    const filas = useMemo(() => (contratos ?? []).map((c) => ({
+        ...filaContrato(c), avisoProceso: c.aviso_proceso, avisoCierre: textoAvisoCierre(c.aviso_cierre),
+    })), [contratos]);
     // Al abrir un contrato se lleva la lista con sus filtros, para volver a ella.
     const estadoNavegacion = { lista: search };
 
@@ -214,7 +217,10 @@ const ListaContratos = ({ edita, proyectos }) => {
                                         {f.proceso}
                                         <AvisoProceso aviso={f.avisoProceso} />
                                     </td>
-                                    <td data-etiqueta="Estado"><span className={`ct-estado ct-estado-${f.tono}`}>{f.estado}</span></td>
+                                    <td data-etiqueta="Estado">
+                                        <span className={`ct-estado ct-estado-${f.tono}`}>{f.estado}</span>
+                                        {f.avisoCierre && <span className="ct-aviso-cierre ct-estado ct-estado-ambar">{f.avisoCierre}</span>}
+                                    </td>
                                     <td data-etiqueta="Valor vigente" className="numero">{f.valor}</td>
                                     <td data-etiqueta="Físico" className="numero">{f.avanceFisico}</td>
                                     <td data-etiqueta="Financiero" className="numero">{f.avanceFinanciero}</td>

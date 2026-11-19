@@ -6,7 +6,7 @@
 // formato del formulario, con las mismas conversiones que formularioContrato.
 
 import { esEnlaceWeb, textoFecha, textoValor, valorDesdeApi, valorParaApi } from './contratacion';
-import { ESTADOS_CONTRATO, etiquetaEstadoContrato } from './contratos';
+import { ESTADOS_CONTRATO, avisoEstadoCierreSecop, estadoCierreBloqueado, etiquetaEstadoContrato } from './contratos';
 import { rutaContrato } from './contratosModulo';
 import { mensajeApi } from './plantillasChecklist';
 
@@ -43,6 +43,8 @@ const NOTAS_SIN_MARCAR = {
 };
 
 const vacio = (valor) => valor === null || valor === undefined || String(valor).trim() === '';
+// Sin contrato guardado (o sin id), el formulario es de un contrato nuevo.
+const esNuevo = (contrato) => vacio(contrato?.id);
 const texto = (valor) => (vacio(valor) ? '' : String(valor).trim());
 
 /**
@@ -142,17 +144,21 @@ export const referenciaSecop = (formulario, contrato) => {
 };
 
 /**
- * Avisos de un resultado: el estado que falta elegir y los días adicionados en SECOP II. Con el
- * `formulario` que resultó de copiar, el estado se pide si el formulario quedó sin él; sin
- * formulario, si SECOP II no lo trae (o no se pudo traducir).
+ * Avisos de un resultado: el estado que falta elegir, el estado de cierre que no se copia y los
+ * días adicionados en SECOP II. Con el `formulario` que resultó de copiar, el estado se pide si el
+ * formulario quedó sin él; sin formulario, si SECOP II no lo trae (o no se pudo traducir). Con el
+ * `contrato` guardado, si SECOP II lo ve terminado o liquidado y el contrato no lo está, se avisa
+ * qué acción usar (avisoEstadoCierreSecop).
  */
-export const avisosSecop = (resultado, formulario = null) => {
+export const avisosSecop = (resultado, formulario = null, contrato = null) => {
     const avisos = [];
     const sinEstado = formulario ? vacio(formulario.estado) : vacio(valoresDesdeSecop(resultado?.contrato).estado);
     if (sinEstado) {
         const estadoSecop = texto(resultado?.secop?.estado_secop);
         avisos.push(estadoSecop ? `Elige el estado: SECOP II dice «${estadoSecop}».` : 'Elige el estado: SECOP II no lo informa.');
     }
+    const avisoCierre = avisoEstadoCierreSecop(valoresDesdeSecop(resultado?.contrato).estado, contrato?.estado, esNuevo(contrato));
+    if (avisoCierre) avisos.push(avisoCierre);
     const dias = Number(resultado?.secop?.dias_adicionados);
     if (Number.isFinite(dias) && dias > 0) {
         avisos.push(`SECOP II reporta ${dias} ${dias === 1 ? 'día adicionado' : 'días adicionados'}: regístralos como prórroga en Modificaciones.`);
@@ -206,10 +212,13 @@ const iguales = (campo, a, b) => {
  * "Actualizar desde SECOP II": los campos en que el formulario difiere de SECOP II, en el orden
  * del formulario, con su etiqueta, los dos valores legibles (`actual`, el del formulario, y
  * `secop`), si va `marcado` por defecto y su `nota`. Un campo que SECOP II no trae no se compara.
- * El estado, el valor inicial y la fecha fin inicial no van marcados (NOTAS_SIN_MARCAR).
+ * El estado, el valor inicial y la fecha fin inicial no van marcados (NOTAS_SIN_MARCAR); en un
+ * contrato guardado, un estado terminado o liquidado de SECOP II no se ofrece (estadoCierreBloqueado).
  */
 export const diferenciasSecop = (formulario, resultado, { tipos = null, contrato = null } = {}) => {
     const deSecop = { ...valoresDesdeSecop(resultado?.contrato), ...referenciaDesdeSecop(resultado?.contrato) };
+    // A terminado y liquidado se llega con «Terminar» y «Liquidar»: ese estado no se ofrece.
+    if (estadoCierreBloqueado(deSecop.estado, contrato?.estado, esNuevo(contrato))) delete deSecop.estado;
     const referencia = referenciaSecop(formulario, contrato);
     const actuales = { ...formulario, secop_proceso: referencia.proceso, url_secop: referencia.enlace ?? '' };
     return [...CAMPOS_DESDE_SECOP, ...REFERENCIA_COMPARADA]
@@ -234,6 +243,7 @@ export const camposMarcados = (diferencias) => (diferencias ?? []).filter((d) =>
  */
 export const aplicarDiferencias = (formulario, resultado, elegidos, contrato = null) => {
     const deSecop = valoresDesdeSecop(resultado?.contrato);
+    if (estadoCierreBloqueado(deSecop.estado, contrato?.estado, esNuevo(contrato))) delete deSecop.estado;
     const nuevaReferencia = referenciaDesdeSecop(resultado?.contrato);
     const referencia = referenciaSecop(formulario, contrato);
     const lista = elegidos ?? [];
