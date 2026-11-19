@@ -71,6 +71,12 @@
 .ct-estado-verde-pleno { color: var(--gp-sobre-acento); background: var(--gp-verde-texto); }
 .ct-estado-coral { color: var(--gp-coral); background: var(--gp-coral-suave); }
 
+/* Avisos de un proceso (vencidas, próximas, cierre, sin actualización, hitos), como chips. */
+.ct-avisos { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+/* En la lista va dentro de la celda del proceso, que no parte líneas: el aviso sí, en su propio renglón. */
+.ct-aviso-proceso { display: flex; flex-wrap: wrap; gap: .3rem; align-items: baseline; min-width: 11rem; max-width: 14rem; margin-top: .25rem; font-family: var(--gp-fuente); font-size: .8rem; white-space: normal; }
+.ct-aviso-proceso .ct-estado { flex-shrink: 1; min-width: 0; border-radius: .5rem; white-space: normal; text-align: left; }
+
 /* ---------- Módulo Contratos (/contratos) ---------- */
 
 .ct-filtro { flex: 0 1 13rem; }

@@ -6,6 +6,7 @@ import axios from '../axios';
 import { datosGenerales, errorDeFicha, esIdProyecto, filaProceso, resumenFormulacion } from '../utils/fichaProyecto';
 import { estadoDesdeFicha, estadoNuevoContratoDeProyecto, filaContrato, puedeEditarContratos, rutaContrato } from '../utils/contratosModulo';
 import { RUTA_CONTRATOS } from '../utils/navegacion';
+import ChipsAvisosProceso from './ChipsAvisosProceso';
 import ProcesosProyecto from './ProcesosProyecto';
 import '../../css/Plantillas.css';
 import '../../css/Parametros.css';
@@ -89,7 +90,7 @@ const Formulacion = ({ proyectoId, expediente }) => {
 };
 
 const Procesos = ({ procesos, onAbrir }) => {
-    const filas = procesos.map(filaProceso);
+    const filas = procesos.map((p) => ({ ...filaProceso(p), avisos: p.avisos }));
     return (
         <Bloque
             titulo="Procesos de contratación"
@@ -107,6 +108,7 @@ const Procesos = ({ procesos, onAbrir }) => {
                                 <th>Valor</th>
                                 <th>Contratos</th>
                                 <th>Expediente</th>
+                                <th>Avisos</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -130,6 +132,7 @@ const Procesos = ({ procesos, onAbrir }) => {
                                         {' '}
                                         <Link to={f.rutaChecklist} className="ct-enlace">Checklist</Link>
                                     </td>
+                                    <td data-etiqueta="Avisos"><ChipsAvisosProceso avisos={f.avisos} /></td>
                                 </tr>
                             ))}
                         </tbody>

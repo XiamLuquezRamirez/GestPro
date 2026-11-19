@@ -11,9 +11,11 @@ import {
     contarOpcionales, motivoNoEliminarPropio, plantillasConVersion, requiereAprobacionNoAplica, textoOpcionales,
 } from '../utils/expedienteChecklist';
 import {
-    alternarPlantillaNueva, avanceEtapas, avisoIncompatiblesProceso, conAvance, datosPropioContratacion, errorDeProceso,
-    esIdProceso, htmlPendientesCierre, NOTA_PONDERADO, pondera, seleccionInicial, textoEstadoExpediente, textoSinPlantillas,
+    alternarPlantillaNueva, avisoIncompatiblesProceso, conAvance, conEtapaActualizada, datosFechaEtapa, datosPropioContratacion,
+    errorDeProceso, errorFechaEtapa, esIdProceso, etapasConFechas, fechaHoyBogota, fechaLegible, fechaPorGuardar, htmlPendientesCierre, NOTA_PONDERADO,
+    pondera, seleccionInicial, textoEstadoExpediente, textoSinPlantillas,
 } from '../utils/expedienteContratacion';
+import { franjaAvisosExpediente } from '../utils/avisosContratacion';
 import { etiquetaEstadoProceso, numeroProceso, tonoEstado } from '../utils/contratacion';
 import { RUTA_PLANTILLAS, rutaFichaProyecto } from '../utils/navegacion';
 import { avisarError } from '../utils/avisosPlantillas';
@@ -56,6 +58,147 @@ const Medidor = ({ titulo, cumplidos, total, porcentaje, nota, pie }) => {
         </div>
         {pie && <small id={pieId} className="exc-medidor-pie">{pie}</small>}
     </div>
+    );
+};
+
+const ETIQUETAS_FECHA = { fecha_programada: 'Fecha programada', fecha_real: 'Fecha real' };
+
+/**
+ * Una fecha de la etapa (programada o real) en un input date. Se guarda al salir del campo o con
+ * Enter, si cambió y es una fecha completa (mientras se escribe el año, el input da valores como
+ * 0002-11-25). El error del servidor va bajo el campo; el estado del guardado, en la región viva.
+ */
+const CampoFecha = ({ campo, valor, max, deshabilitado, sugerida, onGuardar }) => {
+    const id = useId();
+    const [borrador, setBorrador] = useState(valor);
+    const [error, setError] = useState(null);
+    // Refs, no estados: Enter y luego salir del campo no deben enviar dos veces, y un segundo
+    // cambio mientras se guarda el primero se guarda después en vez de perderse.
+    const guardando = useRef(false);
+    const pendiente = useRef(false);
+    const ultimo = useRef(valor);
+    const guardado = useRef(valor);
+    // Lo que diga el servidor (esta respuesta u otra acción del checklist) reemplaza el borrador,
+    // salvo mientras se guarda: ahí el borrador puede ser un cambio más nuevo.
+    useEffect(() => {
+        guardado.current = valor;
+        if (!guardando.current) { ultimo.current = valor; setBorrador(valor); }
+    }, [valor]);
+
+    const cambiar = (nuevo) => { ultimo.current = nuevo; setBorrador(nuevo); setError(null); };
+
+    const guardar = async () => {
+        if (guardando.current) { pendiente.current = true; return; }
+        guardando.current = true;
+        try {
+            let repetir = true;
+            while (repetir) {
+                pendiente.current = false;
+                const quiere = ultimo.current;
+                const accion = fechaPorGuardar(quiere, guardado.current);
+                if (accion === 'incompleta') setError('Escribe una fecha completa (día, mes y año).');
+                if (accion !== 'guardar') break;
+                // eslint-disable-next-line no-await-in-loop
+                const mensaje = await onGuardar(campo, quiere);
+                if (mensaje) {
+                    setError(mensaje);
+                    ultimo.current = guardado.current;
+                    setBorrador(guardado.current);
+                    break;
+                }
+                guardado.current = quiere;
+                repetir = pendiente.current;
+            }
+        } finally {
+            guardando.current = false;
+        }
+    };
+
+    const idError = `${id}-error`;
+    const idSugerida = `${id}-sugerida`;
+    const descripcion = [error && idError, sugerida && idSugerida].filter(Boolean).join(' ') || undefined;
+    const marcaSugerida = sugerida && (
+        <span id={idSugerida} className="exc-sugerida" title="La propuso el sistema al completarse la etapa: puedes corregirla.">
+            sugerida
+        </span>
+    );
+
+    // Solo lectura (expediente cerrado o sin permiso de edición): la fecha como texto, no un input apagado.
+    if (deshabilitado) {
+        return (
+            <div className="exc-fecha">
+                <span className="exc-fecha-etiqueta">{ETIQUETAS_FECHA[campo]}</span>
+                <span className="exc-fecha-control">
+                    <span className="exc-fecha-texto">{fechaLegible(valor)}</span>
+                    {marcaSugerida}
+                </span>
+            </div>
+        );
+    }
+
+    return (
+        <div className="exc-fecha">
+            <label htmlFor={id}>{ETIQUETAS_FECHA[campo]}</label>
+            <span className="exc-fecha-control">
+                <input
+                    id={id}
+                    type="date"
+                    value={borrador}
+                    max={max}
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={descripcion}
+                    onChange={(e) => cambiar(e.target.value)}
+                    onBlur={guardar}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); guardar(); } }}
+                />
+                {marcaSugerida}
+            </span>
+            {error && <small id={idError} className="ct-error-campo">{error}</small>}
+        </div>
+    );
+};
+
+/** El avance de una etapa con su semáforo y, si es una etapa del catálogo, sus fechas. */
+const EtapaCronograma = ({ etapa, editable, hoy, onGuardarFecha }) => {
+    const guardar = (campo, valor) => onGuardarFecha(etapa, campo, valor);
+    return (
+        <div className="exc-etapa">
+            <Medidor titulo={etapa.titulo} cumplidos={etapa.cumplidos} total={etapa.total} porcentaje={etapa.porcentaje} />
+            {(etapa.alerta || etapa.conFechas) && (
+                <div className="exc-etapa-fechas">
+                    {etapa.alerta && (
+                        <span className={`ct-estado ct-estado-${etapa.alerta.tono} exc-alerta`}>{etapa.alerta.texto}</span>
+                    )}
+                    {etapa.conFechas && (
+                        <>
+                            <CampoFecha campo="fecha_programada" valor={etapa.programada} deshabilitado={!editable} onGuardar={guardar} />
+                            <CampoFecha
+                                campo="fecha_real"
+                                valor={etapa.real}
+                                max={hoy}
+                                deshabilitado={!editable}
+                                sugerida={etapa.sugerida}
+                                onGuardar={guardar}
+                            />
+                        </>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+/** La franja de avisos del expediente: vencidas, próximas, cierre y sin actualización. */
+const FranjaAvisos = ({ avisos }) => {
+    const items = franjaAvisosExpediente(avisos);
+    if (items.length === 0) return null;
+    return (
+        <div className="exc-avisos exv-no-imprimir">
+            <b>Avisos del cronograma</b>
+            <ul>
+                {items.map((a) => <li key={a.clave} className={`ct-estado ct-estado-${a.tono}`}>{a.texto}</li>)}
+            </ul>
+        </div>
     );
 };
 
@@ -133,6 +276,8 @@ const Expediente = ({ procesoId, user }) => {
     const [historialAbierto, setHistorialAbierto] = useState(false);
     // Sube con cada cambio que el servidor ya registró: el historial abierto se vuelve a pedir.
     const [revision, setRevision] = useState(0);
+    // El texto de la región viva: el resultado del último guardado de una fecha.
+    const [anuncio, setAnuncio] = useState('');
     const nuevaRevision = useCallback(() => setRevision((r) => r + 1), []);
     const [ocupado, ejecutar] = useOcupado();
 
@@ -148,8 +293,12 @@ const Expediente = ({ procesoId, user }) => {
         return () => { montado.current = false; turno.current += 1; };
     }, []);
 
+    // Etapas cuya fecha se guardó en esta pantalla: sus fechas no las repone una respuesta atrasada del checklist.
+    const etapasProtegidas = useRef(new Set());
+
     const ponerExpediente = useCallback((data) => {
         turno.current += 1;
+        etapasProtegidas.current.clear();
         setExpediente(data);
         nuevaRevision();
     }, [nuevaRevision]);
@@ -178,6 +327,7 @@ const Expediente = ({ procesoId, user }) => {
             if (!alDia()) return;
         }
         setDisponibles(datos);
+        etapasProtegidas.current.clear();
         setExpediente(datosExpediente);
         // Lo elegido se conserva entre recargas; la primera vez, si hay una sola plantilla, va elegida.
         setSeleccion((prev) => prev ?? seleccionInicial(datos.plantillas));
@@ -228,7 +378,7 @@ const Expediente = ({ procesoId, user }) => {
     // respondió el servidor, que ya quedó en el historial. `datos` trae progreso y avance por etapa.
     const pintarFila = (fila, datos) => setExpediente((prev) => (
         prev?.requisitos.some((f) => f.id === fila.id)
-            ? { ...conAvance(prev, datos), requisitos: prev.requisitos.map((f) => (f.id === fila.id ? fila : f)) }
+            ? { ...conAvance(prev, datos, etapasProtegidas.current), requisitos: prev.requisitos.map((f) => (f.id === fila.id ? fila : f)) }
             : prev
     ));
 
@@ -240,14 +390,14 @@ const Expediente = ({ procesoId, user }) => {
     // Un propio nuevo va al final: el backend ordena los propios después de toda plantilla, y la
     // agrupación lo pone en su etapa.
     const agregarFila = (expedienteId, fila, datos) => {
-        setExpediente((prev) => (prev?.id === expedienteId ? { ...conAvance(prev, datos), requisitos: [...prev.requisitos, fila] } : prev));
+        setExpediente((prev) => (prev?.id === expedienteId ? { ...conAvance(prev, datos, etapasProtegidas.current), requisitos: [...prev.requisitos, fila] } : prev));
         nuevaRevision();
     };
 
     const quitarFila = (fila, datos) => {
         setExpediente((prev) => (
             prev?.requisitos.some((f) => f.id === fila.id)
-                ? { ...conAvance(prev, datos), requisitos: prev.requisitos.filter((f) => f.id !== fila.id) }
+                ? { ...conAvance(prev, datos, etapasProtegidas.current), requisitos: prev.requisitos.filter((f) => f.id !== fila.id) }
                 : prev
         ));
         nuevaRevision();
@@ -414,6 +564,27 @@ const Expediente = ({ procesoId, user }) => {
         if (!isConfirmed) return;
         await accionFila(() => axios.post(`${urlFila(fila)}/aplica`), 'No se pudo indicar que el requisito aplica');
     });
+
+    /** Guarda una fecha de la etapa: devuelve null si se guardó, o el mensaje que va bajo el campo. */
+    const guardarFecha = async (etapa, campo, valor) => {
+        const id = expediente.id;
+        const nombre = `${ETIQUETAS_FECHA[campo]} de ${etapa.titulo}`;
+        setAnuncio(`Guardando: ${nombre}…`);
+        try {
+            const { data } = await axios.put(`/expedientes/${id}/etapas/${etapa.etapaId}`, datosFechaEtapa(campo, valor));
+            if (!montado.current) return null;
+            // Su fecha ya es la más nueva: una respuesta del checklist que salió antes no la repone.
+            etapasProtegidas.current.add(etapa.etapaId);
+            setExpediente((prev) => (prev?.id === id ? conEtapaActualizada(prev, data) : prev));
+            nuevaRevision();
+            setAnuncio(`Guardada: ${nombre}.`);
+            return null;
+        } catch (e) {
+            const mensaje = errorFechaEtapa(e, campo);
+            if (montado.current) setAnuncio(`No se pudo guardar: ${nombre}. ${mensaje}`);
+            return mensaje;
+        }
+    };
 
     const urlPropios = () => `/expedientes/${expediente.id}/requisitos-propios`;
 
@@ -582,7 +753,8 @@ const Expediente = ({ procesoId, user }) => {
     const numero = numeroProceso(proceso);
     const { cumplidos = 0, total = 0, porcentaje = 0 } = expediente?.progreso ?? {};
     const avisoOpcionales = textoOpcionales(contarOpcionales(expediente?.requisitos));
-    const etapasAvance = avanceEtapas(expediente?.avance_por_etapa);
+    const etapasAvance = etapasConFechas(expediente?.avance_por_etapa);
+    const hoy = fechaHoyBogota(new Date());
     const cerrado = expediente?.estado === 'cerrado';
     const incompatibles = avisoIncompatiblesProceso(expediente?.plantillas);
     // Uno cerrado tiene el checklist congelado: no admite otra versión, y no se la ofrece.
@@ -657,13 +829,16 @@ const Expediente = ({ procesoId, user }) => {
                         </div>
                     </div>
 
+                    <FranjaAvisos avisos={expediente.avisos} />
+
                     {etapasAvance.length > 0 && (
-                        <section className="exc-etapas" aria-label="Avance por etapa">
+                        <section className="exc-etapas" aria-label="Avance y cronograma por etapa">
                             {etapasAvance.map((e) => (
-                                <Medidor key={e.clave} titulo={e.titulo} cumplidos={e.cumplidos} total={e.total} porcentaje={e.porcentaje} />
+                                <EtapaCronograma key={e.clave} etapa={e} editable={editable} hoy={hoy} onGuardarFecha={guardarFecha} />
                             ))}
                         </section>
                     )}
+                    <p className="ct-oculto" aria-live="polite">{anuncio}</p>
 
                     {cerrado && (
                         <div className="exv-nota">

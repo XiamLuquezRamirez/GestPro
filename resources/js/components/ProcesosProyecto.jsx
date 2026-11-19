@@ -13,6 +13,7 @@ import {
     modoTrasGuardarContrato, numeroProceso, opcionesConActual, opcionesFuenteProceso, ordenarCatalogo, puedeEditarProcesos, puedeRegistrarContrato,
     textoContratos, textoFecha, textoValor, tonoEstado, validarProceso, valorEnEdicion,
 } from '../utils/contratacion';
+import ChipsAvisosProceso from './ChipsAvisosProceso';
 import ContratoEditor from './contratos/ContratoEditor';
 import useDialogoModal from './useDialogoModal';
 import useOcupado from './useOcupado';
@@ -572,6 +573,7 @@ const ProcesosProyecto = ({ proyecto, user, onCerrar, onCambio }) => {
                                                 <div><dt>Contratos vinculados</dt><dd>{textoContratos(p.contratos)}</dd></div>
                                                 <ExpedienteProceso proceso={p} />
                                             </dl>
+                                            <ChipsAvisosProceso avisos={p.avisos} />
                                             {p.observaciones && <p className="pl-ayuda">{p.observaciones}</p>}
                                             {modo?.tipo === 'estado' && modo.proceso.id === p.id ? (
                                                 <FormularioEstado proceso={p} guardando={ocupado} onGuardar={cambiarEstado} onCancelar={() => setModo(null)} />

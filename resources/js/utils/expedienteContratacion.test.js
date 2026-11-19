@@ -5,7 +5,17 @@ import {
     alternarPlantillaNueva,
     avanceEtapas,
     conAvance,
+    conEtapaActualizada,
+    datosFechaEtapa,
     datosPropioContratacion,
+    errorFechaEtapa,
+    etapasConFechas,
+    fechaCompleta,
+    fechaHoyBogota,
+    fechaPorGuardar,
+    fechaLegible,
+    fusionarAvance,
+    fechasEtapa,
     errorDeProceso,
     esIdProceso,
     formularioPropioContratacion,
@@ -133,6 +143,233 @@ describe('conAvance', () => {
     it('lo que la respuesta no trae queda como estaba', () => {
         expect(conAvance(expediente, {})).toEqual(expediente);
         expect(conAvance(expediente, undefined)).toEqual(expediente);
+    });
+
+    it('también toma los avisos, si la respuesta los trae', () => {
+        const conAvisos = { ...expediente, avisos: { etapas_vencidas: 0 } };
+        expect(conAvance(conAvisos, { avisos: { etapas_vencidas: 1 } }).avisos).toEqual({ etapas_vencidas: 1 });
+        expect(conAvance(conAvisos, {}).avisos).toEqual({ etapas_vencidas: 0 });
+    });
+});
+
+const avanceApi = (id, cambios = {}) => ({
+    etapa: id === null ? null : etapa(id, id, `Etapa ${id}`),
+    total: 2,
+    cumplidos: 1,
+    porcentaje: 50,
+    fecha_programada: null,
+    fecha_real: null,
+    fecha_real_sugerida: false,
+    completa: false,
+    alerta: 'sin_fecha',
+    ...cambios,
+});
+
+describe('fechasEtapa', () => {
+    it('las fechas de una etapa como valores del input date, con su semáforo', () => {
+        expect(fechasEtapa(avanceApi(3, { fecha_programada: '2026-11-18', alerta: 'vencida' }))).toEqual({
+            etapaId: 3,
+            conFechas: true,
+            programada: '2026-11-18',
+            real: '',
+            sugerida: false,
+            alerta: { texto: 'Vencida', tono: 'coral' },
+        });
+    });
+
+    it('"sugerida" solo con una fecha real que puso el sistema', () => {
+        expect(fechasEtapa(avanceApi(1, { fecha_real: '2026-11-19', fecha_real_sugerida: true, completa: true, alerta: 'completa' })))
+            .toMatchObject({ real: '2026-11-19', sugerida: true, alerta: { texto: 'Completa', tono: 'verde' } });
+        expect(fechasEtapa(avanceApi(1, { fecha_real: null, fecha_real_sugerida: true })).sugerida).toBe(false);
+        expect(fechasEtapa(avanceApi(1, { fecha_real: '2026-11-19', fecha_real_sugerida: false })).sugerida).toBe(false);
+    });
+
+    it('sin fecha, sin etiqueta', () => {
+        expect(fechasEtapa(avanceApi(1)).alerta).toBeNull();
+    });
+
+    it('el grupo sin etapa no tiene fechas', () => {
+        expect(fechasEtapa(avanceApi(null, { alerta: 'completa' }))).toEqual({
+            etapaId: null, conFechas: false, programada: '', real: '', sugerida: false, alerta: { texto: 'Completa', tono: 'verde' },
+        });
+    });
+
+    it('una respuesta sin las claves nuevas no rompe', () => {
+        expect(fechasEtapa({ etapa: etapa(2, 2), total: 1, cumplidos: 0, porcentaje: 0 })).toEqual({
+            etapaId: 2, conFechas: true, programada: '', real: '', sugerida: false, alerta: null,
+        });
+    });
+});
+
+describe('etapasConFechas', () => {
+    it('el avance de cada etapa con sus fechas', () => {
+        const lista = etapasConFechas([avanceApi(1, { fecha_programada: '2026-11-21', alerta: 'proxima' }), avanceApi(null)]);
+        expect(lista).toHaveLength(2);
+        expect(lista[0]).toMatchObject({ clave: 'etapa-1', titulo: '1. Etapa 1', total: 2, cumplidos: 1, porcentaje: 50, etapaId: 1, programada: '2026-11-21' });
+        expect(lista[0].alerta).toEqual({ texto: 'Próxima', tono: 'ambar' });
+        expect(lista[1]).toMatchObject({ clave: 'sin-etapa', conFechas: false });
+        expect(etapasConFechas(undefined)).toEqual([]);
+    });
+});
+
+describe('fechaCompleta', () => {
+    it('acepta vacío (borrar) y una fecha año-mes-día con año de cuatro cifras desde 1900', () => {
+        expect(fechaCompleta('')).toBe(true);
+        expect(fechaCompleta('2026-11-25')).toBe(true);
+    });
+
+    it('rechaza lo que el input da mientras se escribe el año', () => {
+        expect(fechaCompleta('0002-11-25')).toBe(false);
+        expect(fechaCompleta('0202-11-25')).toBe(false);
+        expect(fechaCompleta('2026-13-01')).toBe(false);
+        expect(fechaCompleta('25/11/2026')).toBe(false);
+        expect(fechaCompleta(undefined)).toBe(false);
+    });
+});
+
+describe('datosFechaEtapa', () => {
+    it('solo el campo que cambió; vacío borra la fecha', () => {
+        expect(datosFechaEtapa('fecha_programada', '2026-11-25')).toEqual({ fecha_programada: '2026-11-25' });
+        expect(datosFechaEtapa('fecha_real', '')).toEqual({ fecha_real: null });
+    });
+
+    it('un campo desconocido no se envía', () => {
+        expect(datosFechaEtapa('otra', '2026-11-25')).toEqual({});
+    });
+});
+
+describe('conEtapaActualizada', () => {
+    const expediente = {
+        id: 5,
+        avance_por_etapa: [avanceApi(1), avanceApi(2), avanceApi(null)],
+        avisos: { etapas_vencidas: 0 },
+    };
+
+    it('reemplaza la etapa que respondió el PUT y pone los avisos nuevos', () => {
+        const etapaNueva = avanceApi(2, { fecha_programada: '2026-11-10', alerta: 'vencida' });
+        const nuevo = conEtapaActualizada(expediente, { etapa: etapaNueva, avisos: { etapas_vencidas: 1 } });
+        expect(nuevo.avance_por_etapa).toEqual([avanceApi(1), etapaNueva, avanceApi(null)]);
+        expect(nuevo.avisos).toEqual({ etapas_vencidas: 1 });
+        expect(expediente.avance_por_etapa[1].alerta).toBe('sin_fecha');
+    });
+
+    it('sin la etapa en el avance, solo los avisos', () => {
+        const nuevo = conEtapaActualizada(expediente, { etapa: avanceApi(9), avisos: { etapas_vencidas: 2 } });
+        expect(nuevo.avance_por_etapa).toEqual(expediente.avance_por_etapa);
+        expect(nuevo.avisos).toEqual({ etapas_vencidas: 2 });
+    });
+
+    it('sin expediente o sin respuesta, como estaba', () => {
+        expect(conEtapaActualizada(null, { etapa: avanceApi(1) })).toBeNull();
+        expect(conEtapaActualizada(expediente, undefined)).toEqual(expediente);
+    });
+});
+
+describe('errorFechaEtapa', () => {
+    it('el error del campo que envió la validación', () => {
+        const error = { response: { status: 422, data: { message: 'x', errors: { fecha_real: ['Escribe la fecha real como año-mes-día.'] } } } };
+        expect(errorFechaEtapa(error, 'fecha_real')).toBe('Escribe la fecha real como año-mes-día.');
+    });
+
+    it('la regla de negocio con el campo, sin repetirla', () => {
+        const error = { response: { status: 422, data: {
+            mensaje: 'La fecha real no puede ser posterior a hoy.',
+            errores: ['La fecha real no puede ser posterior a hoy.'],
+            errors: { fecha_real: ['La fecha real no puede ser posterior a hoy.'] },
+        } } };
+        expect(errorFechaEtapa(error, 'fecha_real')).toBe('La fecha real no puede ser posterior a hoy.');
+    });
+
+    it('un rechazo sin campo (expediente cerrado) o de otro tipo, con el mensaje de la API', () => {
+        expect(errorFechaEtapa({ response: { status: 422, data: { mensaje: 'El expediente está cerrado.' } } }, 'fecha_programada'))
+            .toBe('El expediente está cerrado.');
+        expect(errorFechaEtapa({ response: { status: 403 } }, 'fecha_real')).toBe('No tienes permiso para esta acción.');
+    });
+});
+
+describe('fechaHoyBogota', () => {
+    it('el día de Bogotá, no el de UTC: a las 20:00 de Bogotá (01:00 UTC) sigue siendo el mismo día', () => {
+        expect(fechaHoyBogota(new Date('2026-11-20T01:00:00Z'))).toBe('2026-11-19');
+        expect(fechaHoyBogota(new Date('2026-11-20T04:59:00Z'))).toBe('2026-11-19');
+    });
+
+    it('a las 00:00 de Bogotá (05:00 UTC) cambia el día', () => {
+        expect(fechaHoyBogota(new Date('2026-11-20T05:00:00Z'))).toBe('2026-11-20');
+        expect(fechaHoyBogota(new Date('2026-01-05T12:00:00Z'))).toBe('2026-01-05');
+    });
+});
+
+describe('fechaLegible', () => {
+    it('año-mes-día como día/mes/año, sin pasar por zonas horarias', () => {
+        expect(fechaLegible('2026-11-19')).toBe('19/11/2026');
+        expect(fechaLegible('2026-01-05')).toBe('05/01/2026');
+    });
+
+    it('sin fecha, "Sin fecha"', () => {
+        expect(fechaLegible('')).toBe('Sin fecha');
+        expect(fechaLegible(null)).toBe('Sin fecha');
+        expect(fechaLegible(undefined)).toBe('Sin fecha');
+    });
+});
+
+describe('fusionarAvance (respuesta del checklist que llega después de guardar una fecha)', () => {
+    const actual = [
+        avanceApi(1, { fecha_programada: '2026-12-01', fecha_real: '2026-11-18', alerta: 'al_dia' }),
+        avanceApi(2, { fecha_programada: '2026-12-05', alerta: 'al_dia' }),
+    ];
+    const vieja = [
+        avanceApi(1, { cumplidos: 2, porcentaje: 100, fecha_programada: '2026-11-01', fecha_real: null, alerta: 'vencida' }),
+        avanceApi(2, { cumplidos: 2, porcentaje: 100, fecha_programada: '2026-11-02', alerta: 'vencida' }),
+    ];
+
+    it('sin etapas protegidas, lo que llega', () => {
+        expect(fusionarAvance(actual, vieja, new Set())).toEqual(vieja);
+        expect(fusionarAvance(actual, vieja)).toEqual(vieja);
+    });
+
+    it('en una etapa protegida (fecha guardada hace poco) conserva las fechas y el semáforo, y toma el avance nuevo', () => {
+        const r = fusionarAvance(actual, vieja, new Set([1]));
+        expect(r[0]).toMatchObject({ cumplidos: 2, porcentaje: 100, fecha_programada: '2026-12-01', fecha_real: '2026-11-18', alerta: 'al_dia' });
+        expect(r[1]).toEqual(vieja[1]);
+    });
+
+    it('si la etapa se completó o dejó de estarlo, la fecha real (sugerida o borrada) es la que llega', () => {
+        const completada = [avanceApi(1, { completa: true, fecha_programada: '2026-11-01', fecha_real: '2026-11-19', fecha_real_sugerida: true, alerta: 'completa' })];
+        const r = fusionarAvance([actual[0]], completada, new Set([1]));
+        expect(r[0]).toMatchObject({ fecha_programada: '2026-12-01', fecha_real: '2026-11-19', fecha_real_sugerida: true, alerta: 'completa' });
+    });
+
+    it('el grupo sin etapa y las etapas nuevas pasan tal cual', () => {
+        const r = fusionarAvance(actual, [avanceApi(null), avanceApi(9)], new Set([1]));
+        expect(r).toEqual([avanceApi(null), avanceApi(9)]);
+    });
+
+    it('sin lista que llegue, la actual', () => {
+        expect(fusionarAvance(actual, undefined, new Set([1]))).toBe(actual);
+    });
+});
+
+describe('conAvance con etapas protegidas', () => {
+    it('aplica fusionarAvance al avance por etapa', () => {
+        const expediente = { avance_por_etapa: [avanceApi(1, { fecha_programada: '2026-12-01' })], progreso: { cumplidos: 0 } };
+        const datos = { avance_por_etapa: [avanceApi(1, { fecha_programada: '2026-11-01' })], progreso: { cumplidos: 1 } };
+        expect(conAvance(expediente, datos, new Set([1])).avance_por_etapa[0].fecha_programada).toBe('2026-12-01');
+        expect(conAvance(expediente, datos).avance_por_etapa[0].fecha_programada).toBe('2026-11-01');
+    });
+});
+
+describe('fechaPorGuardar', () => {
+    it('nada si el borrador es lo ya guardado', () => {
+        expect(fechaPorGuardar('2026-11-19', '2026-11-19')).toBe('nada');
+    });
+
+    it('error si es una fecha a medio escribir', () => {
+        expect(fechaPorGuardar('0002-11-19', '2026-11-19')).toBe('incompleta');
+    });
+
+    it('guardar si cambió y está completa (vacía borra)', () => {
+        expect(fechaPorGuardar('2026-11-20', '2026-11-19')).toBe('guardar');
+        expect(fechaPorGuardar('', '2026-11-19')).toBe('guardar');
     });
 });
 

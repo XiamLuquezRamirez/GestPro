@@ -3,6 +3,7 @@
 // pendientes al cerrar y la elección de plantillas para crearlo. La agrupación de viabilización
 // (agruparChecklist) no cambia. Funciones puras, probadas en expedienteContratacion.test.js.
 
+import { etiquetaAlerta } from './avisosContratacion';
 import { esIdContrato } from './contratosModulo';
 import { opcionesEtapa } from './contratacion';
 import { datosPropio, formularioPropio } from './expedienteChecklist';
@@ -64,12 +65,119 @@ export const avanceEtapas = (avance) => (avance ?? []).map((a) => ({
     porcentaje: a.porcentaje,
 }));
 
+/**
+ * El avance por etapa que llega de una acción del checklist, sin reponer fechas viejas: esa
+ * petición pudo salir antes de que se guardara una fecha. En las etapas `protegidas` (ids cuya
+ * fecha se guardó en esta pantalla) se conservan las fechas y el semáforo actuales; solo si la
+ * etapa se completó o dejó de estarlo se toma la fecha real que llega (la sugerida o su borrado).
+ * El avance (conteos y porcentajes) siempre es el que llega.
+ */
+export const fusionarAvance = (actual, entrante, protegidas) => {
+    if (!entrante) return actual;
+    if (!protegidas || protegidas.size === 0) return entrante;
+    const previas = new Map((actual ?? []).filter((a) => a.etapa).map((a) => [a.etapa.id, a]));
+    return entrante.map((nueva) => {
+        const id = nueva.etapa?.id;
+        const previa = previas.get(id);
+        if (!id || !protegidas.has(id) || !previa) return nueva;
+        if (Boolean(previa.completa) !== Boolean(nueva.completa)) return { ...nueva, fecha_programada: previa.fecha_programada };
+        return {
+            ...nueva,
+            fecha_programada: previa.fecha_programada,
+            fecha_real: previa.fecha_real,
+            fecha_real_sugerida: previa.fecha_real_sugerida,
+            alerta: previa.alerta,
+        };
+    });
+};
+
 /** El expediente con el progreso y el avance por etapa que trae una respuesta parcial, si los trae. */
-export const conAvance = (expediente, datos) => ({
+export const conAvance = (expediente, datos, protegidas) => ({
     ...expediente,
     progreso: datos?.progreso ?? expediente.progreso,
-    avance_por_etapa: datos?.avance_por_etapa ?? expediente.avance_por_etapa,
+    avance_por_etapa: fusionarAvance(expediente.avance_por_etapa, datos?.avance_por_etapa, protegidas),
+    avisos: datos?.avisos ?? expediente.avisos,
 });
+
+// ---------- Cronograma (fechas por etapa) ----------
+
+export const CAMPOS_FECHA_ETAPA = ['fecha_programada', 'fecha_real'];
+
+/**
+ * Las fechas de una etapa de `avance_por_etapa` como valores del input date ('' sin fecha), si
+ * la real la sugirió el sistema y la etiqueta de su semáforo. El grupo sin etapa no tiene fechas.
+ */
+export const fechasEtapa = (avance) => {
+    const real = avance?.fecha_real ?? '';
+    return {
+        etapaId: avance?.etapa?.id ?? null,
+        conFechas: Boolean(avance?.etapa),
+        programada: avance?.fecha_programada ?? '',
+        real,
+        sugerida: Boolean(real && avance?.fecha_real_sugerida),
+        alerta: etiquetaAlerta(avance?.alerta),
+    };
+};
+
+/** El avance por etapa para sus barras (avanceEtapas) con las fechas y el semáforo de cada una. */
+export const etapasConFechas = (avance) => {
+    const lista = avance ?? [];
+    return avanceEtapas(lista).map((e, i) => ({ ...e, ...fechasEtapa(lista[i]) }));
+};
+
+/**
+ * Si el valor del input date se puede guardar: vacío (borra la fecha) o una fecha año-mes-día
+ * real con año desde 1900. Mientras se escribe el año, el input da valores como 0002-11-25.
+ */
+export const fechaCompleta = (valor) => {
+    if (valor === '') return true;
+    const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(valor ?? ''));
+    if (!partes) return false;
+    const [anio, mes, dia] = partes.slice(1).map(Number);
+    if (anio < 1900) return false;
+    const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+    return fecha.getUTCFullYear() === anio && fecha.getUTCMonth() === mes - 1 && fecha.getUTCDate() === dia;
+};
+
+/** El cuerpo del PUT de la etapa: solo el campo que cambió; vacío lo borra (null). */
+export const datosFechaEtapa = (campo, valor) => (CAMPOS_FECHA_ETAPA.includes(campo) ? { [campo]: valor || null } : {});
+
+/** El expediente con la etapa que respondió el PUT (`etapa`) en su lugar y los `avisos` nuevos. */
+export const conEtapaActualizada = (expediente, datos) => {
+    if (!expediente || !datos) return expediente;
+    const id = datos.etapa?.etapa?.id;
+    return {
+        ...expediente,
+        avance_por_etapa: (expediente.avance_por_etapa ?? []).map((a) => (id && a.etapa?.id === id ? datos.etapa : a)),
+        avisos: datos.avisos ?? expediente.avisos,
+    };
+};
+
+/** El error que va bajo el campo de fecha: el de ese campo si el 422 lo trae; si no, el de la API. */
+export const errorFechaEtapa = (error, campo) => {
+    const errores = error?.response?.status === 422 ? error.response.data?.errors : null;
+    const propio = errores && [].concat(errores[campo] ?? [])[0];
+    return propio ? String(propio) : mensajeApi(error);
+};
+
+const ZONA_CONTRATACION = 'America/Bogota';
+
+/** El día de hoy en la zona de contratación (Bogotá) como año-mes-día, no el del equipo ni el de UTC: el `max` de la fecha real. */
+export const fechaHoyBogota = (ahora = new Date()) => new Intl.DateTimeFormat('en-CA', {
+    timeZone: ZONA_CONTRATACION, year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(ahora);
+
+/** Una fecha año-mes-día como día/mes/año (sin pasar por Date: no cambia con la zona); "Sin fecha" si no hay. */
+export const fechaLegible = (iso) => {
+    const partes = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ''));
+    return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : 'Sin fecha';
+};
+
+/** Qué hacer con el borrador de una fecha: 'nada' (ya guardado), 'incompleta' (a medio escribir) o 'guardar'. */
+export const fechaPorGuardar = (borrador, guardado) => {
+    if (borrador === guardado) return 'nada';
+    return fechaCompleta(borrador) ? 'guardar' : 'incompleta';
+};
 
 /** Etapas que se ofrecen a un propio: las activas y la que ya tiene (aunque esté inactiva). */
 export const opcionesEtapaPropio = (etapas, fila) => opcionesEtapa(etapas, fila?.etapa ?? null);

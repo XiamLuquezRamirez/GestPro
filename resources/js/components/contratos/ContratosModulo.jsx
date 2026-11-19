@@ -9,6 +9,7 @@ import {
     opcionesFiltroEstado, opcionesFiltroProyecto, parametrosBusqueda, proyectoDeEstado, puedeEditarContratos, resultadoSecopDeEstado, rutaContrato,
     rutaListaDesde, rutaVistaSecop, textoListaVacia, textoVolverDesde, vistaDeConsulta,
 } from '../../utils/contratosModulo';
+import { avisoProcesoContrato } from '../../utils/avisosContratacion';
 import { RUTA_CONTRATOS } from '../../utils/navegacion';
 import { mensajeApi } from '../../utils/plantillasChecklist';
 import { mensajeSecop } from '../../utils/secop';
@@ -51,6 +52,25 @@ const useProyectos = () => {
     }, []);
     useEffect(() => { cargar(); }, [cargar]);
     return { lista, error, reintentar: cargar };
+};
+
+/**
+ * El aviso de un contrato cuyo proceso tiene etapas vencidas, el cierre vencido o está sin
+ * actualización (`aviso_proceso`), con el enlace al checklist del proceso. Sin aviso, nada.
+ */
+const AvisoProceso = ({ aviso, bloque = false }) => {
+    const datos = avisoProcesoContrato(aviso);
+    if (!datos) return null;
+    const enlace = <Link to={datos.ruta} className="ct-enlace">Abrir el checklist del proceso</Link>;
+    if (bloque) {
+        return <p className="pl-aviso-suave"><b>{datos.texto}.</b> {enlace}</p>;
+    }
+    return (
+        <span className="ct-aviso-proceso">
+            <span className="ct-estado ct-estado-coral">{datos.texto}</span>
+            <Link to={datos.ruta} className="ct-enlace">Checklist<span className="ct-oculto"> del proceso</span></Link>
+        </span>
+    );
 };
 
 const AvisoProyectos = ({ proyectos }) => (proyectos.error ? (
@@ -118,7 +138,7 @@ const ListaContratos = ({ edita, proyectos }) => {
     }, [clave]);
     useEffect(() => { cargar(); }, [cargar]);
 
-    const filas = useMemo(() => (contratos ?? []).map(filaContrato), [contratos]);
+    const filas = useMemo(() => (contratos ?? []).map((c) => ({ ...filaContrato(c), avisoProceso: c.aviso_proceso })), [contratos]);
     // Al abrir un contrato se lleva la lista con sus filtros, para volver a ella.
     const estadoNavegacion = { lista: search };
 
@@ -190,7 +210,10 @@ const ListaContratos = ({ edita, proyectos }) => {
                                     <td data-etiqueta="Objeto"><span className="ct-objeto" title={f.objeto}>{f.objeto}</span></td>
                                     <td data-etiqueta="Contratista">{f.contratista}</td>
                                     <td data-etiqueta="Proyecto" className={f.sinProyecto ? 'ct-sin-dato' : undefined}>{f.proyecto}</td>
-                                    <td data-etiqueta="Proceso" className="numero">{f.proceso}</td>
+                                    <td data-etiqueta="Proceso" className="numero">
+                                        {f.proceso}
+                                        <AvisoProceso aviso={f.avisoProceso} />
+                                    </td>
                                     <td data-etiqueta="Estado"><span className={`ct-estado ct-estado-${f.tono}`}>{f.estado}</span></td>
                                     <td data-etiqueta="Valor vigente" className="numero">{f.valor}</td>
                                     <td data-etiqueta="Físico" className="numero">{f.avanceFisico}</td>
@@ -425,6 +448,7 @@ const ContratoAbierto = ({ contratoId, edita, proyectos }) => {
                 {!edita && <p>Solo lectura: tu rol puede consultar el contrato, pero no modificarlo.</p>}
             </header>
             {edita && <AvisoProyectos proyectos={proyectos} />}
+            <AvisoProceso aviso={contrato.aviso_proceso} bloque />
             <div className="gp-panel ct-editor">
                 <ContratoEditor
                     key={contrato.id}

@@ -28,3 +28,41 @@
 .exc-plantillas label { display: flex; gap: .6rem; align-items: flex-start; cursor: pointer; font-size: .9rem; }
 .exc-plantillas label small { display: block; color: var(--exv-tinta-suave); }
 .exc-principal { margin-left: .5rem; }
+
+/* Cronograma por etapa (fase 4B): semáforo, fecha programada y fecha real bajo cada barra. */
+.exc-etapa { display: grid; gap: .5rem; align-content: start; min-width: 0; }
+.exc-etapa-fechas { display: flex; flex-wrap: wrap; gap: .5rem .9rem; align-items: flex-end; }
+.exc-alerta { align-self: center; }
+.exc-fecha { display: grid; gap: .2rem; min-width: 0; }
+.exc-fecha label, .exc-fecha-etiqueta { font-size: .74rem; color: var(--exv-tinta-tenue); }
+.exc-fecha-texto { font-size: .85rem; color: var(--exv-tinta); font-variant-numeric: tabular-nums; }
+.exc-fecha-control { display: inline-flex; gap: .4rem; align-items: center; }
+.exc-fecha input[type="date"] {
+    max-width: 100%;
+    padding: .25rem .4rem;
+    font: inherit;
+    font-size: .85rem;
+    color: var(--exv-tinta);
+    background: var(--exv-tarjeta);
+    border: 1px solid var(--exv-linea);
+    border-radius: var(--exv-radio);
+}
+.exc-fecha input[type="date"]:disabled { color: var(--exv-tinta-suave); background: transparent; border-style: dashed; cursor: default; }
+.exc-fecha input[aria-invalid="true"] { border-color: var(--gp-coral); }
+.exc-sugerida { font-size: .74rem; font-style: italic; color: var(--exv-tinta-suave); }
+
+/* Franja de avisos del cronograma, arriba del avance por etapa. */
+.exc-avisos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem .75rem;
+    align-items: center;
+    margin: 0 0 1rem;
+    padding: .65rem .9rem;
+    background: var(--exv-tarjeta);
+    border: 1px solid var(--exv-linea-suave);
+    border-left: 3px solid var(--gp-ambar);
+    border-radius: var(--exv-radio);
+    font-size: .88rem;
+}
+.exc-avisos ul { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0; padding: 0; list-style: none; }
