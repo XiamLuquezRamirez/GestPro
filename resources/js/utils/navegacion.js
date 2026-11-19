@@ -49,6 +49,32 @@ export const DESTINOS = [
     { id: 'plantillas', titulo: 'Plantillas de checklist', ruta: RUTA_PLANTILLAS, grupo: GRUPO.CATALOGOS, icono: 'faListCheck', palabras: 'requisitos checklist fuentes sectores versiones catalogo', soloRol: 'Administrador' },
 ];
 
+// Los catálogos son muchos para una sola lista: en el menú se agrupan en secciones plegables,
+// en este orden y con sus destinos en este orden. Todo catálogo de DESTINOS va en una sección.
+export const SUBGRUPOS_CATALOGOS = [
+    { titulo: 'Proyectos y territorio', ids: ['estados', 'fases', 'sectores', 'municipios'] },
+    { titulo: 'Financiación y entidades', ids: ['fuentes-financiacion', 'entidades'] },
+    { titulo: 'Agenda', ids: ['tipos-evento', 'prioridades', 'responsables'] },
+    { titulo: 'Contratación', ids: ['modalidades', 'etapas-contratacion', 'tipos-contrato'] },
+    { titulo: 'Checklists', ids: ['plantillas'] },
+];
+
+/**
+ * Las secciones de catálogos con los destinos que trae la lista (ya filtrada por rol), en el
+ * orden del menú. Una sección sin destinos para el usuario no aparece.
+ *
+ * @return {Array<{titulo: string, destinos: object[]}>}
+ */
+export const catalogosPorSubgrupo = (destinos) => SUBGRUPOS_CATALOGOS
+    .map(({ titulo, ids }) => ({
+        titulo,
+        destinos: ids.map((id) => destinos.find((d) => d.id === id && d.grupo === GRUPO.CATALOGOS)).filter(Boolean),
+    }))
+    .filter((s) => s.destinos.length > 0);
+
+/** La sección del catálogo `id`, o null si no es un catálogo. */
+export const subgrupoDe = (id) => SUBGRUPOS_CATALOGOS.find((s) => s.ids.includes(id))?.titulo ?? null;
+
 /** Los destinos que puede abrir el usuario: algunos son solo de un rol. */
 const permitido = (usuario, destino) => !destino.soloRol || destino.soloRol === usuario?.rol;
 

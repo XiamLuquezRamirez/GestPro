@@ -2,17 +2,18 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-    faAnglesLeft, faAnglesRight, faEllipsis, faMagnifyingGlass, faRightFromBracket, faTv, faXmark,
+    faAnglesLeft, faAnglesRight, faChevronRight, faEllipsis, faMagnifyingGlass, faRightFromBracket, faTv, faXmark,
 } from '@fortawesome/free-solid-svg-icons';
 import PaletaComandos from './PaletaComandos';
 import { getImageUrl } from '../utils/assetHelper';
 import { ICONOS } from '../utils/iconosNavegacion';
-import { DESTINOS, GRUPO, destinoActivo, destinosPara, tituloDeRuta } from '../utils/navegacion';
+import { DESTINOS, GRUPO, catalogosPorSubgrupo, destinoActivo, destinosPara, subgrupoDe, tituloDeRuta } from '../utils/navegacion';
 import '../../css/Shell.css';
 
 const GRUPOS = [GRUPO.TRABAJO, GRUPO.ANALISIS, GRUPO.CATALOGOS];
 const IDS_BARRA_INFERIOR = ['tablero', 'proyectos', 'eventos'];
 const CLAVE_PLEGADO = 'gestpro.rielPlegado';
+const CLAVE_SECCIONES = 'gestpro.seccionesCatalogos';
 
 const leerPlegado = () => {
     try {
@@ -30,6 +31,24 @@ const guardarPlegado = (valor) => {
     }
 };
 
+// Las secciones de catálogos abiertas: solo una preferencia, como el riel plegado.
+const leerSecciones = () => {
+    try {
+        const guardadas = JSON.parse(localStorage.getItem(CLAVE_SECCIONES) ?? '[]');
+        return Array.isArray(guardadas) ? guardadas.filter((s) => typeof s === 'string') : [];
+    } catch {
+        return [];
+    }
+};
+
+const guardarSecciones = (secciones) => {
+    try {
+        localStorage.setItem(CLAVE_SECCIONES, JSON.stringify(secciones));
+    } catch {
+        // Sin almacenamiento, las secciones vuelven a abrirse solo con el catálogo activo.
+    }
+};
+
 const Enlace = ({ destino, activo, plegado, onClick }) => (
     <Link
         to={destino.ruta}
@@ -43,10 +62,53 @@ const Enlace = ({ destino, activo, plegado, onClick }) => (
     </Link>
 );
 
-const ListaDestinos = ({ destinos, activo, plegado, onNavegar }) => GRUPOS.map((grupo) => (
+/**
+ * Los catálogos, en secciones que se abren y cierran. Con el riel plegado (solo iconos) el botón
+ * de cada sección se oculta y se ven todos los iconos, separados por sección (Shell.css).
+ */
+const SeccionesCatalogos = ({ destinos, activo, plegado, onNavegar, abiertas, onAlternar, prefijo }) => (
+    catalogosPorSubgrupo(destinos).map((seccion) => {
+        const abierta = abiertas.includes(seccion.titulo);
+        const idLista = `${prefijo}-${seccion.titulo.normalize('NFD').replace(/[^A-Za-z]/g, '').toLowerCase()}`;
+        const contieneActivo = seccion.destinos.some((d) => d.id === activo);
+        return (
+            <div className={`gp-subgrupo${abierta ? ' abierta' : ''}`} key={seccion.titulo}>
+                <button
+                    type="button"
+                    className={`gp-subgrupo-boton${contieneActivo ? ' con-activo' : ''}`}
+                    aria-expanded={abierta}
+                    aria-controls={idLista}
+                    aria-label={`${seccion.titulo}, ${seccion.destinos.length} ${seccion.destinos.length === 1 ? 'catálogo' : 'catálogos'}`}
+                    onClick={() => onAlternar(seccion.titulo)}
+                >
+                    <FontAwesomeIcon icon={faChevronRight} className="gp-subgrupo-flecha" fixedWidth />
+                    <span>{seccion.titulo}</span>
+                    <small>{seccion.destinos.length}</small>
+                </button>
+                <div className="gp-subgrupo-lista" id={idLista}>
+                    {seccion.destinos.map((destino) => (
+                        <Enlace key={destino.id} destino={destino} activo={activo === destino.id} plegado={plegado} onClick={onNavegar} />
+                    ))}
+                </div>
+            </div>
+        );
+    })
+);
+
+const ListaDestinos = ({ destinos, activo, plegado, onNavegar, abiertas, onAlternar, prefijo }) => GRUPOS.map((grupo) => (
     <div className="gp-nav-grupo" key={grupo}>
         <div className="gp-nav-titulo gp-etiqueta">{grupo}</div>
-        {destinos.filter((d) => d.grupo === grupo).map((destino) => (
+        {grupo === GRUPO.CATALOGOS ? (
+            <SeccionesCatalogos
+                destinos={destinos}
+                activo={activo}
+                plegado={plegado}
+                onNavegar={onNavegar}
+                abiertas={abiertas}
+                onAlternar={onAlternar}
+                prefijo={prefijo}
+            />
+        ) : destinos.filter((d) => d.grupo === grupo).map((destino) => (
             <Enlace key={destino.id} destino={destino} activo={activo === destino.id} plegado={plegado} onClick={onNavegar} />
         ))}
     </div>
@@ -59,9 +121,30 @@ const AppShell = ({ user, onLogout }) => {
     const [plegado, setPlegado] = useState(leerPlegado);
     const [paletaAbierta, setPaletaAbierta] = useState(false);
     const [masAbierto, setMasAbierto] = useState(false);
+    const [seccionesAbiertas, setSeccionesAbiertas] = useState(leerSecciones);
 
     const activo = destinoActivo(pathname, search);
     const abrirPaleta = useCallback(() => setPaletaAbierta(true), []);
+
+    const alternarSeccion = useCallback((titulo) => {
+        setSeccionesAbiertas((actuales) => {
+            const nuevas = actuales.includes(titulo) ? actuales.filter((s) => s !== titulo) : [...actuales, titulo];
+            guardarSecciones(nuevas);
+            return nuevas;
+        });
+    }, []);
+
+    // Al llegar a un catálogo, su sección se abre para que se vea dónde estás. Después se puede cerrar.
+    const seccionActiva = subgrupoDe(activo);
+    useEffect(() => {
+        if (!seccionActiva) return;
+        setSeccionesAbiertas((actuales) => {
+            if (actuales.includes(seccionActiva)) return actuales;
+            const nuevas = [...actuales, seccionActiva];
+            guardarSecciones(nuevas);
+            return nuevas;
+        });
+    }, [seccionActiva]);
 
     useEffect(() => {
         const alPulsar = (e) => {
@@ -108,7 +191,14 @@ const AppShell = ({ user, onLogout }) => {
                 </button>
 
                 <nav className="gp-nav">
-                    <ListaDestinos destinos={destinos} activo={activo} plegado={plegado} />
+                    <ListaDestinos
+                        destinos={destinos}
+                        activo={activo}
+                        plegado={plegado}
+                        abiertas={seccionesAbiertas}
+                        onAlternar={alternarSeccion}
+                        prefijo="riel"
+                    />
                 </nav>
 
                 <div className="gp-riel-pie">
@@ -180,7 +270,14 @@ const AppShell = ({ user, onLogout }) => {
                                 <FontAwesomeIcon icon={faXmark} />
                             </button>
                         </div>
-                        <ListaDestinos destinos={destinos} activo={activo} onNavegar={() => setMasAbierto(false)} />
+                        <ListaDestinos
+                            destinos={destinos}
+                            activo={activo}
+                            onNavegar={() => setMasAbierto(false)}
+                            abiertas={seccionesAbiertas}
+                            onAlternar={alternarSeccion}
+                            prefijo="hoja"
+                        />
                         <div className="gp-hoja-pie">
                             <Link to="/sala" className="gp-boton"><FontAwesomeIcon icon={faTv} /> Modo sala</Link>
                             <button type="button" className="gp-boton" onClick={onLogout}><FontAwesomeIcon icon={faRightFromBracket} /> Cerrar sesión</button>

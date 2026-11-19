@@ -67,6 +67,51 @@ kbd {
 .gp-nav-grupo:first-child { margin-top: .25rem; }
 .gp-nav-titulo { padding: 0 .55rem .3rem; white-space: nowrap; }
 
+/* Catálogos: secciones plegables. La lista de una sección cerrada no se ve. */
+.gp-subgrupo + .gp-subgrupo { margin-top: .1rem; }
+.gp-subgrupo-boton {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    width: 100%;
+    padding: .38rem .45rem .38rem .55rem;
+    font: inherit;
+    font-size: .82rem;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    color: var(--gp-texto-2);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: var(--gp-radio);
+    transition: background .12s, color .12s;
+}
+.gp-subgrupo-boton:hover { color: var(--gp-texto); background: var(--gp-superficie); }
+.gp-subgrupo-boton:focus-visible { outline: 2px solid var(--gp-azul); outline-offset: -2px; }
+.gp-subgrupo-boton span { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.gp-subgrupo-boton small {
+    min-width: 1.25rem;
+    padding: .02rem .3rem;
+    font-size: .68rem;
+    font-weight: 600;
+    text-align: center;
+    color: var(--gp-texto-3);
+    background: var(--gp-superficie);
+    border-radius: 999px;
+}
+/* Cerrada pero con el catálogo en que estás: se marca para no perderlo de vista. */
+.gp-subgrupo:not(.abierta) .gp-subgrupo-boton.con-activo { color: var(--gp-texto); }
+.gp-subgrupo:not(.abierta) .gp-subgrupo-boton.con-activo small { color: #fff; background: #0180A1; }
+.gp-subgrupo-flecha { font-size: .62rem; color: var(--gp-texto-3); transition: transform .15s; }
+.gp-subgrupo.abierta .gp-subgrupo-flecha { transform: rotate(90deg); }
+.gp-subgrupo-lista { display: none; margin: .1rem 0 .3rem .95rem; padding-left: .45rem; border-left: 1px solid var(--gp-linea); }
+.gp-subgrupo.abierta .gp-subgrupo-lista { display: block; }
+.gp-subgrupo-lista .gp-enlace { padding-block: .34rem; font-size: .86rem; }
+@media (prefers-reduced-motion: reduce) {
+    .gp-subgrupo-flecha { transition: none; }
+}
+
 .gp-enlace {
     position: relative;
     display: flex;
@@ -157,6 +202,10 @@ kbd {
 .riel-plegado .gp-riel .gp-nav-grupo { margin-top: .5rem; padding-top: .5rem; border-top: 1px solid var(--gp-linea); }
 .riel-plegado .gp-riel .gp-nav-grupo:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .riel-plegado .gp-riel .gp-enlace { justify-content: center; padding: .55rem 0; }
+/* Plegado: sin botones de sección; todos los iconos de catálogos, separados por sección. */
+.riel-plegado .gp-riel .gp-subgrupo-boton { display: none; }
+.riel-plegado .gp-riel .gp-subgrupo-lista { display: block; margin: 0; padding: 0; border: 0; }
+.riel-plegado .gp-riel .gp-subgrupo + .gp-subgrupo { margin-top: .25rem; padding-top: .25rem; border-top: 1px dashed var(--gp-linea); }
 .riel-plegado .gp-riel .gp-riel-pie { padding-inline: .6rem; }
 .riel-plegado .gp-riel .gp-usuario { justify-content: center; padding-inline: 0; }
 
@@ -178,6 +227,9 @@ kbd {
     .gp-riel .gp-nav-grupo { margin-top: .5rem; padding-top: .5rem; border-top: 1px solid var(--gp-linea); }
     .gp-riel .gp-nav-grupo:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
     .gp-riel .gp-enlace { justify-content: center; padding: .55rem 0; }
+    .gp-riel .gp-subgrupo-boton { display: none; }
+    .gp-riel .gp-subgrupo-lista { display: block; margin: 0; padding: 0; border: 0; }
+    .gp-riel .gp-subgrupo + .gp-subgrupo { margin-top: .25rem; padding-top: .25rem; border-top: 1px dashed var(--gp-linea); }
     .gp-riel .gp-riel-pie { padding-inline: .6rem; }
     .gp-riel .gp-usuario { justify-content: center; padding-inline: 0; }
 }

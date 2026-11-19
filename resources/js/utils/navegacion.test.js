@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { DESTINOS, GRUPO, RUTA_CONTRATOS, RUTA_PLANTILLAS, SECCIONES_PARAMETROS, buscarEnPaleta, destinoActivo, destinosPara, puedeVer, rutaExpedienteContratacion, rutaFichaProyecto, seccionDesdeSlug, tituloDeRuta } from './navegacion';
+import { DESTINOS, GRUPO, RUTA_CONTRATOS, RUTA_PLANTILLAS, SECCIONES_PARAMETROS, SUBGRUPOS_CATALOGOS, buscarEnPaleta, catalogosPorSubgrupo, destinoActivo, destinosPara, puedeVer, rutaExpedienteContratacion, rutaFichaProyecto, seccionDesdeSlug, subgrupoDe, tituloDeRuta } from './navegacion';
 import { ICONOS } from './iconosNavegacion';
 
 const proyectos = [
@@ -235,5 +235,51 @@ describe('tituloDeRuta', () => {
         expect(tituloDeRuta('/contratos/12', '')).toBe('Contratos');
         expect(tituloDeRuta('/dashboard', '?vista=contratos')).toBe('Avance de contratos');
         expect(tituloDeRuta('/otra', '')).toBe('GestPro');
+    });
+});
+
+describe('catálogos por subgrupo', () => {
+    const admin = { rol: 'Administrador' };
+    const gestor = { rol: 'Gestor' };
+
+    it('reparte los catálogos en cinco secciones, en el orden acordado', () => {
+        const secciones = catalogosPorSubgrupo(destinosPara(admin));
+
+        expect(secciones.map((s) => s.titulo)).toEqual(['Proyectos y territorio', 'Financiación y entidades', 'Agenda', 'Contratación', 'Checklists']);
+        expect(secciones.map((s) => s.destinos.map((d) => d.id))).toEqual([
+            ['estados', 'fases', 'sectores', 'municipios'],
+            ['fuentes-financiacion', 'entidades'],
+            ['tipos-evento', 'prioridades', 'responsables'],
+            ['modalidades', 'etapas-contratacion', 'tipos-contrato'],
+            ['plantillas'],
+        ]);
+    });
+
+    it('cada catálogo del menú está en exactamente una sección', () => {
+        const catalogos = DESTINOS.filter((d) => d.grupo === GRUPO.CATALOGOS).map((d) => d.id).sort();
+        const enSecciones = SUBGRUPOS_CATALOGOS.flatMap((s) => s.ids).sort();
+
+        expect(enSecciones).toEqual(catalogos);
+    });
+
+    it('omite las secciones que el usuario no puede ver', () => {
+        const secciones = catalogosPorSubgrupo(destinosPara(gestor));
+
+        expect(secciones.map((s) => s.titulo)).not.toContain('Checklists');
+        expect(secciones.flatMap((s) => s.destinos.map((d) => d.id))).not.toContain('plantillas');
+    });
+
+    it('ignora los destinos que no son catálogos', () => {
+        const ids = catalogosPorSubgrupo(DESTINOS).flatMap((s) => s.destinos.map((d) => d.id));
+
+        expect(ids).not.toContain('tablero');
+        expect(ids).not.toContain('contratos');
+    });
+
+    it('dice en qué sección está un catálogo, o null si no es un catálogo', () => {
+        expect(subgrupoDe('tipos-contrato')).toBe('Contratación');
+        expect(subgrupoDe('responsables')).toBe('Agenda');
+        expect(subgrupoDe('tablero')).toBeNull();
+        expect(subgrupoDe(null)).toBeNull();
     });
 });
