@@ -173,7 +173,7 @@ class CatalogoRequisitosController extends Controller
         'fuente' => 'la fuente normativa', 'sector_id' => 'el sector', 'tipo_id' => 'el tipo de proyecto',
         'condicion' => 'la condición', 'nota' => 'las observaciones', 'orden' => 'el orden',
         'activo' => 'el estado activo', 'ids' => 'el orden de los requisitos', 'ids.*' => 'cada requisito',
-        'etapa_id' => 'la etapa',
+        'etapa_id' => 'la etapa', 'peso' => 'el peso',
     ];
 
     private const MENSAJES = [
@@ -186,6 +186,7 @@ class CatalogoRequisitosController extends Controller
         'string' => 'Revisa :attribute: debe ser un texto.',
         'min' => 'Revisa :attribute: el mínimo es :min.',
         'orden.max' => 'Revisa el orden: el máximo es :max.',
+        'peso.max' => 'Revisa el peso: el máximo es :max.',
         'codigo_comun.regex' => 'El código común solo admite letras, números, punto, guion y guion bajo.',
         'texto.required' => 'Escribe el nombre del requisito.',
         'clave.regex' => 'La clave solo admite minúsculas, números y guion bajo.',
@@ -223,6 +224,8 @@ class CatalogoRequisitosController extends Controller
             'activo' => ['sometimes', 'boolean'],
             // Si la plantilla la exige o la rechaza, y si está activa, lo decide el servicio.
             'etapa_id' => ['nullable', 'bail', 'integer', $entero],
+            // De 1 a 100 en contratación; si la plantilla lo admite distinto de 1 lo decide el servicio.
+            'peso' => ['sometimes', 'bail', 'integer', $entero, 'min:1', 'max:100'],
         ];
 
         if ($version->plantilla->motor === PlantillaChecklist::MOTOR_SIMPLE) {

@@ -102,7 +102,7 @@ final class CatalogoService
                 'descripcion', 'categoria', 'tipo_requisito', 'caracter', 'cargo_cumplimiento', 'cargo_revision',
                 'soporte_requerido', 'referencia_normativa', 'condicion_descripcion',
                 'requiere_aprobacion_no_aplica', 'codigo_comun', 'responsable_cumplimiento_id', 'responsable_revision_id',
-                'etapa_id',
+                'etapa_id', 'peso',
             ];
             $vigente?->requisitos()->orderBy('id')->select($columnas)->get()
                 ->map(fn ($r) => ['catalogo_version_id' => $borrador->id, ...$r->only($columnas)])
@@ -238,8 +238,10 @@ final class CatalogoService
 
         $errores = [];
         $erroresEtapa = [];
+        $erroresPeso = [];
         $seccion = $datos['seccion'];
         $this->etapaDelRequisito($version, $datos, $requisito, $erroresEtapa);
+        $peso = $this->pesoDelRequisito($version, $datos, $requisito, $erroresPeso);
 
         $claveRepetida = RequisitoCatalogo::where('catalogo_version_id', $version->id)
             ->where('clave', $datos['clave'])
@@ -275,7 +277,7 @@ final class CatalogoService
         }
         $datos['condicion'] = $condicion !== '' ? $condicion : null;
 
-        $this->rechazarSiHayErrores($erroresEtapa, $errores);
+        $this->rechazarSiHayErrores($erroresEtapa, $erroresPeso, $errores);
 
         $valores = [
             'catalogo_version_id' => $version->id,
@@ -291,6 +293,7 @@ final class CatalogoService
             'condicion' => $datos['condicion'],
             'orden' => $datos['orden'] ?? ($requisito?->orden ?? (int) $version->requisitos()->max('orden') + 1),
             'activo' => array_key_exists('activo', $datos) ? (bool) $datos['activo'] : ($requisito?->activo ?? true),
+            'peso' => $peso,
             ...$this->camposDeSeguimiento($datos, $requisito, sinCaracter: true),
         ];
         if ($version->plantilla->clave === PlantillaChecklist::CLAVE_SGR) {
@@ -324,8 +327,10 @@ final class CatalogoService
     {
         $errores = [];
         $erroresEtapa = [];
+        $erroresPeso = [];
         $clave = trim((string) ($datos['clave'] ?? '')) ?: ($requisito?->clave ?? $this->claveLibre($version));
         $etapa = $this->etapaDelRequisito($version, $datos, $requisito, $erroresEtapa);
+        $peso = $this->pesoDelRequisito($version, $datos, $requisito, $erroresPeso);
 
         $repetida = fn (string $columna, ?string $valor) => $valor !== null && RequisitoCatalogo::where('catalogo_version_id', $version->id)
             ->where($columna, $valor)
@@ -346,7 +351,7 @@ final class CatalogoService
             $errores[] = 'Un requisito condicionado necesita describir cuándo aplica.';
         }
 
-        $this->rechazarSiHayErrores($erroresEtapa, $errores);
+        $this->rechazarSiHayErrores($erroresEtapa, $erroresPeso, $errores);
 
         $valores = [
             'catalogo_version_id' => $version->id,
@@ -365,6 +370,7 @@ final class CatalogoService
             'codigo_comun' => $codigoComun,
             'requiere_aprobacion_no_aplica' => (bool) ($datos['requiere_aprobacion_no_aplica'] ?? $requisito?->requiere_aprobacion_no_aplica ?? false),
             'etapa_id' => $etapa,
+            'peso' => $peso,
             ...$seguimiento,
         ];
 
@@ -378,17 +384,39 @@ final class CatalogoService
     }
 
     /**
-     * El requisito no se guarda si hay errores. Los de la etapa van primero en la lista y, además,
-     * en el campo `etapa_id`, para que la pantalla los muestre bajo el select sin adivinar cuáles son.
+     * El requisito no se guarda si hay errores. Los de la etapa van primero en la lista, después
+     * los del peso, y además cada uno en su campo (`etapa_id`, `peso`), para que la pantalla los
+     * muestre bajo su input sin adivinar cuáles son.
      *
      * @param list<string> $deEtapa
+     * @param list<string> $dePeso
      * @param list<string> $otros
      */
-    private function rechazarSiHayErrores(array $deEtapa, array $otros): void
+    private function rechazarSiHayErrores(array $deEtapa, array $dePeso, array $otros): void
     {
-        if ($deEtapa || $otros) {
-            throw new ReglaNegocioException('El requisito no es válido.', [...$deEtapa, ...$otros], $deEtapa ? ['etapa_id' => $deEtapa] : []);
+        if ($deEtapa || $dePeso || $otros) {
+            $porCampo = array_filter(['etapa_id' => $deEtapa, 'peso' => $dePeso]);
+            throw new ReglaNegocioException('El requisito no es válido.', [...$deEtapa, ...$dePeso, ...$otros], $porCampo);
         }
+    }
+
+    /**
+     * Peso del requisito en el avance del expediente. En una plantilla de contratación es
+     * opcional: de 1 a 100 (lo valida el controlador); sin el campo en el pedido, conserva el que
+     * tenía (1 al crear). En una de viabilización no se usa: un peso distinto de 1 se rechaza y
+     * siempre se guarda 1. Los errores se agregan a $errores.
+     */
+    private function pesoDelRequisito(CatalogoVersion $version, array $datos, ?RequisitoCatalogo $requisito, array &$errores): int
+    {
+        if (! $version->plantilla->esContratacion()) {
+            if (array_key_exists('peso', $datos) && $datos['peso'] !== 1) {
+                $errores[] = 'Los requisitos de una plantilla de viabilización no llevan peso.';
+            }
+
+            return 1;
+        }
+
+        return array_key_exists('peso', $datos) ? (int) $datos['peso'] : ($requisito?->peso ?? 1);
     }
 
     /**

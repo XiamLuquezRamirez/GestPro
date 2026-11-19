@@ -25,7 +25,7 @@ class RequisitoCatalogo extends Model
         'descripcion', 'categoria', 'tipo_requisito', 'caracter', 'cargo_cumplimiento', 'cargo_revision',
         'soporte_requerido', 'referencia_normativa', 'condicion_descripcion',
         'requiere_aprobacion_no_aplica', 'codigo_comun', 'responsable_cumplimiento_id', 'responsable_revision_id',
-        'etapa_id',
+        'etapa_id', 'peso',
     ];
     protected $casts = [
         'catalogo_version_id' => 'integer',
@@ -35,6 +35,7 @@ class RequisitoCatalogo extends Model
         'responsable_cumplimiento_id' => 'integer',
         'responsable_revision_id' => 'integer',
         'etapa_id' => 'integer',
+        'peso' => 'integer',
         'activo' => 'boolean',
         'requiere_aprobacion_no_aplica' => 'boolean',
     ];
