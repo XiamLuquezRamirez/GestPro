@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -9,16 +10,27 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProyectoExpediente extends Model
 {
+    // De viabilización, por proyecto: borrador -> radicado. De contratación, uno por proceso:
+    // borrador -> cerrado.
+    public const TIPO_VIABILIZACION = 'viabilizacion';
+    public const TIPO_CONTRATACION = 'contratacion';
+    public const TIPOS = [self::TIPO_VIABILIZACION, self::TIPO_CONTRATACION];
+
     public const BORRADOR = 'borrador';
     public const RADICADO = 'radicado';
+    public const CERRADO = 'cerrado';
 
     protected $table = 'proyectos_expedientes';
     protected $fillable = [
-        'proyecto_id', 'fase_sgr', 'fecha_configuracion', 'estado',
+        'proyecto_id', 'tipo', 'proceso_id', 'fase_sgr', 'fecha_configuracion', 'estado',
         'fecha_radicado', 'usuario_radicado_id', 'usuario_creo_id',
     ];
+    // El mismo valor por defecto de la columna, para que un expediente recién creado lo tenga
+    // sin volver a leerlo.
+    protected $attributes = ['tipo' => self::TIPO_VIABILIZACION];
     protected $casts = [
         'proyecto_id' => 'integer',
+        'proceso_id' => 'integer',
         'fase_sgr' => 'integer',
         'fecha_configuracion' => 'datetime',
         'fecha_radicado' => 'datetime',
@@ -32,6 +44,32 @@ class ProyectoExpediente extends Model
     public function proyecto(): BelongsTo
     {
         return $this->belongsTo(Proyecto::class, 'proyecto_id');
+    }
+
+    /** Proceso de contratación del expediente; null en los de viabilización. */
+    public function proceso(): BelongsTo
+    {
+        return $this->belongsTo(ProcesoLicitacion::class, 'proceso_id');
+    }
+
+    public function scopeViabilizacion(Builder $query): Builder
+    {
+        return $query->where($query->qualifyColumn('tipo'), self::TIPO_VIABILIZACION);
+    }
+
+    public function scopeContratacion(Builder $query): Builder
+    {
+        return $query->where($query->qualifyColumn('tipo'), self::TIPO_CONTRATACION);
+    }
+
+    public function esViabilizacion(): bool
+    {
+        return $this->tipo === self::TIPO_VIABILIZACION;
+    }
+
+    public function esContratacion(): bool
+    {
+        return $this->tipo === self::TIPO_CONTRATACION;
     }
 
     /** Versiones de plantilla que usa el expediente. La etapa 5 permite más de una. */

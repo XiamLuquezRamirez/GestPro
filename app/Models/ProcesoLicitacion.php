@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ProcesoLicitacion extends Model
 {
@@ -96,5 +97,11 @@ class ProcesoLicitacion extends Model
     public function contratos(): HasMany
     {
         return $this->hasMany(Contrato::class, 'proceso_licitacion');
+    }
+
+    /** Expediente de contratación del proceso: como máximo uno. */
+    public function expediente(): HasOne
+    {
+        return $this->hasOne(ProyectoExpediente::class, 'proceso_id');
     }
 }

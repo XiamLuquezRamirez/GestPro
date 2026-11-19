@@ -40,6 +40,8 @@ use Illuminate\Validation\ValidationException;
  *   observación y soporte) y los que vuelven a aplicar se recuperan tal cual.
  * - Solo se radica con todos los requisitos que aplican cumplidos.
  * - Radicado, el expediente queda congelado: no se reconfigura ni se marca.
+ * - Los expedientes del proyecto son los de viabilización (Proyecto::expedientes()). Uno de
+ *   contratación (de un proceso) comparte el checklist, pero no se configura ni se radica.
  */
 final class ExpedienteService
 {
@@ -178,6 +180,8 @@ final class ExpedienteService
 
     public function confirmarConfiguracion(ProyectoExpediente $expediente, array $datos, ?User $usuario = null): ProyectoExpediente
     {
+        $this->exigirViabilizacion($expediente);
+
         return DB::transaction(function () use ($expediente, $datos, $usuario) {
             // Todo se decide sobre la fila bloqueada: un PUT simultáneo que quite las
             // plantillas espera a que esto termine, y luego ya lo ve confirmado. Con el
@@ -239,6 +243,8 @@ final class ExpedienteService
      */
     public function actualizarConfiguracion(ProyectoExpediente $expediente, array $datos, ?User $usuario = null): ProyectoExpediente
     {
+        $this->exigirViabilizacion($expediente);
+
         return DB::transaction(function () use ($expediente, $datos, $usuario) {
             // Borrador, plantillas y "ya confirmado" se leen de la fila bloqueada.
             $this->bloquear($expediente);
@@ -378,6 +384,8 @@ final class ExpedienteService
 
     public function radicar(ProyectoExpediente $expediente, ?User $usuario): ProyectoExpediente
     {
+        $this->exigirViabilizacion($expediente);
+
         DB::transaction(function () use ($expediente, $usuario) {
             // Con la fila bloqueada, un propio que se agrega a la vez espera o ya cuenta.
             $this->bloquear($expediente);
@@ -710,6 +718,7 @@ final class ExpedienteService
     public function resumenPorProyecto(?int $proyectoId = null): array
     {
         $cantidades = ProyectoExpediente::query()
+            ->viabilizacion()
             ->when($proyectoId !== null, fn ($q) => $q->where('proyecto_id', $proyectoId))
             ->selectRaw('MAX(id) AS ultimo_id, COUNT(*) AS cantidad')
             ->groupBy('proyecto_id')
@@ -1212,6 +1221,14 @@ final class ExpedienteService
     {
         if (! $expediente->esBorrador()) {
             throw new ReglaNegocioException('El expediente está radicado: su checklist está congelado y no admite cambios.');
+        }
+    }
+
+    /** La configuración SGR y la radicación son solo de los expedientes de viabilización. */
+    private function exigirViabilizacion(ProyectoExpediente $expediente): void
+    {
+        if ($expediente->esContratacion()) {
+            throw new ReglaNegocioException('El expediente es de contratación: no tiene configuración SGR ni se radica.');
         }
     }
 

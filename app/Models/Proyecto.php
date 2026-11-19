@@ -91,9 +91,16 @@ class Proyecto extends Model
         return $this->hasMany(CheckFormulacion::class, 'proyecto');
     }
 
+    /** Expedientes de viabilización del proyecto. Los de contratación son de cada proceso. */
     public function expedientes(): HasMany
     {
-        return $this->hasMany(ProyectoExpediente::class, 'proyecto_id');
+        return $this->hasMany(ProyectoExpediente::class, 'proyecto_id')->viabilizacion();
+    }
+
+    /** Expedientes de contratación de los procesos del proyecto. */
+    public function expedientesContratacion(): HasMany
+    {
+        return $this->hasMany(ProyectoExpediente::class, 'proyecto_id')->contratacion();
     }
 
     public function contratos(): HasMany
