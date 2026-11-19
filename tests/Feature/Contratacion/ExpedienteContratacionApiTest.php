@@ -159,7 +159,7 @@ class ExpedienteContratacionApiTest extends TestCase
         $this->assertSame([
             'id', 'proyecto', 'plantillas', 'tiene_sgr', 'configurado', 'estado', 'usuario_creo', 'creado', 'actualizado',
             'tipo', 'proceso', 'fecha_cierre', 'usuario_cierre',
-            'progreso', 'avance_por_etapa', 'requisitos', 'avisos_duplicados', 'avisos_duplicados_total', 'retenidos',
+            'progreso', 'avance_por_etapa', 'avisos', 'requisitos', 'avisos_duplicados', 'avisos_duplicados_total', 'retenidos',
         ], array_keys($r->json()));
         $r->assertJsonPath('tipo', ProyectoExpediente::TIPO_CONTRATACION)
             ->assertJsonPath('proceso', [
@@ -183,8 +183,8 @@ class ExpedienteContratacionApiTest extends TestCase
         ], $etapas);
         // En el orden del catálogo de etapas, no en el de los requisitos.
         $this->assertSame([
-            ['etapa' => $this->etapaJson('planeacion'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0],
-            ['etapa' => $this->etapaJson('pliego_definitivo'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0],
+            ['etapa' => $this->etapaJson('planeacion'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha'],
+            ['etapa' => $this->etapaJson('pliego_definitivo'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha'],
         ], $r->json('avance_por_etapa'));
     }
 
@@ -215,9 +215,9 @@ class ExpedienteContratacionApiTest extends TestCase
         $r = $this->leer($expediente);
 
         $this->assertSame([
-            ['etapa' => $this->etapaJson('planeacion'), 'total' => 2, 'cumplidos' => 1, 'porcentaje' => 50, 'peso_total' => 2, 'peso_cumplido' => 1],
-            ['etapa' => $this->etapaJson('pliego_definitivo'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0],
-            ['etapa' => null, 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0],
+            ['etapa' => $this->etapaJson('planeacion'), 'total' => 2, 'cumplidos' => 1, 'porcentaje' => 50, 'peso_total' => 2, 'peso_cumplido' => 1, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha'],
+            ['etapa' => $this->etapaJson('pliego_definitivo'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha'],
+            ['etapa' => null, 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha'],
         ], $r->json('avance_por_etapa'));
         $r->assertJsonPath('progreso', ['total' => 4, 'cumplidos' => 1, 'porcentaje' => 25, 'peso_total' => 4, 'peso_cumplido' => 1]);
         $this->assertSame(
@@ -233,7 +233,7 @@ class ExpedienteContratacionApiTest extends TestCase
         $this->cumplir($expediente, $this->fila($expediente, 'Estudios previos'))
             ->assertJsonPath('requisito.etapa', $this->etapaJson('planeacion'))
             ->assertJsonPath('progreso', ['total' => 2, 'cumplidos' => 1, 'porcentaje' => 50, 'peso_total' => 2, 'peso_cumplido' => 1])
-            ->assertJsonPath('avance_por_etapa.0', ['etapa' => $this->etapaJson('planeacion'), 'total' => 1, 'cumplidos' => 1, 'porcentaje' => 100, 'peso_total' => 1, 'peso_cumplido' => 1]);
+            ->assertJsonPath('avance_por_etapa.0', ['etapa' => $this->etapaJson('planeacion'), 'total' => 1, 'cumplidos' => 1, 'porcentaje' => 100, 'peso_total' => 1, 'peso_cumplido' => 1, 'fecha_programada' => null, 'fecha_real' => now()->toDateString(), 'fecha_real_sugerida' => true, 'completa' => true, 'alerta' => 'completa']);
     }
 
     public function test_la_api_de_viabilizacion_no_trae_las_claves_de_contratacion(): void
@@ -281,7 +281,7 @@ class ExpedienteContratacionApiTest extends TestCase
         $this->como()->postJson($url, ['titulo' => 'Póliza', 'etapa_propia_id' => $this->etapa('adjudicacion')->id])
             ->assertCreated()
             ->assertJsonPath('requisito.etapa', $this->etapaJson('adjudicacion'))
-            ->assertJsonPath('avance_por_etapa.2', ['etapa' => $this->etapaJson('adjudicacion'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0]);
+            ->assertJsonPath('avance_por_etapa.2', ['etapa' => $this->etapaJson('adjudicacion'), 'total' => 1, 'cumplidos' => 0, 'porcentaje' => 0, 'peso_total' => 1, 'peso_cumplido' => 0, 'fecha_programada' => null, 'fecha_real' => null, 'fecha_real_sugerida' => false, 'completa' => false, 'alerta' => 'sin_fecha']);
 
         $propio = $expediente->requisitos()->whereNull('requisito_catalogo_id')->sole();
         $this->assertSame($this->etapa('adjudicacion')->id, $propio->etapa_propia_id);

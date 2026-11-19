@@ -7,6 +7,7 @@
  */
 
 use App\Http\Controllers\CatalogoRequisitosController;
+use App\Http\Controllers\CronogramaExpedienteController;
 use App\Http\Controllers\ExpedienteController;
 use App\Http\Controllers\NoAplicaRequisitoController;
 use App\Http\Controllers\PlantillaChecklistController;
@@ -47,6 +48,9 @@ Route::middleware('can:editar-datos')->group(function () {
     // Solo los de contratación: se cierran, con aviso de los pendientes.
     Route::post('/expedientes/{expediente}/cerrar', [ExpedienteController::class, 'cerrar'])
         ->name('expedientes.cerrar');
+    // Solo los de contratación: fechas programada y real de una etapa.
+    Route::put('/expedientes/{expediente}/etapas/{etapa}', [CronogramaExpedienteController::class, 'update'])
+        ->whereNumber('etapa')->name('expedientes.etapas.update');
     Route::delete('/expedientes/{expediente}', [ExpedienteController::class, 'destroy'])
         ->name('expedientes.destroy');
 

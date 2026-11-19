@@ -106,6 +106,12 @@ class ProyectoExpediente extends Model
         return $this->hasMany(ProyectoRequisito::class, 'expediente_id');
     }
 
+    /** Fechas programada y real de sus etapas; solo en los de contratación. */
+    public function etapasCronograma(): HasMany
+    {
+        return $this->hasMany(ExpedienteEtapa::class, 'expediente_id');
+    }
+
     public function usuarioRadico(): BelongsTo
     {
         return $this->belongsTo(User::class, 'usuario_radicado_id');

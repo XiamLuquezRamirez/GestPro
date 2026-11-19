@@ -6,6 +6,7 @@ use App\Exceptions\CierreConPendientesException;
 use App\Exceptions\ReglaNegocioException;
 use App\Models\CatalogoVersion;
 use App\Models\EtapaContratacion;
+use App\Models\ExpedienteEtapa;
 use App\Models\Fase;
 use App\Models\PlantillaChecklist;
 use App\Models\ProcesoLicitacion;
@@ -19,6 +20,7 @@ use App\Models\RequisitoTipo;
 use App\Models\RequisitoTipologia;
 use App\Models\Responsable;
 use App\Models\User;
+use App\Services\Contratacion\AvisosContratacion;
 use App\Services\Contratacion\PlantillasContratacion;
 use Closure;
 use Illuminate\Http\UploadedFile;
@@ -54,6 +56,13 @@ use Illuminate\Validation\ValidationException;
  *   `cumplidos` siguen siendo conteos. En viabilización el peso no se usa. Cerrado, queda congelado como uno
  *   radicado. La fecha y el usuario del cierre se guardan en fecha_radicado y
  *   usuario_radicado_id: los del acto que termina el trámite del expediente.
+ * - Cronograma (solo contratación): cada etapa puede tener fecha programada y fecha real
+ *   (expediente_etapas). Tras cada acción que cambia el avance, una etapa que acaba de
+ *   completarse recibe la de hoy como sugerida, y una que dejó de estarlo pierde la suya si era
+ *   sugerida; la que puso una persona se conserva, y la que una persona vació estando completa no
+ *   se vuelve a sugerir mientras lo siga (fechasTrasElAvance, el único lugar). El avance
+ *   por etapa presentado trae sus fechas y su semáforo, y el expediente sus avisos
+ *   (AvisosContratacion).
  */
 final class ExpedienteService
 {
@@ -100,6 +109,7 @@ final class ExpedienteService
         private readonly HistorialChecklist $historial,
         private readonly PlantillasExpediente $plantillas,
         private readonly PlantillasContratacion $contratacion,
+        private readonly AvisosContratacion $avisos,
     ) {
     }
 
@@ -570,16 +580,31 @@ final class ExpedienteService
      * - Los requisitos propios no se tocan.
      * - Corre en su propia transacción (un savepoint si ya hay una) y con la fila del
      *   expediente bloqueada: dos recálculos simultáneos no eligen anclas distintas para una llave.
+     * - En uno de contratación, cambiar los requisitos cambia el avance: cuando la transacción
+     *   más externa se confirma, ajusta la fecha real sugerida con el mismo punto único que
+     *   avanceDe() (avanceConFechaSugerida), sobre una instancia propia del expediente. Si la
+     *   transacción se revierte (la vista previa de una versión nueva), no ajusta nada.
      *
      * @return array{aplican:int, retenidos:int}
      */
     public function sincronizar(ProyectoExpediente $expediente): array
     {
-        return DB::transaction(function () use ($expediente) {
+        $resultado = DB::transaction(function () use ($expediente) {
             $this->bloquear($expediente);
 
             return $this->recalcular($expediente);
         });
+        if ($expediente->esContratacion()) {
+            $id = $expediente->id;
+            DB::afterCommit(function () use ($id) {
+                $actual = ProyectoExpediente::query()->find($id);
+                if ($actual) {
+                    $this->avanceConFechaSugerida($actual);
+                }
+            });
+        }
+
+        return $resultado;
     }
 
     /** @return array{aplican:int, retenidos:int} */
@@ -819,7 +844,7 @@ final class ExpedienteService
                 'tipologias' => $this->opciones($expediente->tipologias),
             ]]),
             'progreso' => $contratacion ? $this->progresoPonderado($filas, $posiciones) : $this->progresoDe($expediente),
-            ...($contratacion ? ['avance_por_etapa' => $this->avancePorEtapa($filas, $posiciones)] : []),
+            ...($contratacion ? $this->cronogramaYAvisos($expediente, $this->avancePorEtapa($filas, $posiciones), $this->cronogramaDe($expediente)) : []),
             'requisitos' => $filas->map(fn (ProyectoRequisito $f) => $this->presentarFila($f, $posiciones))->values(),
             // Los más parecidos, hasta MAX_AVISOS; el total dice cuántos hay en realidad.
             'avisos_duplicados' => $avisos['avisos'],
@@ -1014,20 +1039,196 @@ final class ExpedienteService
 
     /**
      * El avance que acompaña la respuesta de una acción sobre el checklist: el progreso y, en
-     * uno de contratación, también el avance por etapa, ambos de las mismas filas.
+     * uno de contratación, también el avance por etapa (con sus fechas y su semáforo) y los
+     * avisos, de las mismas filas. En uno de contratación se llama después de toda acción que
+     * cambia el avance, ya guardada y fuera de su transacción: ajusta la fecha real sugerida de
+     * las etapas (avanceConFechaSugerida).
+     *
+     * @return array{progreso: array, avance_por_etapa?: list<array>, avisos?: array}
      */
     public function avanceDe(ProyectoExpediente $expediente): array
     {
         if (! $expediente->esContratacion()) {
             return ['progreso' => $this->progresoDe($expediente)];
         }
-        $filas = $this->filasDelAvance($expediente);
-        $posiciones = $this->posiciones($this->plantillas->versionesDe($expediente));
+        [$filas, $posiciones, $avance, $cronograma] = $this->avanceConFechaSugerida($expediente);
 
         return [
             'progreso' => $this->progresoPonderado($filas, $posiciones),
-            'avance_por_etapa' => $this->avancePorEtapa($filas, $posiciones),
+            ...$this->cronogramaYAvisos($expediente, $avance, $cronograma),
         ];
+    }
+
+    /**
+     * El punto único que ajusta la fecha real sugerida de un expediente de contratación: lo usan
+     * avanceDe() (tras cada acción del checklist) y sincronizar() (al nacer el expediente o con
+     * una versión nueva). Con el expediente bloqueado (la misma fila que bloquean las acciones
+     * del checklist y las fechas de una etapa), lee el avance y aplica fechasTrasElAvance(), todo
+     * en una transacción. Se llama con la acción ya guardada y fuera de su transacción, así que
+     * nada de esto la hace fallar: si el bloqueo, un interbloqueo o una escritura fallan, se
+     * registra el error, se deshace solo el ajuste y se responde el avance sin él.
+     *
+     * @return array{0: Collection<int, ProyectoRequisito>, 1: array, 2: list<array>, 3: Collection<int, ExpedienteEtapa>}
+     *         las filas del avance, sus posiciones, el avance por etapa y el cronograma
+     */
+    private function avanceConFechaSugerida(ProyectoExpediente $expediente): array
+    {
+        $leer = function () use ($expediente): array {
+            $filas = $this->filasDelAvance($expediente);
+            $posiciones = $this->posiciones($this->plantillas->versionesDe($expediente));
+
+            return [$filas, $posiciones, $this->avancePorEtapa($filas, $posiciones)];
+        };
+
+        try {
+            return DB::transaction(function () use ($expediente, $leer) {
+                $this->bloquear($expediente);
+                [$filas, $posiciones, $avance] = $leer();
+
+                return [$filas, $posiciones, $avance, $this->fechasTrasElAvance($expediente, $avance)];
+            });
+        } catch (\Throwable $e) {
+            report($e);
+            [$filas, $posiciones, $avance] = $leer();
+
+            return [$filas, $posiciones, $avance, $this->cronogramaDe($expediente)];
+        }
+    }
+
+    /**
+     * El avance por etapa de un expediente de contratación, con sus fechas y su semáforo, y sus
+     * avisos, sin cambiar nada.
+     *
+     * @return array{avance_por_etapa: list<array>, avisos: array}
+     */
+    public function cronogramaDeContratacion(ProyectoExpediente $expediente): array
+    {
+        return $this->cronogramaYAvisos($expediente, $this->avancePorEtapaDe($expediente), $this->cronogramaDe($expediente));
+    }
+
+    /** @return Collection<int, ExpedienteEtapa> etapa_id => fechas de la etapa */
+    private function cronogramaDe(ProyectoExpediente $expediente): Collection
+    {
+        return $expediente->etapasCronograma()->get()->keyBy('etapa_id');
+    }
+
+    /**
+     * La fecha real sugerida, tras una acción que cambió el avance: el único lugar que la pone o
+     * la quita. Solo sugiere cuando una etapa pasa de incompleta a completa, y lo sabe por su
+     * fila, sin comparar el avance de antes con el de después: una etapa completa cuya fecha real
+     * nadie atendió (sin fila, o sin fecha real y sin estar descartada,
+     * ExpedienteEtapa::descartada()) acaba de completarse. Así sirve igual para toda acción y
+     * para sincronizar, aunque varias peticiones se crucen. En borrador, esa etapa recibe la de
+     * hoy como sugerida (su fila nace si no la tiene), y cada etapa que no está completa pierde
+     * la sugerida o el descarte, para que al completarse otra vez se sugiera; la fecha que puso
+     * una persona no se toca. Las escrituras van por lote, no por etapa. Va dentro de la
+     * transacción de avanceConFechaSugerida(), que atrapa sus errores: un fallo deshace todo el
+     * ajuste.
+     *
+     * @param list<array> $avance el de avancePorEtapa()
+     * @return Collection<int, ExpedienteEtapa> el cronograma resultante, como cronogramaDe()
+     */
+    private function fechasTrasElAvance(ProyectoExpediente $expediente, array $avance): Collection
+    {
+        $cronograma = $this->cronogramaDe($expediente);
+        if (! $expediente->esBorrador()) {
+            return $cronograma;
+        }
+
+        $nuevas = [];
+        $sugerir = [];
+        $quitar = [];
+        foreach ($avance as $etapa) {
+            if ($etapa['etapa'] === null) {
+                continue;
+            }
+            $fila = $cronograma->get($etapa['etapa']['id']);
+            if ($this->avisos->completa($etapa)) {
+                // Completa: si nadie atendió su fecha real (ni el sistema ni una persona que la
+                // vació estando completa), acaba de completarse: se sugiere.
+                if (! $fila) {
+                    $nuevas[] = $etapa['etapa']['id'];
+                } elseif ($fila->fecha_real === null && ! $fila->descartada()) {
+                    $sugerir[] = $fila->id;
+                }
+            } elseif ($fila && $fila->fecha_real_sugerida) {
+                // Ya no está completa: se quita la sugerida, o se olvida que la vaciaron.
+                $quitar[] = $fila->id;
+            }
+        }
+        if ($nuevas === [] && $sugerir === [] && $quitar === []) {
+            return $cronograma;
+        }
+
+        $hoy = $this->avisos->hoy()->toDateString();
+        $ahora = now();
+        if ($nuevas !== []) {
+            ExpedienteEtapa::query()->insert(array_map(fn (int $etapaId) => [
+                'expediente_id' => $expediente->id,
+                'etapa_id' => $etapaId,
+                'fecha_real' => $hoy,
+                'fecha_real_sugerida' => true,
+                'created_at' => $ahora,
+                'updated_at' => $ahora,
+            ], $nuevas));
+        }
+        if ($sugerir !== []) {
+            ExpedienteEtapa::query()->whereIn('id', $sugerir)->update(['fecha_real' => $hoy, 'fecha_real_sugerida' => true]);
+        }
+        if ($quitar !== []) {
+            ExpedienteEtapa::query()->whereIn('id', $quitar)->update(['fecha_real' => null, 'fecha_real_sugerida' => false]);
+        }
+
+        return $this->cronogramaDe($expediente);
+    }
+
+    /**
+     * El avance por etapa con las fechas y el semáforo de cada etapa, y los avisos del expediente.
+     *
+     * @param list<array> $avance el de avancePorEtapa()
+     * @param Collection<int, ExpedienteEtapa> $cronograma el de cronogramaDe()
+     * @return array{avance_por_etapa: list<array>, avisos: array}
+     */
+    private function cronogramaYAvisos(ProyectoExpediente $expediente, array $avance, Collection $cronograma): array
+    {
+        $presentado = $this->presentarCronograma($avance, $cronograma, $expediente->esBorrador());
+        $expediente->loadMissing('proceso');
+
+        return [
+            'avance_por_etapa' => $presentado,
+            'avisos' => $this->avisos->resumen(
+                $expediente->proceso,
+                $expediente,
+                $presentado,
+                $this->avisos->ultimosEventos([$expediente->id])[$expediente->id] ?? null
+            ),
+        ];
+    }
+
+    /**
+     * Cada etapa del avance con `fecha_programada`, `fecha_real`, `fecha_real_sugerida`,
+     * `completa` y `alerta` (AvisosContratacion::alerta). Las filas sin etapa no tienen fechas.
+     *
+     * @param list<array> $avance el de avancePorEtapa()
+     * @param Collection<int, ExpedienteEtapa> $cronograma etapa_id => fechas
+     * @param bool $vigila el expediente está en borrador: avisa vencimientos
+     * @return list<array>
+     */
+    public function presentarCronograma(array $avance, Collection $cronograma, bool $vigila): array
+    {
+        return array_map(function (array $etapa) use ($cronograma, $vigila) {
+            $fila = $etapa['etapa'] !== null ? $cronograma->get($etapa['etapa']['id']) : null;
+            $programada = $fila?->fecha_programada?->format('Y-m-d');
+
+            return [
+                ...$etapa,
+                'fecha_programada' => $programada,
+                'fecha_real' => $fila?->fecha_real?->format('Y-m-d'),
+                'fecha_real_sugerida' => (bool) $fila?->sugerida(),
+                'completa' => $this->avisos->completa($etapa),
+                'alerta' => $this->avisos->alerta($etapa, $programada, $vigila),
+            ];
+        }, $avance);
     }
 
     /** @return list<array{etapa: ?array, total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}> el de avancePorEtapa() */

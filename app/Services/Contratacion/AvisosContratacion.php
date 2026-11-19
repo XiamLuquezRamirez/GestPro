@@ -1,0 +1,177 @@
+<?php
+
+namespace App\Services\Contratacion;
+
+use App\Models\ProcesoLicitacion;
+use App\Models\ProyectoExpediente;
+use Carbon\CarbonInterface;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Avisos de contratación (R14): el semáforo de cada etapa de un expediente y el resumen de un
+ * proceso. Solo lee: no guarda nada.
+ *
+ * Reglas:
+ * - Días calendario en la zona `contratacion.zona` (America/Bogota por defecto), no en la de la
+ *   aplicación (UTC): "hoy" es now() en esa zona, y los momentos (updated_at, el último evento del
+ *   historial) se pasan a esa zona antes de tomar su fecha. Los umbrales están en
+ *   config/contratacion.php: `dias_proxima` (3) y `dias_sin_actualizacion` (15).
+ * - Una etapa está completa si tiene requisitos que cuentan y todos están cumplidos (la misma
+ *   definición del avance, sin pesos). Si no lo está, en un expediente en borrador: vencida si su
+ *   fecha programada ya pasó; próxima si cae entre hoy y hoy + dias_proxima; al día si es más
+ *   lejana; sin fecha si no tiene. Un expediente cerrado no avisa vencimientos: sus etapas sin
+ *   completar quedan sin completar (con o sin fecha) y las completas, completas.
+ * - Del proceso: en un estado final (celebrado, desierto, cancelado, revocado) no cuenta etapas
+ *   vencidas ni próximas: ya terminó. El cierre es próximo si su fecha de cierre cae entre hoy y hoy + dias_proxima, y
+ *   vencido si ya pasó, mientras siga en preparación o publicado. Está sin actualización si desde
+ *   su última actividad (el máximo entre su updated_at y el último evento del historial de su
+ *   expediente) pasaron dias_sin_actualizacion días o más, salvo en un estado final o con el
+ *   expediente cerrado.
+ * - Hitos: etapas completas de las que tienen requisitos que cuentan. Las filas sin etapa no son
+ *   una etapa: no cuentan como hito ni avisan.
+ */
+final class AvisosContratacion
+{
+    public const VENCIDA = 'vencida';
+    public const PROXIMA = 'proxima';
+    public const AL_DIA = 'al_dia';
+    public const COMPLETA = 'completa';
+    public const SIN_FECHA = 'sin_fecha';
+    /** Etapa que no se completó en un expediente ya cerrado. */
+    public const SIN_COMPLETAR = 'sin_completar';
+
+    /** Estados en los que el proceso ya terminó: no avisa etapas vencidas ni próximas ni que está sin actualización. */
+    public const ESTADOS_FINALES = [
+        ProcesoLicitacion::CELEBRADO, ProcesoLicitacion::DESIERTO, ProcesoLicitacion::CANCELADO, ProcesoLicitacion::REVOCADO,
+    ];
+
+    /** Estados en los que el cierre del proceso todavía no ha ocurrido. */
+    public const ANTES_DEL_CIERRE = [ProcesoLicitacion::PREPARACION, ProcesoLicitacion::PUBLICADO];
+
+    /** Zona horaria de los días de contratación. */
+    public function zona(): string
+    {
+        return (string) config('contratacion.zona', 'America/Bogota');
+    }
+
+    /** El comienzo de hoy en la zona de contratación. */
+    public function hoy(): Carbon
+    {
+        return Carbon::now($this->zona())->startOfDay();
+    }
+
+    /** La fecha (año-mes-día) de un momento en la zona de contratación. */
+    public function fechaDe(CarbonInterface $momento): string
+    {
+        return Carbon::instance($momento)->setTimezone($this->zona())->toDateString();
+    }
+
+    public function diasProxima(): int
+    {
+        return (int) config('contratacion.dias_proxima', 3);
+    }
+
+    public function diasSinActualizacion(): int
+    {
+        return (int) config('contratacion.dias_sin_actualizacion', 15);
+    }
+
+    /** @param array{total: int, cumplidos: int} $avance el de una etapa en avance_por_etapa */
+    public function completa(array $avance): bool
+    {
+        return $avance['total'] > 0 && $avance['cumplidos'] === $avance['total'];
+    }
+
+    /**
+     * Semáforo de una etapa.
+     *
+     * @param array{total: int, cumplidos: int} $avance el de la etapa en avance_por_etapa
+     * @param ?string $programada su fecha programada, año-mes-día
+     * @param bool $vigila el expediente está en borrador: avisa vencimientos
+     */
+    public function alerta(array $avance, ?string $programada, bool $vigila): string
+    {
+        if ($this->completa($avance)) {
+            return self::COMPLETA;
+        }
+        if (! $vigila) {
+            return self::SIN_COMPLETAR;
+        }
+        if ($programada === null) {
+            return self::SIN_FECHA;
+        }
+        $hoy = $this->hoy();
+        if ($programada < $hoy->toDateString()) {
+            return self::VENCIDA;
+        }
+
+        return $programada <= $hoy->copy()->addDays($this->diasProxima())->toDateString() ? self::PROXIMA : self::AL_DIA;
+    }
+
+    /**
+     * Resumen de avisos de un proceso.
+     *
+     * @param ?ProyectoExpediente $expediente el de contratación del proceso, o null
+     * @param list<array> $avancePorEtapa el de su expediente, ya presentado (con `alerta` y `completa`); [] sin expediente
+     * @param ?CarbonInterface $ultimoEvento el último evento del historial de su expediente, o null
+     * @return array{etapas_vencidas: int, etapas_proximas: int, cierre_proximo: bool, cierre_vencido: bool, dias_para_cierre: ?int,
+     *               sin_actualizacion: bool, dias_sin_actualizacion: ?int, hitos: array{completadas: int, total: int}}
+     */
+    public function resumen(ProcesoLicitacion $proceso, ?ProyectoExpediente $expediente, array $avancePorEtapa, ?CarbonInterface $ultimoEvento): array
+    {
+        $hoy = $this->hoy();
+        $etapas = array_values(array_filter($avancePorEtapa, fn (array $a) => $a['etapa'] !== null));
+        $alertas = array_count_values(array_column($etapas, 'alerta'));
+
+        $diasCierre = $proceso->fecha_cierre ? $this->dias($hoy, $proceso->fecha_cierre) : null;
+        $antesDelCierre = in_array($proceso->estado, self::ANTES_DEL_CIERRE, true);
+
+        $ultima = collect([$proceso->updated_at, $ultimoEvento])->filter()->max();
+        $diasSin = $ultima ? max(0, $this->dias(Carbon::parse($this->fechaDe($ultima)), $hoy)) : null;
+        $terminado = in_array($proceso->estado, self::ESTADOS_FINALES, true);
+        $vigente = ! $terminado && $expediente?->estado !== ProyectoExpediente::CERRADO;
+
+        return [
+            'etapas_vencidas' => $terminado ? 0 : $alertas[self::VENCIDA] ?? 0,
+            'etapas_proximas' => $terminado ? 0 : $alertas[self::PROXIMA] ?? 0,
+            'cierre_proximo' => $antesDelCierre && $diasCierre !== null && $diasCierre >= 0 && $diasCierre <= $this->diasProxima(),
+            'cierre_vencido' => $antesDelCierre && $diasCierre !== null && $diasCierre < 0,
+            'dias_para_cierre' => $diasCierre,
+            'sin_actualizacion' => $vigente && $diasSin !== null && $diasSin >= $this->diasSinActualizacion(),
+            'dias_sin_actualizacion' => $diasSin,
+            'hitos' => [
+                'completadas' => count(array_filter($etapas, fn (array $a) => $a['completa'])),
+                'total' => count(array_filter($etapas, fn (array $a) => $a['total'] > 0)),
+            ],
+        ];
+    }
+
+    /**
+     * El último evento del historial de cada expediente, en una sola consulta.
+     *
+     * @param iterable<int> $expedienteIds
+     * @return array<int, Carbon> expediente_id => fecha; sin eventos, no aparece
+     */
+    public function ultimosEventos(iterable $expedienteIds): array
+    {
+        $ids = collect($expedienteIds)->unique()->values();
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        return DB::table('checklist_historial')
+            ->whereIn('expediente_id', $ids)
+            ->groupBy('expediente_id')
+            ->get(['expediente_id', DB::raw('MAX(created_at) AS ultimo')])
+            ->filter(fn (object $fila) => $fila->ultimo !== null)
+            ->mapWithKeys(fn (object $fila) => [(int) $fila->expediente_id => Carbon::parse($fila->ultimo)])
+            ->all();
+    }
+
+    /** Días calendario de `$desde` a `$hasta`: negativos si `$hasta` es anterior. */
+    private function dias(CarbonInterface $desde, CarbonInterface $hasta): int
+    {
+        return (int) round(Carbon::parse($desde->toDateString())->diffInDays(Carbon::parse($hasta->toDateString()), false));
+    }
+}
