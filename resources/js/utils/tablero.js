@@ -7,6 +7,8 @@ export const VISTA = {
     ESTADISTICAS: 'estadisticas',
     CONTRATOS: 'contratos',
     EXPEDIENTES: 'expedientes',
+    // Solo del tablero normal: la sala no la recorre (secuenciaSala).
+    CONTRATACION: 'contratacion',
 };
 
 const VISTAS_ANALITICAS = Object.values(VISTA);

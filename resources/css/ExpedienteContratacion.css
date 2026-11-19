@@ -100,3 +100,47 @@
     background: var(--gp-ambar-suave);
     border-radius: var(--exv-radio);
 }
+
+/* Datos del proceso y sus contratos (ProcesoDetalle), con o sin expediente. */
+.exc-detalle { display: grid; gap: 1rem; margin: 0 0 1rem; }
+.exc-detalle > .exv-aviso { margin: 0; }
+.exc-proceso { margin: 0 0 1rem; }
+.exc-bloque {
+    min-width: 0;
+    padding: .9rem 1rem;
+    background: var(--exv-tarjeta);
+    border: 1px solid var(--exv-linea-suave);
+    border-radius: var(--exv-radio);
+}
+.exc-bloque-cabecera { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin-bottom: .4rem; }
+.exc-bloque-cabecera h3 { margin: 0; font-size: 1rem; }
+.exc-cuenta { font-size: .82rem; font-weight: 400; color: var(--exv-tinta-tenue); }
+.exc-datos { margin-top: .2rem; }
+.exc-observaciones { margin-top: .8rem; font-size: .86rem; }
+.exc-observaciones b { display: block; font-family: var(--gp-fuente-datos); font-size: .66rem; font-weight: 400; letter-spacing: .08em; text-transform: uppercase; color: var(--gp-texto-3); }
+.exc-observaciones p { margin: .1rem 0 0; white-space: pre-line; overflow-wrap: anywhere; }
+.exc-detalle .ct-cambio-estado, .exc-detalle .pl-formulario { margin-top: .8rem; }
+
+.exc-contratos { display: grid; gap: 0; margin: .3rem 0 0; padding: 0; list-style: none; }
+.exc-contratos li {
+    display: grid;
+    grid-template-columns: minmax(6rem, auto) minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: .4rem 1rem;
+    padding: .5rem 0;
+    font-size: .86rem;
+    border-bottom: 1px solid var(--exv-linea-suave);
+}
+.exc-contratos li:last-child { border-bottom: 0; }
+.exc-contratos li.anulado .exc-contrato-objeto, .exc-contratos li.anulado .exc-contrato-valor { color: var(--gp-texto-3); text-decoration: line-through; }
+.exc-contrato-numero { font-weight: 650; }
+.exc-contrato-objeto { min-width: 0; overflow-wrap: anywhere; }
+.exc-contrato-objeto small { display: block; font-size: .76rem; color: var(--exv-tinta-tenue); }
+.exc-contrato-valor { font-family: var(--gp-fuente-datos); white-space: nowrap; text-align: right; }
+
+@media (max-width: 720px) {
+    .exc-contratos li { grid-template-columns: minmax(0, 1fr) auto auto; }
+    .exc-contrato-objeto { grid-column: 1 / -1; grid-row: 2; }
+    .exc-bloque-cabecera .pl-tarjeta-acciones, .exc-bloque-cabecera > .gp-boton { width: 100%; }
+    .exc-bloque-cabecera .pl-tarjeta-acciones .gp-boton { flex: 1; justify-content: center; }
+}

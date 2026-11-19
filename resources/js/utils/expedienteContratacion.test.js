@@ -41,6 +41,10 @@ import {
     textoPendientesCierre,
     textoSinPlantillas,
 } from './expedienteContratacion';
+import {
+    abrirFormularioDetalle, enlaceProceso, filaContratoProceso, fuentesDelDetalle, procesoDelFormulario, puedeRegistrarDesdeDetalle,
+    textoContratosProceso,
+} from './expedienteContratacion';
 import { agruparChecklist, describirEvento } from './expedienteChecklist';
 
 const etapa = (id, orden, nombre = `Etapa ${id}`) => ({ id, nombre, orden });
@@ -936,5 +940,91 @@ describe('aprobarConConfirmacion', () => {
     it('cualquier otro error se propaga', async () => {
         const fallo = { response: { status: 500, data: {} } };
         await expect(aprobarConConfirmacion({ faltan: 0, enviar: vi.fn().mockRejectedValue(fallo), confirmar: vi.fn() })).rejects.toBe(fallo);
+    });
+});
+
+describe('detalle del proceso: contratos', () => {
+    const contrato = { id: 31, n_contrato: 'C-001', objeto: 'Construcción', contratista: 'Consorcio Agua', estado: 'en_ejecucion', valor_inicial: '1000000.00', valor: '1200000.00' };
+
+    it('presenta un contrato del proceso con su valor vigente y su enlace', () => {
+        expect(filaContratoProceso(contrato)).toMatchObject({
+            id: 31,
+            numero: 'C-001',
+            objeto: 'Construcción',
+            contratista: 'Consorcio Agua',
+            estado: 'En ejecución',
+            tono: 'verde',
+            ruta: '/contratos/31',
+        });
+        expect(filaContratoProceso(contrato).valor).toBe(filaContratoProceso({ ...contrato, valor: null, valor_inicial: '1200000.00' }).valor);
+    });
+
+    it('sin valor vigente usa el inicial, y sin ninguno un guion', () => {
+        expect(filaContratoProceso({ ...contrato, valor: null }).valor).toMatch(/1\.000\.000/);
+        expect(filaContratoProceso({ ...contrato, valor: null, valor_inicial: null }).valor).toBe('—');
+        expect(filaContratoProceso({ ...contrato, n_contrato: '' }).numero).toBe('Sin número');
+    });
+
+    it('marca los anulados', () => {
+        expect(filaContratoProceso(contrato).anulado).toBe(false);
+        expect(filaContratoProceso({ ...contrato, estado: 'anulado' }).anulado).toBe(true);
+    });
+
+    it('cuenta los contratos', () => {
+        expect(textoContratosProceso([])).toBe('Este proceso aún no tiene contratos.');
+        expect(textoContratosProceso([contrato])).toBe('1 contrato');
+        expect(textoContratosProceso([contrato, contrato])).toBe('2 contratos');
+    });
+
+    it('"Registrar contrato": quien edita, si el proceso los admite y tiene proyecto', () => {
+        const detalle = { admite_contratos: true, proyecto: { id: 4, nombre: 'Acueducto' } };
+        expect(puedeRegistrarDesdeDetalle({ rol: 'Gestor' }, detalle)).toBe(true);
+        expect(puedeRegistrarDesdeDetalle({ rol: 'Administrador' }, detalle)).toBe(true);
+        expect(puedeRegistrarDesdeDetalle({ rol: 'Consulta' }, detalle)).toBe(false);
+        expect(puedeRegistrarDesdeDetalle({ rol: 'Gestor' }, { ...detalle, admite_contratos: false })).toBe(false);
+        expect(puedeRegistrarDesdeDetalle({ rol: 'Gestor' }, { ...detalle, proyecto: null })).toBe(false);
+        expect(puedeRegistrarDesdeDetalle({ rol: 'Gestor' }, null)).toBe(false);
+    });
+});
+
+describe('detalle del proceso: enlace a la plataforma', () => {
+    it('con un enlace web, lo ofrece con el nombre de la plataforma', () => {
+        expect(enlaceProceso({ url_proceso: 'https://community.secop.gov.co/x', plataforma: 'secop_ii' }))
+            .toEqual({ enlace: 'https://community.secop.gov.co/x', texto: 'Ver el proceso en SECOP II' });
+        expect(enlaceProceso({ url_proceso: ' https://tienda.gov.co/y ', plataforma: 'tvec' }).texto).toBe('Ver el proceso en Tienda Virtual');
+        expect(enlaceProceso({ url_proceso: 'https://x.gov.co', plataforma: 'ninguna' }).texto).toBe('Ver el proceso');
+    });
+
+    it('sin enlace, o con uno que no es web, ninguno', () => {
+        expect(enlaceProceso({ url_proceso: null, plataforma: 'secop_ii' })).toBeNull();
+        expect(enlaceProceso({ url_proceso: 'javascript:alert(1)', plataforma: 'secop_ii' })).toBeNull();
+        expect(enlaceProceso(null)).toBeNull();
+    });
+});
+
+describe('formularios del detalle del proceso', () => {
+    const v1 = { id: 7, estado: 'preparacion', actualizado: '2026-11-19T10:00:00.000000Z' };
+    const v2 = { ...v1, estado: 'publicado', actualizado: '2026-11-19T10:05:00.000000Z' };
+
+    it('congela el proceso al abrir: tras un 409 el detalle se recarga, pero el siguiente intento sale con el actualizado de cuando se abrió', () => {
+        const modo = abrirFormularioDetalle('editar', v1);
+        // El detalle recargado (v2) no cambia lo que se guarda: otra vez 409 en lugar de pisar el cambio ajeno.
+        const detalleRecargado = { proceso: v2 };
+        expect(procesoDelFormulario(modo, 'editar')).toBe(v1);
+        expect(procesoDelFormulario(modo, 'editar')).not.toBe(detalleRecargado.proceso);
+        expect(procesoDelFormulario(abrirFormularioDetalle('estado', v1), 'estado').actualizado).toBe(v1.actualizado);
+    });
+
+    it('solo da el proceso del formulario que está abierto', () => {
+        expect(procesoDelFormulario(abrirFormularioDetalle('estado', v1), 'editar')).toBeNull();
+        expect(procesoDelFormulario(null, 'editar')).toBeNull();
+        expect(abrirFormularioDetalle('contrato', v1)).toEqual({ tipo: 'contrato', proceso: v1 });
+    });
+
+    it('las fuentes del proyecto del detalle, para agrupar "Fuentes del proyecto"', () => {
+        expect(fuentesDelDetalle({ proyecto: { id: 4, nombre: 'P', fuente_ids: [2, 5] } })).toEqual([2, 5]);
+        expect(fuentesDelDetalle({ proyecto: { id: 4, nombre: 'P' } })).toEqual([]);
+        expect(fuentesDelDetalle({ proyecto: null })).toEqual([]);
+        expect(fuentesDelDetalle(null)).toEqual([]);
     });
 });

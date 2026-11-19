@@ -565,3 +565,57 @@ html.en-sala { font-size: clamp(15px, .28vw + 12.4px, 17.776px); }
     .tb-fase.compacto .tb-mapa { min-height: 50vw; }
     .sala-vista > * { height: auto; }
 }
+
+/* ---------- Vista Contratación (ContratacionPanel): reutiliza las piezas de ExpedientesSgrPanel.css ---------- */
+/* `.exs-resumen.ctp-resumen`: con más especificidad que `.exs-resumen` (5 columnas), que puede ir después en el bundle. */
+.exs-resumen.ctp-resumen { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.ctp-punto { display: inline-block; flex-shrink: 0; width: .55rem; height: .55rem; margin-right: .3rem; vertical-align: .05em; background: var(--ctp-color, var(--gp-texto-3)); border-radius: 50%; }
+.ctp-semaforo { display: inline-flex; align-items: center; white-space: nowrap; }
+.ctp-tarjeta-vencida, .ctp-semaforo-vencida { --ctp-color: var(--gp-coral); }
+.ctp-tarjeta-proxima, .ctp-semaforo-proxima { --ctp-color: var(--gp-ambar); }
+.ctp-tarjeta-al_dia, .ctp-semaforo-al_dia { --ctp-color: var(--gp-verde-texto); }
+.ctp-tarjeta-sin_expediente, .ctp-semaforo-sin_expediente { --ctp-color: transparent; }
+.ctp-tarjeta-sin_expediente .ctp-punto, .ctp-semaforo-sin_expediente .ctp-punto { box-shadow: inset 0 0 0 1.5px var(--gp-texto-3); }
+.ctp-tarjeta-terminado, .ctp-semaforo-terminado { --ctp-color: var(--gp-texto-2); }
+
+.ctp-fila { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+.ctp-subtitulo { margin-bottom: .6rem; font-size: 1.02rem; }
+.ctp-estados { display: flex; flex-wrap: wrap; gap: .5rem; }
+.ctp-estado {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .3rem .55rem;
+    font-size: .84rem;
+    background: var(--gp-fondo-2);
+    border: 1px solid var(--gp-linea);
+    border-radius: var(--gp-radio);
+    transition: background .12s, border-color .12s;
+}
+.ctp-estado:hover { background: var(--gp-superficie-2); }
+.ctp-estado.activa { background: var(--gp-azul-suave); border-color: var(--gp-azul-texto); }
+.ctp-estado strong { font-family: var(--gp-fuente-datos); }
+.ctp-etapas { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.ctp-etapas li { display: grid; grid-template-columns: minmax(0, 14rem) minmax(3rem, 1fr) auto; align-items: center; gap: .75rem; font-size: .85rem; }
+.ctp-etapa-nombre { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ctp-etapas strong { font-family: var(--gp-fuente-datos); font-size: .8rem; white-space: nowrap; }
+.ctp-sin-etapa { margin-top: .6rem; }
+
+.ctp-objeto { display: -webkit-box; max-width: 22rem; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
+.ctp-tabla td { vertical-align: top; }
+.ctp-tabla .ct-estado { white-space: nowrap; }
+.ctp-col-avisos .ct-avisos { min-width: 8rem; }
+
+@media (max-width: 1000px) {
+    .exs-resumen.ctp-resumen { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .ctp-fila { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 720px) {
+    .exs-resumen.ctp-resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ctp-etapas li { grid-template-columns: minmax(0, 1fr) auto; }
+    .ctp-etapas .tb-pista { grid-column: 1 / -1; grid-row: 2; }
+    .ctp-objeto { max-width: 60%; text-align: right; }
+    .ctp-col-avisos .ct-avisos { justify-content: flex-end; min-width: 0; }
+    .ctp-tabla td { vertical-align: middle; }
+}

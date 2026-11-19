@@ -4,8 +4,8 @@
 // (agruparChecklist) no cambia. Funciones puras, probadas en expedienteContratacion.test.js.
 
 import { etiquetaAlerta, etiquetaRevision } from './avisosContratacion';
-import { esIdContrato } from './contratosModulo';
-import { opcionesEtapa } from './contratacion';
+import { esIdContrato, filaContrato, rutaContrato } from './contratosModulo';
+import { esEnlaceWeb, opcionesEtapa, PLATAFORMAS, puedeEditarProcesos } from './contratacion';
 import { datosPropio, formularioPropio } from './expedienteChecklist';
 import { compararEtapas, escaparHtml, mensajeApi, nombreEtapa, SIN_ETAPA } from './plantillasChecklist';
 
@@ -504,3 +504,51 @@ export const avisoIncompatiblesProceso = (plantillas) => {
         detalle: `${incompatibles.map((p) => `${p.nombre} (${RAZONES[p.razon][2]})`).join(', ')}. ${conserva}`,
     };
 };
+
+// ---------- Detalle del proceso (GET /procesos/{id}/detalle) ----------
+
+/** Un contrato del proceso en el bloque "Contratos": el valor es el vigente o, sin él, el inicial. */
+export const filaContratoProceso = (contrato) => ({
+    ...filaContrato({ ...contrato, valor: contrato.valor ?? contrato.valor_inicial ?? null }),
+    anulado: contrato.estado === 'anulado',
+    ruta: rutaContrato(contrato.id),
+});
+
+export const textoContratosProceso = (contratos) => {
+    const n = contratos?.length ?? 0;
+    if (n === 0) return 'Este proceso aún no tiene contratos.';
+    return n === 1 ? '1 contrato' : `${n} contratos`;
+};
+
+/**
+ * "Registrar contrato" en la página del proceso: quien edita procesos, si el estado los admite
+ * (`admite_contratos`) y si el proceso tiene proyecto, porque el editor de contratos ofrece los
+ * procesos del proyecto elegido.
+ */
+export const puedeRegistrarDesdeDetalle = (usuario, detalle) => (
+    puedeEditarProcesos(usuario) && Boolean(detalle?.admite_contratos) && Boolean(detalle?.proyecto)
+);
+
+/**
+ * El enlace al proceso en su plataforma (SECOP II, SECOP I o la Tienda Virtual), solo si es un
+ * enlace web completo; si no, null.
+ */
+export const enlaceProceso = (proceso) => {
+    if (!esEnlaceWeb(proceso?.url_proceso)) return null;
+    const plataforma = proceso.plataforma !== 'ninguna' ? PLATAFORMAS.find(([v]) => v === proceso.plataforma)?.[1] : null;
+    return { enlace: String(proceso.url_proceso).trim(), texto: plataforma ? `Ver el proceso en ${plataforma}` : 'Ver el proceso' };
+};
+
+/**
+ * Abre un formulario de la página del proceso ('editar', 'estado' o 'contrato') congelando el
+ * proceso de ese momento, como la lista de procesos del proyecto. Tras un 409 el detalle se
+ * recarga, pero lo que se guarda sigue llevando el `actualizado` de cuando se abrió: un segundo
+ * intento vuelve a dar 409 en lugar de pisar el cambio de otra persona. Al reabrir trae lo último.
+ */
+export const abrirFormularioDetalle = (tipo, proceso) => ({ tipo, proceso });
+
+/** El proceso congelado del formulario `tipo` si es el abierto; si no, null. */
+export const procesoDelFormulario = (modo, tipo) => (modo?.tipo === tipo ? modo.proceso ?? null : null);
+
+/** Las fuentes del proyecto del detalle (`proyecto.fuente_ids`), con las que el formulario agrupa "Fuentes del proyecto". */
+export const fuentesDelDetalle = (detalle) => detalle?.proyecto?.fuente_ids ?? [];

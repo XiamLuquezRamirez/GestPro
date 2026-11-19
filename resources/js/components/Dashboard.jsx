@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCalendarDays, faChartColumn, faClipboardCheck, faFileSignature, faLocationDot, faTv } from '@fortawesome/free-solid-svg-icons';
+import { faCalendarDays, faChartColumn, faClipboardCheck, faFileSignature, faGavel, faLocationDot, faTv } from '@fortawesome/free-solid-svg-icons';
 import '../../css/Tablero.css';
+import ContratacionPanel from './ContratacionPanel';
 import ContratosPanel from './ContratosPanel';
 import DistribucionMunicipios from './DistribucionMunicipios';
 import Estadisticas from './Estadisticas';
@@ -22,6 +23,8 @@ const VISTAS_ANALISIS = [
     { id: VISTA.ESTADISTICAS, titulo: 'Estadísticas', icono: faChartColumn },
     { id: VISTA.CONTRATOS, titulo: 'Avance de contratos', icono: faFileSignature },
     { id: VISTA.EXPEDIENTES, titulo: 'Expedientes', icono: faClipboardCheck },
+    // Solo en el tablero normal: la sala no la recorre.
+    { id: VISTA.CONTRATACION, titulo: 'Contratación', icono: faGavel },
 ];
 
 const hoyEnTexto = () => new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -102,6 +105,7 @@ const Dashboard = ({ sala = false }) => {
     const renderVista = (vista, compacto = false) => {
         if (vista === VISTA.ESTADISTICAS) return <Estadisticas proyectos={proyectos} />;
         if (vista === VISTA.CONTRATOS) return <ContratosPanel proyectos={proyectos} compacto={compacto} />;
+        if (vista === VISTA.CONTRATACION) return <ContratacionPanel />;
         if (vista === VISTA.EXPEDIENTES) {
             return (
                 <ExpedientesSgrPanel

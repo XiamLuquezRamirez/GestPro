@@ -42,6 +42,12 @@ describe('resolverVista', () => {
         expect(resolverVista(VISTA.EXPEDIENTES, [])).toBe(VISTA.EXPEDIENTES);
         expect(resolverVista(null, [])).toBeNull();
     });
+
+    it('acepta la vista de Contratación', () => {
+        expect(VISTA.CONTRATACION).toBe('contratacion');
+        expect(resolverVista('contratacion', fases)).toBe(VISTA.CONTRATACION);
+        expect(resolverVista(VISTA.CONTRATACION, [])).toBe(VISTA.CONTRATACION);
+    });
 });
 
 describe('resumirFases', () => {
@@ -82,6 +88,11 @@ describe('resumirFases', () => {
 describe('modo sala', () => {
     it('recorre las fases y luego contratos y expedientes', () => {
         expect(secuenciaSala(fases)).toEqual(['formulacion', 'licitacion', 'ejecucion', VISTA.CONTRATOS, VISTA.EXPEDIENTES]);
+    });
+
+    it('no pasa por Contratación: es solo del tablero normal', () => {
+        expect(secuenciaSala(fases)).not.toContain(VISTA.CONTRATACION);
+        expect(secuenciaSala([])).toEqual([VISTA.CONTRATOS, VISTA.EXPEDIENTES]);
     });
 
     it('avanza en círculo', () => {

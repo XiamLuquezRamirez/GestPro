@@ -8,6 +8,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
 import { ChecklistPorEtapa } from './ExpedienteChecklist';
 import ExpedienteHistorial from './ExpedienteHistorial';
+import ProcesoDetalle from './ProcesoDetalle';
 import useOcupado from './useOcupado';
 import {
     contarOpcionales, motivoNoEliminarPropio, plantillasConVersion, requiereAprobacionNoAplica, textoOpcionales,
@@ -345,6 +346,11 @@ const Expediente = ({ procesoId, user }) => {
     const [anuncio, setAnuncio] = useState('');
     const nuevaRevision = useCallback(() => setRevision((r) => r + 1), []);
     const [ocupado, ejecutar] = useOcupado();
+    // GET /procesos/{p}/detalle: los datos del proceso y sus contratos, tenga o no expediente. Se
+    // pide aparte: si falla, el checklist sigue funcionando.
+    const [detalle, setDetalle] = useState(null);
+    const [errorDetalle, setErrorDetalle] = useState(null);
+    const turnoDetalle = useRef(0);
 
     const puedeEditar = ROLES_EDICION.includes(user?.rol);
     const editable = puedeEditar && expediente?.estado === 'borrador';
@@ -400,6 +406,27 @@ const Expediente = ({ procesoId, user }) => {
     }, [procesoId, nuevaRevision]);
 
     useEffect(() => { cargar(); }, [cargar]);
+
+    // Solo vale la última respuesta; desmontarse la descarta.
+    const cargarDetalle = useCallback(async () => {
+        const numero = ++turnoDetalle.current;
+        setErrorDetalle(null);
+        try {
+            const { data } = await axios.get(`/procesos/${procesoId}/detalle`);
+            if (numero === turnoDetalle.current) setDetalle(data);
+        } catch (e) {
+            if (numero === turnoDetalle.current) setErrorDetalle(errorDeProceso(e));
+        }
+    }, [procesoId]);
+
+    useEffect(() => {
+        cargarDetalle();
+        return () => { turnoDetalle.current += 1; };
+    }, [cargarDetalle]);
+
+    // Tras editar el proceso, cambiar su estado o registrarle un contrato: cambian sus datos, su
+    // cabecera y sus avisos, así que se recargan el detalle y el expediente.
+    const recargarProceso = () => Promise.all([cargarDetalle(), cargar()]);
 
     // Para el selector de etapa de los propios. Sin la lista, solo se ofrece la que el propio ya tiene.
     useEffect(() => {
@@ -947,6 +974,14 @@ const Expediente = ({ procesoId, user }) => {
 
             {error && <div className="exv-aviso" role="alert">{error.mensaje} {reintentar}</div>}
 
+            <ProcesoDetalle
+                detalle={detalle}
+                error={errorDetalle}
+                user={user}
+                onReintentar={cargarDetalle}
+                onCambio={recargarProceso}
+            />
+
             {!expediente ? (
                 <SinExpediente
                     plantillas={disponibles.plantillas}
@@ -1077,8 +1112,9 @@ const Expediente = ({ procesoId, user }) => {
 };
 
 /**
- * El expediente de contratación de un proceso (`/contratacion/:procesoId`): su checklist por etapa,
- * el avance total y por etapa, y el cierre, que solo avisa de lo pendiente. Sin expediente, ofrece
+ * El expediente de contratación de un proceso (`/contratacion/:procesoId`): los datos del proceso y
+ * sus contratos (con editar, cambiar el estado y registrar contrato), su checklist por etapa, el
+ * avance total y por etapa, y el cierre, que solo avisa de lo pendiente. Sin expediente, ofrece
  * crearlo con las plantillas que le corresponden. Un id que no es válido no llega a la API.
  */
 const ExpedienteContratacion = ({ user }) => {
