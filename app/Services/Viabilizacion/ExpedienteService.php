@@ -53,7 +53,7 @@ use Illuminate\Validation\ValidationException;
  *   contratación (de un proceso) nace con crearDeProceso(), ya configurado: comparte el
  *   checklist, pero no se configura ni se radica. Sus filas llevan la etapa de contratación
  *   (la del requisito mostrado, o la elegida en un propio), con el avance por etapa, y se
- *   cierra con cerrar(): solo avisa de los pendientes. Su porcentaje de avance es ponderado:
+ *   cierra con cerrar(): solo avisa de los pendientes y de las etapas sin aprobar. Su porcentaje de avance es ponderado:
  *   cada fila que cuenta pesa lo del requisito que muestra (un propio pesa 1); `total` y
  *   `cumplidos` siguen siendo conteos. En viabilización el peso no se usa. Cerrado, queda congelado como uno
  *   radicado. La fecha y el usuario del cierre se guardan en fecha_radicado y
@@ -67,7 +67,7 @@ use Illuminate\Validation\ValidationException;
  *   (AvisosContratacion).
  * - Revisión por etapa (solo contratación, RevisionEtapas): el avance por etapa presentado trae
  *   la revisión de cada etapa con su estado visible, calculado en lote con los eventos del
- *   checklist posteriores a la revisión (cambiosTrasLaRevision), y el aviso de la etapa anterior
+ *   checklist posteriores a la revisión, por id del historial (cambiosTrasLaRevision), y el aviso de la etapa anterior
  *   sin aprobar. Nada de la revisión bloquea las acciones del checklist ni el cierre.
  */
 final class ExpedienteService
@@ -492,9 +492,10 @@ final class ExpedienteService
     }
 
     /**
-     * Cierra un expediente de contratación. Solo avisa: con requisitos que cuentan sin cumplir,
-     * sin `$confirmar` responde cuántos faltan y en qué etapas (CierreConPendientesException) y
-     * no cierra; confirmado, cierra igual y el historial guarda lo que faltaba.
+     * Cierra un expediente de contratación. Solo avisa: con requisitos que cuentan sin cumplir o
+     * con etapas sin aprobar, sin `$confirmar` responde cuántos requisitos faltan y en qué etapas,
+     * y qué etapas no están aprobadas (CierreConPendientesException), y no cierra; confirmado,
+     * cierra igual y el historial guarda lo que faltaba.
      */
     public function cerrar(ProyectoExpediente $expediente, bool $confirmar, ?User $usuario): ProyectoExpediente
     {
@@ -505,11 +506,11 @@ final class ExpedienteService
             $this->bloquear($expediente);
             $this->exigirBorrador($expediente);
 
-            $avance = $this->avancePorEtapaDe($expediente);
+            $avance = $this->cronogramaDeContratacion($expediente)['avance_por_etapa'];
             $pendientes = $this->pendientes($avance);
-            if ($pendientes['total'] > 0 && ! $confirmar) {
-                $falta = $pendientes['total'] === 1 ? 'Falta 1 requisito' : "Faltan {$pendientes['total']} requisitos";
-                throw new CierreConPendientesException("{$falta} por cumplir. Confirma para cerrar el expediente de todos modos.", $pendientes);
+            $sinAprobar = count($pendientes['etapas_sin_aprobar']);
+            if (($pendientes['total'] > 0 || $sinAprobar > 0) && ! $confirmar) {
+                throw new CierreConPendientesException($this->mensajeDeCierre($pendientes['total'], $sinAprobar), $pendientes);
             }
 
             $expediente->update([
@@ -528,21 +529,39 @@ final class ExpedienteService
     }
 
     /**
-     * Lo que falta en cada etapa del avance, solo las etapas con algo pendiente.
+     * Lo que falta en cada etapa del avance, solo las etapas con algo pendiente, y las etapas con
+     * requisitos que cuentan que no están aprobadas, con su estado de revisión visible.
      *
-     * @param list<array{etapa: ?array, total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}> $avance el de avancePorEtapa()
-     * @return array{total: int, por_etapa: list<array{etapa: ?array, pendientes: int}>}
+     * @param list<array> $avance el presentado, con `revision` (presentarCronograma())
+     * @return array{total: int, por_etapa: list<array{etapa: ?array, pendientes: int}>, etapas_sin_aprobar: list<array{etapa: array, estado: string}>}
      */
     private function pendientes(array $avance): array
     {
         $porEtapa = [];
+        $sinAprobar = [];
         foreach ($avance as $etapa) {
             if ($etapa['total'] > $etapa['cumplidos']) {
                 $porEtapa[] = ['etapa' => $etapa['etapa'], 'pendientes' => $etapa['total'] - $etapa['cumplidos']];
             }
+            if ($etapa['revision'] !== null && $etapa['total'] > 0 && ! $this->avisos->aprobada($etapa['revision'])) {
+                $sinAprobar[] = ['etapa' => $etapa['etapa'], 'estado' => $etapa['revision']['estado']];
+            }
         }
 
-        return ['total' => array_sum(array_column($porEtapa, 'pendientes')), 'por_etapa' => $porEtapa];
+        return ['total' => array_sum(array_column($porEtapa, 'pendientes')), 'por_etapa' => $porEtapa, 'etapas_sin_aprobar' => $sinAprobar];
+    }
+
+    /** El aviso del cierre: los requisitos por cumplir, las etapas sin aprobar o ambos. */
+    private function mensajeDeCierre(int $requisitos, int $etapas): string
+    {
+        $confirma = 'Confirma para cerrar el expediente de todos modos.';
+        $deEtapas = $etapas === 1 ? '1 etapa sin aprobar' : "{$etapas} etapas sin aprobar";
+        if ($requisitos === 0) {
+            return "Hay {$deEtapas}. {$confirma}";
+        }
+        $falta = $requisitos === 1 ? 'Falta 1 requisito por cumplir' : "Faltan {$requisitos} requisitos por cumplir";
+
+        return $etapas === 0 ? "{$falta}. {$confirma}" : "{$falta} y {$deEtapas}. {$confirma}";
     }
 
     public function eliminar(ProyectoExpediente $expediente, ?User $usuario = null): void
@@ -1231,7 +1250,7 @@ final class ExpedienteService
      * @param list<array> $avance el de avancePorEtapa()
      * @param Collection<int, ExpedienteEtapa> $cronograma etapa_id => fechas y revisión
      * @param bool $vigila el expediente está en borrador: avisa vencimientos
-     * @param array{etapas?: array<int, CarbonInterface>, requisitos?: ?CarbonInterface} $cambios los de cambiosTrasLaRevision()
+     * @param array<int, array{checklist: bool, requisitos: bool}> $cambios etapa_id => cambios tras su revisión, los de cambiosTrasLaRevision()
      * @return list<array>
      */
     public function presentarCronograma(array $avance, Collection $cronograma, bool $vigila, array $cambios = []): array
@@ -1242,7 +1261,7 @@ final class ExpedienteService
             $fila = $etapa['etapa'] !== null ? $cronograma->get($etapa['etapa']['id']) : null;
             $programada = $fila?->fecha_programada?->format('Y-m-d');
             $revision = $etapa['etapa'] !== null
-                ? $this->avisos->revision($etapa, $fila, $cambios['etapas'][$etapa['etapa']['id']] ?? null, $cambios['requisitos'] ?? null)
+                ? $this->avisos->revision($etapa, $fila, $cambios[$etapa['etapa']['id']]['checklist'] ?? false, $cambios[$etapa['etapa']['id']]['requisitos'] ?? false)
                 : null;
 
             $presentado[] = [
@@ -1251,7 +1270,7 @@ final class ExpedienteService
                 'fecha_real' => $fila?->fecha_real?->format('Y-m-d'),
                 'fecha_real_sugerida' => (bool) $fila?->sugerida(),
                 'completa' => $this->avisos->completa($etapa),
-                'alerta' => $this->avisos->alerta($etapa, $programada, $vigila),
+                'alerta' => $this->avisos->alerta($etapa, $programada, $vigila, $this->avisos->aprobada($revision)),
                 'revision' => $revision,
                 'aviso_etapa_anterior' => $revision !== null && $anteriorSinAprobar && $etapa['cumplidos'] > 0,
             ];
@@ -1265,37 +1284,62 @@ final class ExpedienteService
 
     /**
      * Lo que cambió en el checklist de cada expediente después de revisar sus etapas, en lote
-     * (las consultas no crecen con los expedientes ni con las etapas): por etapa, el último
-     * evento del historial en un requisito cuya etapa mostrada es esa (también los de filas ya
-     * eliminadas o que cambiaron de etapa, por la etapa propia que guarda el registro), y el
-     * último cambio de los requisitos de todo el expediente (una versión nueva aplicada). Solo
-     * mira los expedientes con alguna etapa revisada y los eventos posteriores a la primera
-     * revisión entre todos ellos.
+     * (las consultas no crecen con los expedientes ni con las etapas). El orden lo da el id del
+     * historial (monótono y asignado bajo el bloqueo del expediente), no la hora al segundo: la
+     * revisión vigente de una etapa es su último `etapa_aprobada`/`etapa_devuelta`, y cuentan los
+     * eventos de requisito de esa etapa con un id mayor (también los de filas ya eliminadas o que
+     * cambiaron de etapa, por la etapa propia que guarda el registro) y, para las aprobadas, una
+     * versión nueva aplicada después. Solo mira los expedientes con alguna etapa revisada, y de
+     * cada uno, el historial posterior a la más antigua de sus revisiones vigentes. Del historial
+     * lee solo los ids, el tipo y la etapa (no los antes/después completos).
      *
      * @param array<int, array{posiciones: array<int, int>, cronograma: Collection<int, ExpedienteEtapa>}> $expedientes expediente_id => datos
-     * @return array<int, array{etapas: array<int, CarbonInterface>, requisitos: ?CarbonInterface}> expediente_id => cambios; sin revisiones, no aparece
+     * @return array<int, array<int, array{checklist: bool, requisitos: bool}>> expediente_id => etapa_id => cambios
+     *         después de su revisión: `checklist` en un requisito de la etapa, `requisitos` una versión nueva; sin revisiones, no aparece
      */
     private function cambiosTrasLaRevision(array $expedientes): array
     {
-        $desde = [];
+        $revisadas = [];
         foreach ($expedientes as $id => $datos) {
-            $primera = $datos['cronograma']
-                ->filter(fn (ExpedienteEtapa $f) => $f->estado_revision !== ExpedienteEtapa::SIN_REVISAR && $f->fecha_revision !== null)
-                ->min('fecha_revision');
-            if ($primera !== null) {
-                $desde[$id] = $primera;
+            $etapas = $datos['cronograma']
+                ->filter(fn (ExpedienteEtapa $f) => $f->estado_revision !== ExpedienteEtapa::SIN_REVISAR)
+                ->keys()
+                ->all();
+            if ($etapas !== []) {
+                $revisadas[$id] = array_fill_keys($etapas, true);
             }
         }
-        if ($desde === []) {
+        if ($revisadas === []) {
+            return [];
+        }
+
+        // La revisión vigente de cada etapa revisada: el id de su último evento de revisión.
+        $revisiones = [];
+        $eventosDeRevision = DB::table('checklist_historial')
+            ->whereIn('expediente_id', array_keys($revisadas))
+            ->where('entidad_tipo', HistorialChecklist::EXPEDIENTE)
+            ->whereIn('evento', ['etapa_aprobada', 'etapa_devuelta'])
+            ->get(['id', 'expediente_id', 'despues->etapa_id as etapa_id']);
+        foreach ($eventosDeRevision as $evento) {
+            $id = (int) $evento->expediente_id;
+            $etapaId = (int) $evento->etapa_id;
+            if (isset($revisadas[$id][$etapaId])) {
+                $revisiones[$id][$etapaId] = max($revisiones[$id][$etapaId] ?? 0, (int) $evento->id);
+            }
+        }
+        if ($revisiones === []) {
             return [];
         }
 
         $eventos = DB::table('checklist_historial')
-            ->whereIn('expediente_id', array_keys($desde))
-            ->where('created_at', '>', min($desde))
+            ->where(function ($q) use ($revisiones) {
+                foreach ($revisiones as $id => $porEtapa) {
+                    $q->orWhere(fn ($q) => $q->where('expediente_id', $id)->where('id', '>', min($porEtapa)));
+                }
+            })
             ->where(fn ($q) => $q->where('entidad_tipo', HistorialChecklist::REQUISITO)
                 ->orWhere(fn ($q) => $q->where('entidad_tipo', HistorialChecklist::EXPEDIENTE)->where('evento', 'version_aplicada')))
-            ->get(['expediente_id', 'entidad_tipo', 'entidad_id', 'antes', 'despues', 'created_at']);
+            ->get(['id', 'expediente_id', 'entidad_tipo', 'entidad_id', 'antes->etapa_propia_id as antes_etapa', 'despues->etapa_propia_id as despues_etapa']);
         $idsFilas = $eventos->where('entidad_tipo', HistorialChecklist::REQUISITO)->pluck('entidad_id')->unique()->values();
         $filas = $idsFilas->isEmpty() ? collect() : ProyectoRequisito::query()
             ->whereIn('id', $idsFilas)
@@ -1303,30 +1347,54 @@ final class ExpedienteService
             ->get()
             ->keyBy('id');
 
-        $cambios = [];
-        $mas = fn (?CarbonInterface $a, CarbonInterface $b) => $a === null || $b->greaterThan($a) ? $b : $a;
+        // El último evento de cada etapa y la última versión aplicada de cada expediente, por id.
+        $ultimoDeEtapa = [];
+        $ultimaVersion = [];
         foreach ($eventos as $evento) {
             $id = (int) $evento->expediente_id;
-            $momento = Carbon::parse($evento->created_at);
-            $cambios[$id] ??= ['etapas' => [], 'requisitos' => null];
             if ($evento->entidad_tipo === HistorialChecklist::EXPEDIENTE) {
-                $cambios[$id]['requisitos'] = $mas($cambios[$id]['requisitos'], $momento);
+                $ultimaVersion[$id] = max($ultimaVersion[$id] ?? 0, (int) $evento->id);
                 continue;
             }
-            $etapas = [];
             $fila = $filas->get((int) $evento->entidad_id);
-            if ($fila) {
-                $etapas[] = $this->etapaDe($fila, $expedientes[$id]['posiciones'])?->id;
+            $etapas = [$fila ? $this->etapaDe($fila, $expedientes[$id]['posiciones'])?->id : null, $evento->antes_etapa, $evento->despues_etapa];
+            foreach (array_unique(array_map('intval', array_filter($etapas))) as $etapaId) {
+                $ultimoDeEtapa[$id][$etapaId] = max($ultimoDeEtapa[$id][$etapaId] ?? 0, (int) $evento->id);
             }
-            foreach ([$evento->antes, $evento->despues] as $datos) {
-                $etapas[] = json_decode((string) $datos, true)['etapa_propia_id'] ?? null;
-            }
-            foreach (array_unique(array_filter($etapas)) as $etapaId) {
-                $cambios[$id]['etapas'][(int) $etapaId] = $mas($cambios[$id]['etapas'][(int) $etapaId] ?? null, $momento);
+        }
+
+        $cambios = [];
+        foreach ($revisiones as $id => $porEtapa) {
+            foreach ($porEtapa as $etapaId => $revision) {
+                $cambios[$id][$etapaId] = [
+                    'checklist' => ($ultimoDeEtapa[$id][$etapaId] ?? 0) > $revision,
+                    'requisitos' => ($ultimaVersion[$id] ?? 0) > $revision,
+                ];
             }
         }
 
         return $cambios;
+    }
+
+    /**
+     * El avance por etapa de un expediente de contratación ya presentado (con fechas, semáforo y
+     * el estado visible de la revisión, presentarCronograma()), sin los avisos. Para decidir una
+     * revisión bajo el bloqueo del expediente.
+     *
+     * @return list<array>
+     */
+    public function avancePresentadoDe(ProyectoExpediente $expediente): array
+    {
+        $posiciones = $this->posiciones($this->plantillas->versionesDe($expediente));
+        $cronograma = $this->cronogramaDe($expediente);
+        $cambios = $this->cambiosTrasLaRevision([$expediente->id => ['posiciones' => $posiciones, 'cronograma' => $cronograma]]);
+
+        return $this->presentarCronograma(
+            $this->avancePorEtapa($this->filasDelAvance($expediente), $posiciones),
+            $cronograma,
+            $expediente->esBorrador(),
+            $cambios[$expediente->id] ?? []
+        );
     }
 
     /** @return list<array{etapa: ?array, total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}> el de avancePorEtapa() */

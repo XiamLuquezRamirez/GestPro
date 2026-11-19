@@ -4,6 +4,7 @@ namespace Tests\Feature\Contratacion;
 
 use App\Enums\Rol;
 use App\Models\CatalogoVersion;
+use App\Models\Contrato;
 use App\Models\EtapaContratacion;
 use App\Models\ExpedienteEtapa;
 use App\Models\FuenteFinanciacion;
@@ -416,8 +417,8 @@ class RevisionEtapasApiTest extends TestCase
         $this->assertSame('aprobada_con_cambios', $r->json('avance_por_etapa.0.revision.estado'));
         $this->assertSame('aprobada', $r->json('avance_por_etapa.1.revision.estado'));
         $this->assertSame(ExpedienteEtapa::APROBADA, ExpedienteEtapa::where('etapa_id', $this->etapa('planeacion')->id)->value('estado_revision'));
-        // Ya está aprobada: no se aprueba otra vez.
-        $this->aprobar($expediente, 'planeacion')->assertStatus(422);
+        // Con cambios, se puede volver a aprobar (ver test_una_aprobada_con_cambios_se_reaprueba_sin_tocar_la_fecha_real).
+        $this->aprobar($expediente, 'planeacion', ['confirmar' => true])->assertOk()->assertJsonPath('etapa.revision.estado', 'aprobada');
 
         // Una observación en un requisito de la etapa también es un cambio.
         $this->travelTo(self::HOY . ' 10:15:00');
@@ -562,6 +563,407 @@ class RevisionEtapasApiTest extends TestCase
         }
 
         $this->assertSame($conUno, $this->contarConsultas($url));
+    }
+
+    // ------------------------------------------------------------ avisos (decisión 1)
+
+    private function alertas(ProyectoExpediente $expediente): array
+    {
+        return array_column($this->leer($expediente)->json('avance_por_etapa'), 'alerta');
+    }
+
+    public function test_una_etapa_completa_sin_aprobar_sigue_vencida_o_proxima_hasta_aprobarla(): void
+    {
+        $expediente = $this->expediente();
+        $this->fechas($expediente, 'planeacion', ['fecha_programada' => '2026-11-18']);
+        $this->fechas($expediente, 'pliego_definitivo', ['fecha_programada' => '2026-11-22']);
+        $this->fechas($expediente, 'cierre', ['fecha_programada' => '2026-12-31']);
+        foreach (['Estudios previos', 'CDP', 'Pliego de condiciones', 'Acta de cierre'] as $texto) {
+            $this->marcar($expediente, $texto);
+        }
+
+        // Completas sin aprobar: la vencida y la próxima siguen avisando; la de fecha lejana, completa.
+        $r = $this->leer($expediente);
+        $this->assertSame(['vencida', 'proxima', 'completa'], array_column($r->json('avance_por_etapa'), 'alerta'));
+        $this->assertSame([true, true, true], array_column($r->json('avance_por_etapa'), 'completa'));
+        $r->assertJsonPath('avisos.etapas_vencidas', 1)
+            ->assertJsonPath('avisos.etapas_proximas', 1)
+            ->assertJsonPath('avisos.etapas_por_revisar', 3)
+            ->assertJsonPath('avisos.etapas_devueltas', 0)
+            ->assertJsonPath('avisos.hitos', ['completadas' => 0, 'total' => 3]);
+
+        // Aprobada, con o sin pendientes: deja de avisar y cuenta como hito.
+        $this->aprobar($expediente, 'planeacion')->assertOk()
+            ->assertJsonPath('etapa.alerta', 'aprobada')
+            ->assertJsonPath('avisos.etapas_vencidas', 0)
+            ->assertJsonPath('avisos.etapas_por_revisar', 2)
+            ->assertJsonPath('avisos.hitos', ['completadas' => 1, 'total' => 3]);
+        $this->marcar($expediente, 'Pliego de condiciones', false);
+        $this->aprobar($expediente, 'pliego_definitivo', ['confirmar' => true])->assertOk()
+            ->assertJsonPath('etapa.alerta', 'aprobada')
+            ->assertJsonPath('avisos.etapas_proximas', 0)
+            ->assertJsonPath('avisos.hitos', ['completadas' => 2, 'total' => 3]);
+
+        // Con cambios después de aprobarla, sigue aprobada para los avisos.
+        $this->travelTo(self::HOY . ' 10:05:00');
+        $this->marcar($expediente, 'CDP', false);
+        $this->assertSame('aprobada_con_cambios', $this->revisionDe($expediente, 'planeacion')['estado']);
+        $this->assertSame(['aprobada', 'aprobada', 'completa'], $this->alertas($expediente));
+        $this->leer($expediente)->assertJsonPath('avisos.hitos', ['completadas' => 2, 'total' => 3])->assertJsonPath('avisos.etapas_vencidas', 0);
+
+        // Al pasar los días, la que no se aprobó se vence aunque esté completa.
+        $this->travelTo('2027-01-01 08:00:00');
+        $this->assertSame(['aprobada', 'aprobada', 'vencida'], $this->alertas($expediente));
+    }
+
+    public function test_una_completa_sin_fecha_queda_completa_y_las_devueltas_se_cuentan(): void
+    {
+        $expediente = $this->expediente();
+        $this->marcar($expediente, 'Acta de cierre');
+        $this->assertSame(['sin_fecha', 'sin_fecha', 'completa'], $this->alertas($expediente));
+
+        $this->devolver($expediente, 'cierre', ['observacion' => 'Falta la firma.'])->assertOk()
+            ->assertJsonPath('etapa.alerta', 'completa')
+            ->assertJsonPath('avisos.etapas_devueltas', 1)
+            ->assertJsonPath('avisos.etapas_por_revisar', 0);
+        $this->devolver($expediente, 'planeacion', ['observacion' => 'Faltan los estudios.'])->assertOk()
+            ->assertJsonPath('avisos.etapas_devueltas', 2);
+
+        // Con un cambio en su checklist, la devuelta vuelve a estar por revisar si está completa.
+        $this->travelTo(self::HOY . ' 10:05:00');
+        $this->como()->patchJson("/GestPro/expedientes/{$expediente->id}/requisitos/{$this->fila($expediente, 'Acta de cierre')->id}", ['observacion' => 'Firmada.'])->assertOk()
+            ->assertJsonPath('avisos.etapas_devueltas', 1)
+            ->assertJsonPath('avisos.etapas_por_revisar', 1);
+    }
+
+    public function test_un_expediente_cerrado_muestra_las_aprobadas_y_no_cuenta_revisiones(): void
+    {
+        $expediente = $this->expediente();
+        $this->fechas($expediente, 'planeacion', ['fecha_programada' => '2026-11-01']);
+        $this->marcar($expediente, 'Pliego de condiciones');
+        $this->marcar($expediente, 'Acta de cierre');
+        $this->aprobar($expediente, 'planeacion', ['confirmar' => true])->assertOk();
+        $this->devolver($expediente, 'pliego_definitivo', ['observacion' => 'No.'])->assertOk();
+        $this->como()->postJson("/GestPro/expedientes/{$expediente->id}/cerrar", ['confirmar' => true])->assertOk();
+
+        $this->travelTo('2026-12-31 08:00:00');
+        $r = $this->leer($expediente);
+        $this->assertSame(['aprobada', 'completa', 'completa'], array_column($r->json('avance_por_etapa'), 'alerta'));
+        $r->assertJsonPath('avisos.etapas_vencidas', 0)
+            ->assertJsonPath('avisos.etapas_por_revisar', 0)
+            ->assertJsonPath('avisos.etapas_devueltas', 0)
+            ->assertJsonPath('avisos.hitos', ['completadas' => 1, 'total' => 3]);
+    }
+
+    public function test_los_procesos_la_ficha_y_los_contratos_avisan_con_la_nueva_regla(): void
+    {
+        $expediente = $this->expediente();
+        $proceso = $expediente->proceso;
+        $this->fechas($expediente, 'planeacion', ['fecha_programada' => '2026-11-18']);
+        $this->marcar($expediente, 'Estudios previos');
+        $this->marcar($expediente, 'CDP');
+        $this->devolver($expediente, 'cierre', ['observacion' => 'No.'])->assertOk();
+        $contrato = Contrato::create([
+            'proyecto' => $this->proyecto->id, 'proceso_licitacion' => $proceso->id, 'n_contrato' => 'C-001',
+            'objeto' => 'Construcción del acueducto', 'valor_inicial' => 1000000, 'valor' => 1000000, 'estado' => 'en_ejecucion',
+        ]);
+
+        $avisos = $this->como(Rol::Consulta)->getJson("/GestPro/proyectos/{$this->proyecto->id}/procesos")->assertOk()->json('procesos.0.avisos');
+        $this->assertSame([
+            'etapas_vencidas' => 1,
+            'etapas_proximas' => 0,
+            'cierre_proximo' => false,
+            'cierre_vencido' => false,
+            'dias_para_cierre' => null,
+            'sin_actualizacion' => false,
+            'dias_sin_actualizacion' => 0,
+            'hitos' => ['completadas' => 0, 'total' => 3],
+            'etapas_por_revisar' => 1,
+            'etapas_devueltas' => 1,
+        ], $avisos);
+        $ficha = $this->como(Rol::Consulta)->getJson("/GestPro/proyectos/{$this->proyecto->id}/ficha")->assertOk();
+        $this->assertSame($avisos, $ficha->json('procesos.0.avisos'));
+        // La completa vencida sin aprobar también avisa en el contrato.
+        $this->como(Rol::Consulta)->getJson("/GestPro/contratos/{$contrato->id}/detalle")->assertOk()
+            ->assertJsonPath('aviso_proceso.etapas_vencidas', 1);
+
+        $this->aprobar($expediente, 'planeacion')->assertOk();
+        $this->como(Rol::Consulta)->getJson("/GestPro/contratos/{$contrato->id}/detalle")->assertOk()->assertJsonPath('aviso_proceso', null);
+        $this->como(Rol::Consulta)->getJson("/GestPro/proyectos/{$this->proyecto->id}/procesos")->assertOk()
+            ->assertJsonPath('procesos.0.avisos.hitos', ['completadas' => 1, 'total' => 3])
+            ->assertJsonPath('procesos.0.avisos.etapas_por_revisar', 0);
+    }
+
+    // ------------------------------------------------------------ cierre (decisión 3)
+
+    public function test_el_cierre_avisa_tambien_las_etapas_sin_aprobar(): void
+    {
+        $expediente = $this->expediente();
+        $url = "/GestPro/expedientes/{$expediente->id}/cerrar";
+        $etapa = fn (string $clave) => ['id' => $this->etapa($clave)->id, 'nombre' => $this->etapa($clave)->nombre, 'orden' => $this->etapa($clave)->orden];
+        $this->marcar($expediente, 'Estudios previos');
+        $this->marcar($expediente, 'CDP');
+        $this->devolver($expediente, 'cierre', ['observacion' => 'No.'])->assertOk();
+
+        $this->como()->postJson($url)->assertStatus(422)->assertExactJson([
+            'mensaje' => 'Faltan 2 requisitos por cumplir y 3 etapas sin aprobar. Confirma para cerrar el expediente de todos modos.',
+            'pendientes' => [
+                'total' => 2,
+                'por_etapa' => [
+                    ['etapa' => $etapa('pliego_definitivo'), 'pendientes' => 1],
+                    ['etapa' => $etapa('cierre'), 'pendientes' => 1],
+                ],
+                'etapas_sin_aprobar' => [
+                    ['etapa' => $etapa('planeacion'), 'estado' => 'lista'],
+                    ['etapa' => $etapa('pliego_definitivo'), 'estado' => 'pendiente'],
+                    ['etapa' => $etapa('cierre'), 'estado' => 'devuelta'],
+                ],
+            ],
+        ]);
+
+        // Sin requisitos pendientes, avisa solo las etapas sin aprobar.
+        $this->marcar($expediente, 'Pliego de condiciones');
+        $this->aprobar($expediente, 'planeacion')->assertOk();
+        $this->aprobar($expediente, 'pliego_definitivo')->assertOk();
+        $this->marcar($expediente, 'Acta de cierre');
+        $this->como()->postJson($url)->assertStatus(422)
+            ->assertJsonPath('mensaje', 'Hay 1 etapa sin aprobar. Confirma para cerrar el expediente de todos modos.')
+            ->assertJsonPath('pendientes.total', 0)
+            // Devuelta y con un cambio después (marcar el acta, aunque sea en el mismo segundo): lista.
+            ->assertJsonPath('pendientes.etapas_sin_aprobar', [['etapa' => $etapa('cierre'), 'estado' => 'lista']]);
+        $this->assertSame(ProyectoExpediente::BORRADOR, $expediente->fresh()->estado);
+
+        // Confirmando, cierra y el historial guarda lo que faltaba.
+        $this->como()->postJson($url, ['confirmar' => true])->assertOk()->assertJsonPath('estado', ProyectoExpediente::CERRADO);
+        $despues = json_decode((string) DB::table('checklist_historial')->where('evento', 'expediente_cerrado')->value('despues'), true);
+        $this->assertSame([['etapa' => $etapa('cierre'), 'estado' => 'lista']], $despues['pendientes']['etapas_sin_aprobar']);
+    }
+
+    public function test_con_todo_aprobado_el_cierre_no_pide_confirmacion(): void
+    {
+        $expediente = $this->expediente();
+        foreach (['Estudios previos', 'CDP', 'Pliego de condiciones'] as $texto) {
+            $this->marcar($expediente, $texto);
+        }
+        $this->aprobar($expediente, 'planeacion')->assertOk();
+        $this->aprobar($expediente, 'pliego_definitivo')->assertOk();
+        // Aprobada con pendientes: los requisitos sí se avisan, la etapa no.
+        $this->aprobar($expediente, 'cierre', ['confirmar' => true])->assertOk();
+        $this->como()->postJson("/GestPro/expedientes/{$expediente->id}/cerrar")->assertStatus(422)
+            ->assertJsonPath('mensaje', 'Falta 1 requisito por cumplir. Confirma para cerrar el expediente de todos modos.')
+            ->assertJsonPath('pendientes.etapas_sin_aprobar', []);
+
+        $this->marcar($expediente, 'Acta de cierre');
+        $this->como()->postJson("/GestPro/expedientes/{$expediente->id}/cerrar")->assertOk()->assertJsonPath('estado', ProyectoExpediente::CERRADO);
+    }
+
+    // ------------------------------------------------------------ ajustes de la revisión (M1, M2, B1-B4)
+
+    public function test_un_cambio_en_el_mismo_segundo_de_la_revision_cuenta(): void
+    {
+        $expediente = $this->expediente();
+        // Sin mover el reloj: el orden lo da el historial, no la hora al segundo.
+        $this->marcar($expediente, 'Estudios previos');
+        $this->marcar($expediente, 'CDP');
+        $this->aprobar($expediente, 'planeacion')->assertOk()->assertJsonPath('etapa.revision.estado', 'aprobada');
+        $this->marcar($expediente, 'CDP', false)->assertJsonPath('avance_por_etapa.0.revision.estado', 'aprobada_con_cambios');
+
+        $this->devolver($expediente, 'pliego_definitivo', ['observacion' => 'Falta el pliego.'])->assertOk();
+        // Un cambio de otra etapa en el mismo segundo no la mueve.
+        $this->marcar($expediente, 'Acta de cierre');
+        $this->assertSame('devuelta', $this->revisionDe($expediente, 'pliego_definitivo')['estado']);
+        $this->como()->patchJson("/GestPro/expedientes/{$expediente->id}/requisitos/{$this->fila($expediente, 'Pliego de condiciones')->id}", ['observacion' => 'Ver anexo.'])->assertOk();
+        $revision = $this->revisionDe($expediente, 'pliego_definitivo');
+        $this->assertSame(['pendiente', 'Falta el pliego.'], [$revision['estado'], $revision['observacion']]);
+        $this->marcar($expediente, 'Pliego de condiciones');
+        $this->assertSame('lista', $this->revisionDe($expediente, 'pliego_definitivo')['estado']);
+    }
+
+    public function test_el_estado_de_la_revision_lee_solo_el_historial_que_necesita(): void
+    {
+        $expediente = $this->expediente();
+        $this->aprobar($expediente, 'planeacion', ['confirmar' => true])->assertOk();
+        $this->marcar($expediente, 'CDP');
+        $this->marcar($expediente, 'Acta de cierre');
+
+        $consultas = [];
+        DB::listen(function ($q) use (&$consultas) {
+            if (str_contains($q->sql, 'checklist_historial')) {
+                $consultas[] = $q->sql;
+            }
+        });
+        $this->leer($expediente)->assertJsonPath('avance_por_etapa.0.revision.estado', 'aprobada_con_cambios');
+
+        $this->assertNotEmpty($consultas);
+        foreach ($consultas as $sql) {
+            // Ni por la hora (al segundo) ni con los antes/después completos: por id, y solo la etapa.
+            $this->assertStringNotContainsString('created_at" >', $sql);
+            $this->assertDoesNotMatchRegularExpression('/(select|,)\s*"(antes|despues)"/i', $sql);
+            $this->assertStringNotContainsString('select *', $sql);
+        }
+    }
+
+    public function test_una_aprobada_con_cambios_se_reaprueba_sin_tocar_la_fecha_real(): void
+    {
+        $expediente = $this->expediente();
+        $planeacion = $this->etapa('planeacion');
+        $this->marcar($expediente, 'Estudios previos');
+        $this->marcar($expediente, 'CDP');
+        $this->aprobar($expediente, 'planeacion', ['observacion' => 'Primera revisión.'])->assertOk();
+
+        $this->travelTo('2026-11-20 09:00:00');
+        $this->marcar($expediente, 'CDP', false)->assertJsonPath('avance_por_etapa.0.revision.estado', 'aprobada_con_cambios');
+        // La misma confirmación que al aprobar.
+        $this->aprobar($expediente, 'planeacion')->assertStatus(422)->assertExactJson([
+            'mensaje' => 'Falta 1 requisito de esta etapa. Confirma para aprobarla de todos modos.',
+            'pendientes' => 1,
+        ]);
+
+        $directora = User::factory()->create(['rol' => Rol::Administrador, 'name' => 'Directora']);
+        $this->withHeader('Authorization', 'Bearer ' . auth('api')->login($directora))
+            ->postJson("/GestPro/expedientes/{$expediente->id}/etapas/{$planeacion->id}/aprobar", ['confirmar' => true, 'observacion' => 'Segunda revisión.'])
+            ->assertOk()
+            ->assertJsonPath('etapa.revision', [
+                'estado' => 'aprobada',
+                'usuario' => 'Directora',
+                'fecha' => now()->toIso8601String(),
+                'observacion' => 'Segunda revisión.',
+                'pendientes_al_aprobar' => 1,
+                'devuelta_at' => null,
+            ])
+            // La fecha real sigue siendo la de la primera aprobación.
+            ->assertJsonPath('etapa.fecha_real', self::HOY)
+            ->assertJsonPath('etapa.fecha_real_sugerida', false);
+        $fila = ExpedienteEtapa::sole();
+        $this->assertSame([ExpedienteEtapa::APROBADA, $directora->id, 1], [$fila->estado_revision, $fila->usuario_reviso_id, $fila->pendientes_al_aprobar]);
+
+        $base = ['etapa_id' => $planeacion->id, 'etapa' => $planeacion->nombre];
+        $this->assertSame([
+            [...$base, 'estado_revision' => 'aprobada', 'observacion' => 'Primera revisión.'],
+            [...$base, 'estado_revision' => 'aprobada', 'observacion' => 'Segunda revisión.', 'pendientes_al_aprobar' => 1, 'con_pendientes' => true, 'reaprobacion' => true],
+        ], $this->historial('etapa_aprobada')[1]);
+
+        // Sin cambios después, sigue sin poder aprobarse otra vez.
+        $this->aprobar($expediente, 'planeacion', ['confirmar' => true])->assertStatus(422)->assertExactJson(['mensaje' => 'La etapa ya está aprobada.']);
+
+        // Sin observación nueva, se conserva la anterior.
+        $this->travelTo('2026-11-21 09:00:00');
+        $this->marcar($expediente, 'CDP');
+        $this->aprobar($expediente, 'planeacion')->assertOk()
+            ->assertJsonPath('etapa.revision.observacion', 'Segunda revisión.')
+            ->assertJsonPath('etapa.revision.pendientes_al_aprobar', 0)
+            ->assertJsonPath('etapa.fecha_real', self::HOY);
+        $this->assertCount(3, $this->historial('etapa_aprobada'));
+    }
+
+    public function test_devolver_restaura_la_fecha_sugerida_de_antes_de_aprobar(): void
+    {
+        $expediente = $this->expediente();
+        // Completa el 19: sugerida el 19; aprobada el 21: la fecha pasa al 21.
+        $this->marcar($expediente, 'Estudios previos');
+        $this->marcar($expediente, 'CDP')->assertJsonPath('avance_por_etapa.0.fecha_real', self::HOY);
+        $this->travelTo('2026-11-21 09:00:00');
+        $this->aprobar($expediente, 'planeacion')->assertOk()->assertJsonPath('etapa.fecha_real', '2026-11-21');
+        // Devuelta el 23: vuelve la sugerida que tenía antes de aprobar (la del día en que se completó).
+        $this->travelTo('2026-11-23 09:00:00');
+        $this->devolver($expediente, 'planeacion', ['observacion' => 'Revisar.'])->assertOk()
+            ->assertJsonPath('etapa.fecha_real', self::HOY)
+            ->assertJsonPath('etapa.fecha_real_sugerida', true);
+        $this->assertSame(
+            ['fecha_real' => self::HOY, 'fecha_real_sugerida' => true],
+            array_intersect_key($this->historial('etapa_devuelta')[0][1], ['fecha_real' => 0, 'fecha_real_sugerida' => 0])
+        );
+
+        // Aprobada sin completar (sin fecha antes) y completada después: al devolverla, la regla de
+        // la 4B, sugerida = hoy.
+        $this->aprobar($expediente, 'pliego_definitivo', ['confirmar' => true])->assertOk()->assertJsonPath('etapa.fecha_real', '2026-11-23');
+        $this->travelTo('2026-11-24 09:00:00');
+        $this->marcar($expediente, 'Pliego de condiciones');
+        $this->travelTo('2026-11-25 09:00:00');
+        $this->devolver($expediente, 'pliego_definitivo', ['observacion' => 'Revisar.'])->assertOk()
+            ->assertJsonPath('etapa.fecha_real', '2026-11-25')
+            ->assertJsonPath('etapa.fecha_real_sugerida', true);
+
+        // Vacía antes de aprobar porque una persona la vació estando completa: también sin fecha
+        // antes, así que al devolverla completa, sugerida = hoy.
+        $this->marcar($expediente, 'Acta de cierre');
+        $this->fechas($expediente, 'cierre', ['fecha_real' => null]);
+        $this->aprobar($expediente, 'cierre')->assertOk()->assertJsonPath('etapa.fecha_real', '2026-11-25');
+        $this->travelTo('2026-11-26 09:00:00');
+        $this->devolver($expediente, 'cierre', ['observacion' => 'Revisar.'])->assertOk()
+            ->assertJsonPath('etapa.fecha_real', '2026-11-26')
+            ->assertJsonPath('etapa.fecha_real_sugerida', true);
+    }
+
+    public function test_devolver_tras_una_reaprobacion_mira_la_fecha_de_la_primera_aprobacion(): void
+    {
+        $expediente = $this->expediente();
+        $this->marcar($expediente, 'Estudios previos');
+        $this->marcar($expediente, 'CDP');
+        $this->travelTo('2026-11-21 09:00:00');
+        $this->aprobar($expediente, 'planeacion')->assertOk()->assertJsonPath('etapa.fecha_real', '2026-11-21');
+        $this->como()->patchJson("/GestPro/expedientes/{$expediente->id}/requisitos/{$this->fila($expediente, 'CDP')->id}", ['observacion' => 'Ver.'])->assertOk();
+        $this->aprobar($expediente, 'planeacion')->assertOk()->assertJsonPath('etapa.revision.estado', 'aprobada');
+
+        // La fecha sigue siendo la que puso la primera aprobación: vuelve la sugerida de antes.
+        $this->devolver($expediente, 'planeacion', ['observacion' => 'Revisar.'])->assertOk()
+            ->assertJsonPath('etapa.fecha_real', self::HOY)
+            ->assertJsonPath('etapa.fecha_real_sugerida', true);
+    }
+
+    public function test_una_etapa_sin_requisitos_que_cuenten_no_se_revisa(): void
+    {
+        $expediente = $this->expediente();
+        $this->marcar($expediente, 'Acta de cierre');
+        $this->aprobar($expediente, 'cierre')->assertOk();
+        // El único requisito del cierre pasa a opcional: la etapa sigue en el avance, con total 0.
+        $this->fila($expediente, 'Acta de cierre')->update(['caracter' => RequisitoCatalogo::OPCIONAL]);
+
+        $r = $this->leer($expediente);
+        $cierre = $this->deEtapa($r->json('avance_por_etapa'), 'cierre');
+        $this->assertSame([0, 'sin_requisitos'], [$cierre['total'], $cierre['revision']['estado']]);
+        $r->assertJsonPath('avisos.etapas_por_revisar', 0)->assertJsonPath('avisos.hitos', ['completadas' => 0, 'total' => 2]);
+
+        $sinRequisitos = ['mensaje' => 'La etapa no tiene requisitos que cuenten.'];
+        $this->aprobar($expediente, 'cierre', ['confirmar' => true])->assertStatus(422)->assertExactJson($sinRequisitos);
+        $this->devolver($expediente, 'cierre', ['observacion' => 'No.'])->assertStatus(422)->assertExactJson($sinRequisitos);
+        $this->assertCount(1, $this->historial('etapa_aprobada'));
+        $this->assertSame([], $this->historial('etapa_devuelta'));
+
+        // Ni pide aprobarla para cerrar.
+        $this->marcar($expediente, 'Estudios previos');
+        $this->marcar($expediente, 'CDP');
+        $this->marcar($expediente, 'Pliego de condiciones');
+        $this->aprobar($expediente, 'planeacion')->assertOk();
+        $this->aprobar($expediente, 'pliego_definitivo')->assertOk();
+        $this->como()->postJson("/GestPro/expedientes/{$expediente->id}/cerrar")->assertOk();
+    }
+
+    public function test_confirmar_con_menos_pendientes_vistos_que_los_actuales_vuelve_a_pedir_confirmacion(): void
+    {
+        $expediente = $this->expediente();
+        $this->marcar($expediente, 'Estudios previos');
+        // La pantalla vio 1 pendiente; mientras tanto alguien desmarcó otro.
+        $this->aprobar($expediente, 'planeacion')->assertStatus(422)->assertJsonPath('pendientes', 1);
+        $this->marcar($expediente, 'Estudios previos', false);
+
+        $this->aprobar($expediente, 'planeacion', ['confirmar' => true, 'pendientes_vistos' => 1])->assertStatus(422)->assertExactJson([
+            'mensaje' => 'Faltan 2 requisitos de esta etapa. Confirma para aprobarla de todos modos.',
+            'pendientes' => 2,
+        ]);
+        $this->assertSame(0, ExpedienteEtapa::count());
+
+        $this->aprobar($expediente, 'planeacion', ['confirmar' => true, 'pendientes_vistos' => 'dos'])->assertStatus(422)
+            ->assertJsonValidationErrors('pendientes_vistos');
+        $this->aprobar($expediente, 'planeacion', ['confirmar' => true, 'pendientes_vistos' => -1])->assertStatus(422)
+            ->assertJsonValidationErrors('pendientes_vistos');
+        // Con los que hay (o con menos de los que vio), aprueba.
+        $this->aprobar($expediente, 'planeacion', ['confirmar' => true, 'pendientes_vistos' => 2])->assertOk()
+            ->assertJsonPath('etapa.revision.pendientes_al_aprobar', 2);
+        $this->aprobar($expediente, 'pliego_definitivo', ['confirmar' => true, 'pendientes_vistos' => 5])->assertOk()
+            ->assertJsonPath('etapa.revision.pendientes_al_aprobar', 1);
+        // Sin pendientes_vistos, confirmar basta, como antes.
+        $this->aprobar($expediente, 'cierre', ['confirmar' => true])->assertOk();
     }
 
     public function test_la_viabilizacion_no_cambia(): void

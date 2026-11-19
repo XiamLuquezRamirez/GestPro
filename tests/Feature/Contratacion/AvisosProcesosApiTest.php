@@ -38,6 +38,8 @@ class AvisosProcesosApiTest extends TestCase
         'sin_actualizacion' => false,
         'dias_sin_actualizacion' => 0,
         'hitos' => ['completadas' => 0, 'total' => 0],
+        'etapas_por_revisar' => 0,
+        'etapas_devueltas' => 0,
     ];
 
     private Proyecto $proyecto;
@@ -173,7 +175,10 @@ class AvisosProcesosApiTest extends TestCase
             'dias_para_cierre' => 2,
             'sin_actualizacion' => false,
             'dias_sin_actualizacion' => 0,
-            'hitos' => ['completadas' => 1, 'total' => 3],
+            // Hitos = etapas aprobadas (fase 5, decisión 1): el cierre está completo pero sin aprobar.
+            'hitos' => ['completadas' => 0, 'total' => 3],
+            'etapas_por_revisar' => 1,
+            'etapas_devueltas' => 0,
         ], $procesos[0]['avisos']);
         // El bloque del expediente no cambia.
         $this->assertSame(['id', 'estado', 'progreso', 'aviso_plantilla'], array_keys($procesos[0]['expediente']));

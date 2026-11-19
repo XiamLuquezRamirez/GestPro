@@ -19,24 +19,30 @@ use Illuminate\Support\Facades\DB;
  *   historial) se pasan a esa zona antes de tomar su fecha. Los umbrales están en
  *   config/contratacion.php: `dias_proxima` (3) y `dias_sin_actualizacion` (15).
  * - Una etapa está completa si tiene requisitos que cuentan y todos están cumplidos (la misma
- *   definición del avance, sin pesos). Si no lo está, en un expediente en borrador: vencida si su
- *   fecha programada ya pasó; próxima si cae entre hoy y hoy + dias_proxima; al día si es más
- *   lejana; sin fecha si no tiene. Un expediente cerrado no avisa vencimientos: sus etapas sin
- *   completar quedan sin completar (con o sin fecha) y las completas, completas.
+ *   definición del avance, sin pesos). Una etapa aprobada (también con cambios después) avisa
+ *   `aprobada` y ya no vence: lo que deja de vencer es la aprobación, no completarla. Si no está
+ *   aprobada, en un expediente en borrador: vencida si su fecha programada ya pasó (aunque esté
+ *   completa); próxima si cae entre hoy y hoy + dias_proxima; si no, completa (lista para
+ *   revisar) si lo está, o al día con una fecha más lejana y sin fecha si no tiene. Un expediente
+ *   cerrado no avisa vencimientos: sus etapas sin aprobar quedan completas o sin completar.
  * - Del proceso: en un estado final (celebrado, desierto, cancelado, revocado) no cuenta etapas
  *   vencidas ni próximas: ya terminó. El cierre es próximo si su fecha de cierre cae entre hoy y hoy + dias_proxima, y
  *   vencido si ya pasó, mientras siga en preparación o publicado. Está sin actualización si desde
  *   su última actividad (el máximo entre su updated_at y el último evento del historial de su
  *   expediente) pasaron dias_sin_actualizacion días o más, salvo en un estado final o con el
  *   expediente cerrado.
- * - Hitos: etapas completas de las que tienen requisitos que cuentan. Las filas sin etapa no son
- *   una etapa: no cuentan como hito ni avisan.
+ * - Hitos: etapas aprobadas de las que tienen requisitos que cuentan. Por revisar: las que tienen
+ *   requisitos que cuentan y están listas (completas, sin aprobar ni devueltas); devueltas: las
+ *   devueltas sin cambios después. Con el expediente cerrado no hay nada por revisar ni devuelto:
+ *   ya no se revisa. Las filas sin etapa no son una etapa: no cuentan como hito ni avisan.
  * - Revisión de una etapa (R15, solo avisa), el estado que ve la pantalla: aprobada, o aprobada
  *   con cambios si después de aprobarla hubo un evento del checklist en un requisito de la etapa
  *   o un cambio de los requisitos del expediente (una versión nueva); devuelta, mientras no haya
  *   un evento del checklist de la etapa después de devolverla; si no, pendiente (le faltan
  *   requisitos que cuentan) o lista (no le falta nada). Ni la aprobación ni la devolución se
- *   pierden por los cambios: solo cambia lo que se muestra.
+ *   pierden por los cambios: solo cambia lo que se muestra. "Después" se decide por el id del
+ *   historial, no por la hora. Una etapa sin requisitos que cuenten (total 0: todos opcionales o
+ *   no aplica) muestra sin_requisitos, neutro: ni lista ni aprobada, no se revisa ni cuenta.
  */
 final class AvisosContratacion
 {
@@ -47,6 +53,8 @@ final class AvisosContratacion
     public const SIN_FECHA = 'sin_fecha';
     /** Etapa que no se completó en un expediente ya cerrado. */
     public const SIN_COMPLETAR = 'sin_completar';
+    /** Etapa aprobada en su revisión: ya no avisa. */
+    public const APROBADA = 'aprobada';
 
     /** Estados visibles de la revisión de una etapa. */
     public const REVISION_PENDIENTE = 'pendiente';
@@ -54,6 +62,8 @@ final class AvisosContratacion
     public const REVISION_APROBADA = 'aprobada';
     public const REVISION_CON_CAMBIOS = 'aprobada_con_cambios';
     public const REVISION_DEVUELTA = 'devuelta';
+    /** La etapa está en el avance pero nada de ella cuenta (total 0): no hay nada que revisar. */
+    public const REVISION_SIN_REQUISITOS = 'sin_requisitos';
 
     /** Estados en los que el proceso ya terminó: no avisa etapas vencidas ni próximas ni que está sin actualización. */
     public const ESTADOS_FINALES = [
@@ -103,24 +113,29 @@ final class AvisosContratacion
      * @param array{total: int, cumplidos: int} $avance el de la etapa en avance_por_etapa
      * @param ?string $programada su fecha programada, año-mes-día
      * @param bool $vigila el expediente está en borrador: avisa vencimientos
+     * @param bool $aprobada la revisión de la etapa la aprobó (con o sin cambios después)
      */
-    public function alerta(array $avance, ?string $programada, bool $vigila): string
+    public function alerta(array $avance, ?string $programada, bool $vigila, bool $aprobada = false): string
     {
-        if ($this->completa($avance)) {
-            return self::COMPLETA;
+        if ($aprobada) {
+            return self::APROBADA;
         }
+        $completa = $this->completa($avance);
         if (! $vigila) {
-            return self::SIN_COMPLETAR;
+            return $completa ? self::COMPLETA : self::SIN_COMPLETAR;
         }
         if ($programada === null) {
-            return self::SIN_FECHA;
+            return $completa ? self::COMPLETA : self::SIN_FECHA;
         }
         $hoy = $this->hoy();
         if ($programada < $hoy->toDateString()) {
             return self::VENCIDA;
         }
+        if ($programada <= $hoy->copy()->addDays($this->diasProxima())->toDateString()) {
+            return self::PROXIMA;
+        }
 
-        return $programada <= $hoy->copy()->addDays($this->diasProxima())->toDateString() ? self::PROXIMA : self::AL_DIA;
+        return $completa ? self::COMPLETA : self::AL_DIA;
     }
 
     /**
@@ -128,17 +143,18 @@ final class AvisosContratacion
      *
      * @param array{total: int, cumplidos: int} $avance el de la etapa en avance_por_etapa
      * @param ?ExpedienteEtapa $fila la de la etapa en el cronograma, o null si no tiene
-     * @param ?CarbonInterface $cambioEtapa el último evento del checklist en un requisito de la etapa, después de su revisión
-     * @param ?CarbonInterface $cambioRequisitos el último cambio de los requisitos del expediente (versión nueva), después de su revisión
+     * @param bool $cambioEtapa hubo un evento del checklist en un requisito de la etapa después de su revisión vigente
+     * @param bool $cambioRequisitos cambiaron los requisitos del expediente (versión nueva) después de su revisión vigente
      * @return array{estado: string, usuario: ?string, fecha: ?string, observacion: ?string, pendientes_al_aprobar: ?int, devuelta_at: ?string}
      */
-    public function revision(array $avance, ?ExpedienteEtapa $fila, ?CarbonInterface $cambioEtapa = null, ?CarbonInterface $cambioRequisitos = null): array
+    public function revision(array $avance, ?ExpedienteEtapa $fila, bool $cambioEtapa = false, bool $cambioRequisitos = false): array
     {
         $fecha = $fila?->fecha_revision;
-        $despues = fn (?CarbonInterface $cambio) => $cambio !== null && $fecha !== null && $cambio->greaterThan($fecha);
-        if ($fila?->aprobada()) {
-            $estado = $despues($cambioEtapa) || $despues($cambioRequisitos) ? self::REVISION_CON_CAMBIOS : self::REVISION_APROBADA;
-        } elseif ($fila?->devuelta() && ! $despues($cambioEtapa)) {
+        if ($avance['total'] === 0) {
+            $estado = self::REVISION_SIN_REQUISITOS;
+        } elseif ($fila?->aprobada()) {
+            $estado = $cambioEtapa || $cambioRequisitos ? self::REVISION_CON_CAMBIOS : self::REVISION_APROBADA;
+        } elseif ($fila?->devuelta() && ! $cambioEtapa) {
             $estado = self::REVISION_DEVUELTA;
         } else {
             $estado = $avance['total'] > $avance['cumplidos'] ? self::REVISION_PENDIENTE : self::REVISION_LISTA;
@@ -164,10 +180,11 @@ final class AvisosContratacion
      * Resumen de avisos de un proceso.
      *
      * @param ?ProyectoExpediente $expediente el de contratación del proceso, o null
-     * @param list<array> $avancePorEtapa el de su expediente, ya presentado (con `alerta` y `completa`); [] sin expediente
+     * @param list<array> $avancePorEtapa el de su expediente, ya presentado (con `alerta`, `completa` y `revision`); [] sin expediente
      * @param ?CarbonInterface $ultimoEvento el último evento del historial de su expediente, o null
      * @return array{etapas_vencidas: int, etapas_proximas: int, cierre_proximo: bool, cierre_vencido: bool, dias_para_cierre: ?int,
-     *               sin_actualizacion: bool, dias_sin_actualizacion: ?int, hitos: array{completadas: int, total: int}}
+     *               sin_actualizacion: bool, dias_sin_actualizacion: ?int, hitos: array{completadas: int, total: int},
+     *               etapas_por_revisar: int, etapas_devueltas: int}
      */
     public function resumen(ProcesoLicitacion $proceso, ?ProyectoExpediente $expediente, array $avancePorEtapa, ?CarbonInterface $ultimoEvento): array
     {
@@ -181,7 +198,10 @@ final class AvisosContratacion
         $ultima = collect([$proceso->updated_at, $ultimoEvento])->filter()->max();
         $diasSin = $ultima ? max(0, $this->dias(Carbon::parse($this->fechaDe($ultima)), $hoy)) : null;
         $terminado = in_array($proceso->estado, self::ESTADOS_FINALES, true);
-        $vigente = ! $terminado && $expediente?->estado !== ProyectoExpediente::CERRADO;
+        $cerrado = $expediente?->estado === ProyectoExpediente::CERRADO;
+        $vigente = ! $terminado && ! $cerrado;
+        $conRequisitos = array_values(array_filter($etapas, fn (array $a) => $a['total'] > 0));
+        $revisiones = array_count_values(array_map(fn (array $a) => $a['revision']['estado'] ?? '', $conRequisitos));
 
         return [
             'etapas_vencidas' => $terminado ? 0 : $alertas[self::VENCIDA] ?? 0,
@@ -192,9 +212,11 @@ final class AvisosContratacion
             'sin_actualizacion' => $vigente && $diasSin !== null && $diasSin >= $this->diasSinActualizacion(),
             'dias_sin_actualizacion' => $diasSin,
             'hitos' => [
-                'completadas' => count(array_filter($etapas, fn (array $a) => $a['completa'])),
-                'total' => count(array_filter($etapas, fn (array $a) => $a['total'] > 0)),
+                'completadas' => count(array_filter($conRequisitos, fn (array $a) => $this->aprobada($a['revision'] ?? null))),
+                'total' => count($conRequisitos),
             ],
+            'etapas_por_revisar' => $cerrado ? 0 : $revisiones[self::REVISION_LISTA] ?? 0,
+            'etapas_devueltas' => $cerrado ? 0 : $revisiones[self::REVISION_DEVUELTA] ?? 0,
         ];
     }
 

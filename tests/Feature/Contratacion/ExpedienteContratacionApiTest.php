@@ -347,19 +347,24 @@ class ExpedienteContratacionApiTest extends TestCase
         $this->como()->postJson("/GestPro/expedientes/{$expediente->id}/cerrar")
             ->assertStatus(422)
             ->assertExactJson([
-                'mensaje' => 'Faltan 2 requisitos por cumplir. Confirma para cerrar el expediente de todos modos.',
+                // Fase 5, decisión 3: también avisa las etapas sin aprobar.
+                'mensaje' => 'Faltan 2 requisitos por cumplir y 2 etapas sin aprobar. Confirma para cerrar el expediente de todos modos.',
                 'pendientes' => [
                     'total' => 2,
                     'por_etapa' => [
                         ['etapa' => $this->etapaJson('planeacion'), 'pendientes' => 1],
                         ['etapa' => $this->etapaJson('pliego_definitivo'), 'pendientes' => 1],
                     ],
+                    'etapas_sin_aprobar' => [
+                        ['etapa' => $this->etapaJson('planeacion'), 'estado' => 'pendiente'],
+                        ['etapa' => $this->etapaJson('pliego_definitivo'), 'estado' => 'pendiente'],
+                    ],
                 ],
             ]);
         $this->cumplir($expediente, $this->fila($expediente, 'Estudios previos'));
         $this->como()->postJson("/GestPro/expedientes/{$expediente->id}/cerrar", ['confirmar' => false])
             ->assertStatus(422)
-            ->assertJsonPath('mensaje', 'Falta 1 requisito por cumplir. Confirma para cerrar el expediente de todos modos.')
+            ->assertJsonPath('mensaje', 'Falta 1 requisito por cumplir y 2 etapas sin aprobar. Confirma para cerrar el expediente de todos modos.')
             ->assertJsonPath('pendientes.por_etapa', [['etapa' => $this->etapaJson('pliego_definitivo'), 'pendientes' => 1]]);
 
         $this->assertSame(ProyectoExpediente::BORRADOR, $expediente->fresh()->estado);
@@ -390,6 +395,11 @@ class ExpedienteContratacionApiTest extends TestCase
                     ['etapa' => $this->etapaJson('planeacion'), 'pendientes' => 1],
                     ['etapa' => $this->etapaJson('pliego_definitivo'), 'pendientes' => 1],
                 ],
+                // Fase 5, decisión 3: también las etapas sin aprobar.
+                'etapas_sin_aprobar' => [
+                    ['etapa' => $this->etapaJson('planeacion'), 'estado' => 'pendiente'],
+                    ['etapa' => $this->etapaJson('pliego_definitivo'), 'estado' => 'pendiente'],
+                ],
             ],
         ], json_decode($entrada->despues, true));
     }
@@ -399,12 +409,16 @@ class ExpedienteContratacionApiTest extends TestCase
         $expediente = $this->expediente();
         $this->cumplir($expediente, $this->fila($expediente, 'Estudios previos'));
         $this->cumplir($expediente, $this->fila($expediente, 'Pliego de condiciones'));
+        // Fase 5, decisión 3: sin pendientes es también con las etapas aprobadas.
+        foreach (['planeacion', 'pliego_definitivo'] as $etapa) {
+            $this->como()->postJson("/GestPro/expedientes/{$expediente->id}/etapas/{$this->etapa($etapa)->id}/aprobar")->assertOk();
+        }
 
         $this->como()->postJson("/GestPro/expedientes/{$expediente->id}/cerrar")->assertOk()
             ->assertJsonPath('estado', ProyectoExpediente::CERRADO)
             ->assertJsonPath('progreso.porcentaje', 100);
         $this->assertSame(
-            ['requisitos' => 2, 'cumplidos' => 2, 'pendientes' => ['total' => 0, 'por_etapa' => []]],
+            ['requisitos' => 2, 'cumplidos' => 2, 'pendientes' => ['total' => 0, 'por_etapa' => [], 'etapas_sin_aprobar' => []]],
             json_decode(DB::table('checklist_historial')->where('evento', 'expediente_cerrado')->value('despues'), true)
         );
     }

@@ -20,15 +20,22 @@ use Illuminate\Support\Facades\DB;
  *
  * Reglas:
  * - Solo en un expediente de contratación en borrador, y en una etapa que tiene requisitos en él
- *   (una de su avance por etapa). La fila de la etapa nace si no existe, como con las fechas.
+ *   (una de su avance por etapa) y alguno que cuente (total > 0). La fila de la etapa nace si no
+ *   existe, como con las fechas.
  * - Aprobar: con requisitos que cuentan sin cumplir, sin `confirmar` responde cuántos faltan
- *   (AprobacionConPendientesException) y no aprueba; confirmada, aprueba y guarda cuántos
- *   faltaban. Una etapa ya aprobada no se aprueba otra vez. La fecha real, si está vacía o es la
+ *   (AprobacionConPendientesException) y no aprueba; tampoco si confirma habiendo visto menos
+ *   pendientes de los que hay ahora (`pendientes_vistos`); confirmada, aprueba y guarda cuántos
+ *   faltaban. Una etapa aprobada sin cambios después no se aprueba otra vez; una aprobada con
+ *   cambios (estado visible calculado bajo el bloqueo) se reaprueba: quién, cuándo, la observación
+ *   si llega otra y los pendientes, con la misma confirmación, sin tocar la fecha real, y el
+ *   historial lo marca (`reaprobacion`). La fecha real, si está vacía o es la
  *   sugerida, pasa a ser la de hoy (la de la aprobación) y deja de ser sugerida; la que escribió
  *   una persona se respeta. Sigue siendo corregible.
  * - Devolver: con una observación (obligatoria); una devuelta se puede devolver otra vez. Si la
  *   etapa estaba aprobada y su fecha real es la que puso la aprobación (nadie la cambió
- *   después), vuelve a la regla de la sugerida: sugerida si la etapa está completa, vacía si no.
+ *   después), vuelve a la regla de la sugerida: si la etapa está completa, la sugerida que tenía
+ *   antes de aprobarse (está en el `antes` del `etapa_aprobada`) o, si no tenía fecha, la de hoy;
+ *   vacía si no está completa.
  * - Queda en el historial del expediente (`etapa_aprobada`, `etapa_devuelta`) con la etapa, el
  *   estado de revisión de antes y de después, la observación y la fecha real si cambió.
  * - Sobre el expediente bloqueado, como las acciones del checklist y las fechas de una etapa.
@@ -36,6 +43,7 @@ use Illuminate\Support\Facades\DB;
 final class RevisionEtapas
 {
     public const YA_APROBADA = 'La etapa ya está aprobada.';
+    public const NADA_QUE_REVISAR = 'La etapa no tiene requisitos que cuenten.';
 
     public function __construct(
         private readonly ExpedienteService $expedientes,
@@ -44,26 +52,36 @@ final class RevisionEtapas
     ) {
     }
 
-    /** @return array{etapa: array, avisos: array} la etapa como en avance_por_etapa y los avisos del expediente */
-    public function aprobar(ProyectoExpediente $expediente, EtapaContratacion $etapa, bool $confirmar, ?string $observacion, ?User $usuario): array
+    /**
+     * @param ?int $pendientesVistos los pendientes que vio quien confirma: si ahora faltan más, la
+     *        confirmación no vale y se vuelve a pedir con el número nuevo
+     * @return array{etapa: array, avisos: array} la etapa como en avance_por_etapa y los avisos del expediente
+     */
+    public function aprobar(ProyectoExpediente $expediente, EtapaContratacion $etapa, bool $confirmar, ?string $observacion, ?User $usuario, ?int $pendientesVistos = null): array
     {
-        return $this->revisar($expediente, $etapa, $usuario, function (ExpedienteEtapa $fila, array $avance) use ($confirmar, $observacion, $usuario) {
-            if ($fila->aprobada()) {
+        return $this->revisar($expediente, $etapa, $usuario, function (ExpedienteEtapa $fila, array $avance) use ($confirmar, $observacion, $usuario, $pendientesVistos) {
+            // Aprobada con cambios después: se vuelve a aprobar (reaprobación); sin cambios, no.
+            $reaprobacion = $fila->aprobada() && ($avance['revision']['estado'] ?? null) === AvisosContratacion::REVISION_CON_CAMBIOS;
+            if ($fila->aprobada() && ! $reaprobacion) {
                 throw new ReglaNegocioException(self::YA_APROBADA);
             }
             $pendientes = $avance['total'] - $avance['cumplidos'];
-            if ($pendientes > 0 && ! $confirmar) {
+            $confirmada = $confirmar && ($pendientesVistos === null || $pendientes <= $pendientesVistos);
+            if ($pendientes > 0 && ! $confirmada) {
                 $falta = $pendientes === 1 ? 'Falta 1 requisito' : "Faltan {$pendientes} requisitos";
                 throw new AprobacionConPendientesException("{$falta} de esta etapa. Confirma para aprobarla de todos modos.", $pendientes);
             }
 
             $antes = $this->revision($fila);
             $fechaAntes = $this->fecha($fila);
-            $fijaFecha = $fila->fecha_real === null || $fila->sugerida();
+            // La reaprobación no toca la fecha real: la puso (o la respetó) la primera aprobación.
+            $fijaFecha = ! $reaprobacion && ($fila->fecha_real === null || $fila->sugerida());
             if ($fijaFecha) {
                 $fila->fecha_real = $this->avisos->hoy()->toDateString();
                 $fila->fecha_real_sugerida = false;
             }
+            // Al reaprobar sin observación nueva, se conserva la anterior.
+            $observacion = $reaprobacion ? $observacion ?? $fila->observacion_revision : $observacion;
             $this->guardarRevision($fila, ExpedienteEtapa::APROBADA, $observacion, $pendientes, $usuario);
 
             return ['etapa_aprobada', [...$antes, ...($fijaFecha ? $fechaAntes : [])], [
@@ -71,6 +89,7 @@ final class RevisionEtapas
                 ...($observacion !== null ? ['observacion' => $observacion] : []),
                 'pendientes_al_aprobar' => $pendientes,
                 ...($pendientes > 0 ? ['con_pendientes' => true] : []),
+                ...($reaprobacion ? ['reaprobacion' => true] : []),
                 ...($fijaFecha ? $this->fecha($fila) : []),
             ]];
         });
@@ -82,10 +101,15 @@ final class RevisionEtapas
         return $this->revisar($expediente, $etapa, $usuario, function (ExpedienteEtapa $fila, array $avance, ProyectoExpediente $expediente) use ($etapa, $observacion, $usuario) {
             $antes = $this->revision($fila);
             $fechaAntes = $this->fecha($fila);
-            $vuelve = $fila->aprobada() && $this->fechaDeLaAprobacion($expediente, $etapa, $fila);
+            $aprobacion = $fila->aprobada() ? $this->aprobacionQueFijoLaFecha($expediente, $etapa, $fila) : null;
+            $vuelve = $aprobacion !== null;
             if ($vuelve) {
+                // La de antes de aprobar, si era sugerida; sin fecha antes, la de hoy (como al
+                // completarse); sin completar, vacía.
+                $previa = $aprobacion->antes ?? [];
                 $completa = $this->avisos->completa($avance);
-                $fila->fecha_real = $completa ? $fila->fecha_real : null;
+                $sugeridaPrevia = ($previa['fecha_real_sugerida'] ?? false) && ($previa['fecha_real'] ?? null) !== null;
+                $fila->fecha_real = ! $completa ? null : ($sugeridaPrevia ? $previa['fecha_real'] : $this->avisos->hoy()->toDateString());
                 $fila->fecha_real_sugerida = $completa;
             }
             $this->guardarRevision($fila, ExpedienteEtapa::DEVUELTA, $observacion, null, $usuario);
@@ -114,10 +138,15 @@ final class RevisionEtapas
         DB::transaction(function () use ($expediente, $etapa, $usuario, $accion) {
             $this->expedientes->bloquear($expediente);
             $this->expedientes->exigirBorrador($expediente);
-            $avance = collect($this->expedientes->avancePorEtapaDe($expediente))
+            // El estado visible de la revisión, calculado bajo el bloqueo.
+            $avance = collect($this->expedientes->avancePresentadoDe($expediente))
                 ->first(fn (array $a) => ($a['etapa']['id'] ?? null) === $etapa->id);
             if ($avance === null) {
                 throw new ReglaNegocioException(CronogramaExpediente::SIN_REQUISITOS);
+            }
+            // Todo lo de la etapa es opcional o no aplica: no hay nada que aprobar ni devolver.
+            if ($avance['total'] === 0) {
+                throw new ReglaNegocioException(self::NADA_QUE_REVISAR);
             }
 
             $fila = ExpedienteEtapa::query()
@@ -152,31 +181,36 @@ final class RevisionEtapas
     }
 
     /**
-     * La fecha real de la etapa es la que puso su aprobación vigente: el último `etapa_aprobada`
-     * de la etapa la fijó, es la misma de ahora y ningún `etapa_fechas` posterior la cambió.
+     * El `etapa_aprobada` de la aprobación vigente, si la fecha real de la etapa es la que puso:
+     * esa aprobación la fijó, es la misma de ahora y ningún `etapa_fechas` posterior la cambió.
+     * Las reaprobaciones no tocan la fecha: se mira la aprobación anterior a ellas. Su `antes`
+     * guarda la fecha real que tenía la etapa antes de aprobarse.
      */
-    private function fechaDeLaAprobacion(ProyectoExpediente $expediente, EtapaContratacion $etapa, ExpedienteEtapa $fila): bool
+    private function aprobacionQueFijoLaFecha(ProyectoExpediente $expediente, EtapaContratacion $etapa, ExpedienteEtapa $fila): ?ChecklistHistorial
     {
         $eventos = ChecklistHistorial::query()
             ->where('expediente_id', $expediente->id)
             ->where('entidad_tipo', HistorialChecklist::EXPEDIENTE)
             ->whereIn('evento', ['etapa_aprobada', 'etapa_fechas'])
+            ->where('despues->etapa_id', $etapa->id)
             ->orderByDesc('id')
-            ->get()
-            ->filter(fn (ChecklistHistorial $h) => ($h->despues['etapa_id'] ?? null) === $etapa->id);
+            ->get();
         foreach ($eventos as $evento) {
             if ($evento->evento === 'etapa_fechas') {
                 if (array_key_exists('fecha_real', $evento->despues)) {
-                    return false;
+                    return null;
                 }
+                continue;
+            }
+            if ($evento->despues['reaprobacion'] ?? false) {
                 continue;
             }
 
             return array_key_exists('fecha_real', $evento->despues)
-                && $evento->despues['fecha_real'] === $fila->fecha_real?->format('Y-m-d');
+                && $evento->despues['fecha_real'] === $fila->fecha_real?->format('Y-m-d') ? $evento : null;
         }
 
-        return false;
+        return null;
     }
 
     /** @return array{estado_revision: string, observacion?: string} */

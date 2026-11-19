@@ -20,14 +20,20 @@ class RevisionEtapasController extends Controller
     {
     }
 
-    /** Con requisitos pendientes en la etapa, sin `confirmar: true` responde 422 con cuántos faltan. */
+    /**
+     * Con requisitos pendientes en la etapa, sin `confirmar: true` responde 422 con cuántos faltan;
+     * también con `confirmar` si llega `pendientes_vistos` y ahora faltan más de los que vio.
+     */
     public function aprobar(Request $request, ProyectoExpediente $expediente, EtapaContratacion $etapa): JsonResponse
     {
         $datos = $request->validate([
             'confirmar' => ['sometimes', 'boolean'],
             'observacion' => ['sometimes', 'nullable', 'string', 'max:' . self::MAX_OBSERVACION],
+            'pendientes_vistos' => ['sometimes', 'nullable', 'integer', 'min:0'],
         ], [
             'confirmar.boolean' => 'Indica si confirmas la aprobación con verdadero o falso.',
+            'pendientes_vistos.integer' => 'Indica cuántos pendientes viste con un número entero.',
+            'pendientes_vistos.min' => 'Los pendientes vistos no pueden ser negativos.',
             'observacion.string' => 'Escribe la observación como texto.',
             'observacion.max' => 'La observación no puede tener más de ' . self::MAX_OBSERVACION . ' caracteres.',
         ]);
@@ -37,7 +43,8 @@ class RevisionEtapasController extends Controller
             $etapa,
             (bool) ($datos['confirmar'] ?? false),
             $datos['observacion'] ?? null,
-            $request->user()
+            $request->user(),
+            isset($datos['pendientes_vistos']) ? (int) $datos['pendientes_vistos'] : null
         ));
     }
 

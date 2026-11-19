@@ -259,19 +259,20 @@ class CronogramaEtapasApiTest extends TestCase
             ->assertJsonPath('avisos.etapas_proximas', 1)
             ->assertJsonPath('avisos.hitos', ['completadas' => 0, 'total' => 3]);
 
-        // Hoy mismo también es próxima; una completa con la fecha pasada ya no avisa.
+        // Hoy mismo también es próxima; una completa con la fecha pasada sigue vencida mientras no
+        // se apruebe, y no cuenta como hito (fase 5, decisión 1).
         $this->fechas($expediente, 'cierre', ['fecha_programada' => self::HOY])->assertOk()->assertJsonPath('etapa.alerta', 'proxima');
         $this->marcar($expediente, 'Estudios previos');
         $this->marcar($expediente, 'CDP');
         $r = $this->leer($expediente);
-        $this->assertSame(['completa', 'proxima', 'proxima'], array_column($r->json('avance_por_etapa'), 'alerta'));
-        $r->assertJsonPath('avisos.etapas_vencidas', 0)
+        $this->assertSame(['vencida', 'proxima', 'proxima'], array_column($r->json('avance_por_etapa'), 'alerta'));
+        $r->assertJsonPath('avisos.etapas_vencidas', 1)
             ->assertJsonPath('avisos.etapas_proximas', 2)
-            ->assertJsonPath('avisos.hitos', ['completadas' => 1, 'total' => 3]);
+            ->assertJsonPath('avisos.hitos', ['completadas' => 0, 'total' => 3]);
 
         // Al pasar los días, la próxima se vence.
         $this->travelTo('2026-11-23 08:00:00');
-        $this->assertSame(['completa', 'vencida', 'vencida'], array_column($this->leer($expediente)->json('avance_por_etapa'), 'alerta'));
+        $this->assertSame(['vencida', 'vencida', 'vencida'], array_column($this->leer($expediente)->json('avance_por_etapa'), 'alerta'));
     }
 
     public function test_un_expediente_cerrado_no_avisa_vencimientos(): void
@@ -404,6 +405,8 @@ class CronogramaEtapasApiTest extends TestCase
             'sin_actualizacion' => false,
             'dias_sin_actualizacion' => 14,
             'hitos' => ['completadas' => 0, 'total' => 3],
+            'etapas_por_revisar' => 0,
+            'etapas_devueltas' => 0,
         ]);
         $this->travelTo('2026-11-16 05:30:00');
         $this->leer($expediente)->assertJsonPath('avisos.sin_actualizacion', true)->assertJsonPath('avisos.dias_sin_actualizacion', 15);
