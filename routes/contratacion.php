@@ -9,6 +9,7 @@
 use App\Http\Controllers\ContratoController;
 use App\Http\Controllers\ProcesoContratacionController;
 use App\Http\Controllers\SecopController;
+use App\Http\Controllers\TableroContratacionController;
 use Illuminate\Support\Facades\Route;
 
 // Lectura: cualquier usuario autenticado.
@@ -26,6 +27,11 @@ Route::get('/contratos/buscar', [ContratoController::class, 'buscar'])
 Route::get('/contratos/{contrato}/detalle', [ContratoController::class, 'detalle'])
     ->whereNumber('contrato')
     ->name('contratos.detalle');
+
+// Vista "Contratación" del tablero: todos los procesos, con filtros. El tablero del SPA es
+// /dashboard?vista=contratacion: esta ruta no coincide con ninguna del SPA.
+Route::get('/tablero/contratacion', [TableroContratacionController::class, 'index'])
+    ->name('tablero.contratacion');
 
 // Procesos de contratación: Administrador o Gestor.
 Route::middleware('can:editar-datos')->group(function () {

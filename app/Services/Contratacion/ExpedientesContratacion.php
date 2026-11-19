@@ -209,9 +209,11 @@ final class ExpedientesContratacion
      * cierre y la actualización). Las consultas no crecen con los procesos.
      *
      * @param Collection<int, ProcesoLicitacion> $procesos
+     * @param ?array $avancesPorEtapa recibe el avance_por_etapa presentado del expediente de cada
+     *        proceso que lo tiene (proceso_id => lista), para quien necesita las etapas (el tablero)
      * @return array<int, array{expediente: ?array{id: int, estado: string, progreso: array{total: int, cumplidos: int, porcentaje: int, peso_total: int, peso_cumplido: int}, aviso_plantilla: ?string}, avisos: array}> proceso_id => resumen
      */
-    public function resumenDeProcesos(Collection $procesos): array
+    public function resumenDeProcesos(Collection $procesos, ?array &$avancesPorEtapa = null): array
     {
         $expedientes = $procesos->isEmpty() ? collect() : ProyectoExpediente::query()
             ->contratacion()
@@ -226,6 +228,8 @@ final class ExpedientesContratacion
             $expedientes->flatMap(fn (ProyectoExpediente $e) => $e->versionesPlantilla->pluck('plantilla_id'))
                 ->map(fn ($id) => (int) $id)->unique()->values()->all()
         );
+
+        $avancesPorEtapa = $expedientes->map(fn (ProyectoExpediente $e) => $avances[$e->id]['avance_por_etapa'])->all();
 
         return $procesos->mapWithKeys(function (ProcesoLicitacion $proceso) use ($expedientes, $estados, $avances, $eventos) {
             $expediente = $expedientes->get($proceso->id);
