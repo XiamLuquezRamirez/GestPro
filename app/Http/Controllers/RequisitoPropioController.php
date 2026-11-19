@@ -19,6 +19,7 @@ class RequisitoPropioController extends Controller
         'max' => 'En :attribute caben hasta :max caracteres.',
         'string' => 'Revisa :attribute: debe ser un texto.',
         'in' => 'Revisa :attribute: no es un valor válido.',
+        'integer' => 'Revisa :attribute: debe ser un número entero.',
         'titulo.required' => 'Escribe el título del requisito.',
         'titulo.max' => 'El título admite hasta 500 caracteres.',
         'descripcion.max' => 'La descripción admite hasta 2000 caracteres.',
@@ -31,6 +32,7 @@ class RequisitoPropioController extends Controller
         'descripcion' => 'la descripción',
         'categoria' => 'la categoría',
         'caracter' => 'el carácter',
+        'etapa_propia_id' => 'la etapa',
     ];
 
     public function __construct(
@@ -59,18 +61,26 @@ class RequisitoPropioController extends Controller
 
         return response()->json([
             'mensaje' => 'Requisito eliminado.',
-            'progreso' => $this->expedientes->progresoDe($expediente),
+            ...$this->expedientes->avanceDe($expediente),
         ]);
     }
 
-    /** Al editar, los campos que no vienen en el pedido no cambian; el título siempre se envía. */
+    /**
+     * Al editar, los campos que no vienen en el pedido no cambian; el título siempre se envía. La
+     * etapa la exige el servicio, y solo en un expediente de contratación.
+     */
     private function validar(Request $request): array
     {
+        // Enteros de verdad: `integer` admitiría true como 1 o "1".
+        $entero = fn (string $atributo, mixed $valor, \Closure $falla) => is_int($valor)
+            || $falla('Revisa :attribute: debe ser un número entero.');
+
         return $request->validate([
             'titulo' => ['required', 'string', 'max:500'],
             'descripcion' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'categoria' => ['sometimes', 'nullable', Rule::in(RequisitoCatalogo::CATEGORIAS)],
             'caracter' => ['sometimes', Rule::in(RequisitosPropios::CARACTERES)],
+            'etapa_propia_id' => ['sometimes', 'nullable', 'bail', 'integer', $entero],
         ], self::MENSAJES, self::ATRIBUTOS);
     }
 
@@ -78,7 +88,7 @@ class RequisitoPropioController extends Controller
     {
         return response()->json([
             'requisito' => $this->expedientes->presentarFila($fila->refresh()),
-            'progreso' => $this->expedientes->progresoDe($expediente),
+            ...$this->expedientes->avanceDe($expediente),
         ], $estado);
     }
 }

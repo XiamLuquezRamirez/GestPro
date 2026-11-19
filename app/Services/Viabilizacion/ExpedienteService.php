@@ -2,8 +2,10 @@
 
 namespace App\Services\Viabilizacion;
 
+use App\Exceptions\CierreConPendientesException;
 use App\Exceptions\ReglaNegocioException;
 use App\Models\CatalogoVersion;
+use App\Models\EtapaContratacion;
 use App\Models\Fase;
 use App\Models\PlantillaChecklist;
 use App\Models\ProcesoLicitacion;
@@ -17,6 +19,7 @@ use App\Models\RequisitoTipo;
 use App\Models\RequisitoTipologia;
 use App\Models\Responsable;
 use App\Models\User;
+use App\Services\Contratacion\PlantillasContratacion;
 use Closure;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
@@ -44,7 +47,11 @@ use Illuminate\Validation\ValidationException;
  * - Radicado, el expediente queda congelado: no se reconfigura ni se marca.
  * - Los expedientes del proyecto son los de viabilización (Proyecto::expedientes()). Uno de
  *   contratación (de un proceso) nace con crearDeProceso(), ya configurado: comparte el
- *   checklist, pero no se configura ni se radica.
+ *   checklist, pero no se configura ni se radica. Sus filas llevan la etapa de contratación
+ *   (la del requisito mostrado, o la elegida en un propio), con el avance por etapa, y se
+ *   cierra con cerrar(): solo avisa de los pendientes. Cerrado, queda congelado como uno
+ *   radicado. La fecha y el usuario del cierre se guardan en fecha_radicado y
+ *   usuario_radicado_id: los del acto que termina el trámite del expediente.
  */
 final class ExpedienteService
 {
@@ -80,10 +87,14 @@ final class ExpedienteService
         'usuarioCumplido:id,name', 'usuarioNoAplica:id,name', 'usuarioAprobo:id,name', 'responsable:id,nombre,cargo',
     ];
 
+    // Solo en los de contratación: la etapa de cada fila.
+    private const RELACIONES_ETAPA = ['requisito.etapa', 'origenes.etapa', 'etapaPropia'];
+
     public function __construct(
         private readonly EvaluadorRequisitos $evaluador,
         private readonly HistorialChecklist $historial,
         private readonly PlantillasExpediente $plantillas,
+        private readonly PlantillasContratacion $contratacion,
     ) {
     }
 
@@ -459,6 +470,60 @@ final class ExpedienteService
         return $expediente;
     }
 
+    /**
+     * Cierra un expediente de contratación. Solo avisa: con requisitos que cuentan sin cumplir,
+     * sin `$confirmar` responde cuántos faltan y en qué etapas (CierreConPendientesException) y
+     * no cierra; confirmado, cierra igual y el historial guarda lo que faltaba.
+     */
+    public function cerrar(ProyectoExpediente $expediente, bool $confirmar, ?User $usuario): ProyectoExpediente
+    {
+        $this->exigirContratacion($expediente);
+
+        DB::transaction(function () use ($expediente, $confirmar, $usuario) {
+            // Con la fila bloqueada, una marca o un propio que llega a la vez espera o ya cuenta.
+            $this->bloquear($expediente);
+            $this->exigirBorrador($expediente);
+
+            $avance = $this->avancePorEtapaDe($expediente);
+            $pendientes = $this->pendientes($avance);
+            if ($pendientes['total'] > 0 && ! $confirmar) {
+                $falta = $pendientes['total'] === 1 ? 'Falta 1 requisito' : "Faltan {$pendientes['total']} requisitos";
+                throw new CierreConPendientesException("{$falta} por cumplir. Confirma para cerrar el expediente de todos modos.", $pendientes);
+            }
+
+            $expediente->update([
+                'estado' => ProyectoExpediente::CERRADO,
+                'fecha_radicado' => now(),
+                'usuario_radicado_id' => $usuario?->id,
+            ]);
+            $this->historial->registrarExpediente($expediente, 'expediente_cerrado', [], [
+                'requisitos' => array_sum(array_column($avance, 'total')),
+                'cumplidos' => array_sum(array_column($avance, 'cumplidos')),
+                'pendientes' => $pendientes,
+            ], $usuario);
+        });
+
+        return $expediente;
+    }
+
+    /**
+     * Lo que falta en cada etapa del avance, solo las etapas con algo pendiente.
+     *
+     * @param list<array{etapa: ?array, total: int, cumplidos: int, porcentaje: int}> $avance el de avancePorEtapa()
+     * @return array{total: int, por_etapa: list<array{etapa: ?array, pendientes: int}>}
+     */
+    private function pendientes(array $avance): array
+    {
+        $porEtapa = [];
+        foreach ($avance as $etapa) {
+            if ($etapa['total'] > $etapa['cumplidos']) {
+                $porEtapa[] = ['etapa' => $etapa['etapa'], 'pendientes' => $etapa['total'] - $etapa['cumplidos']];
+            }
+        }
+
+        return ['total' => array_sum(array_column($porEtapa, 'pendientes')), 'por_etapa' => $porEtapa];
+    }
+
     public function eliminar(ProyectoExpediente $expediente, ?User $usuario = null): void
     {
         $this->exigirBorrador($expediente);
@@ -727,25 +792,29 @@ final class ExpedienteService
         $posiciones = $this->posiciones($versiones);
         $avisos = ['avisos' => [], 'total' => 0];
 
+        $contratacion = $expediente->esContratacion();
         $filas = $expediente->requisitos()
             ->where('aplica', true)
-            ->with(self::RELACIONES_FILA)
+            ->with($contratacion ? [...self::RELACIONES_FILA, ...self::RELACIONES_ETAPA] : self::RELACIONES_FILA)
             ->orderBy('orden')
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->each(fn (ProyectoRequisito $f) => $f->setRelation('expediente', $expediente));
         if ($versiones->count() > 1) {
             $avisos = $this->avisosDuplicados($filas, $posiciones);
         }
 
         return [
             ...$this->presentarCabecera($expediente, $versiones),
-            'configuracion' => [
+            // Un expediente de contratación no tiene configuración SGR: tiene etapas.
+            ...($contratacion ? [] : ['configuracion' => [
                 'sectores' => $this->opciones($expediente->sectores),
                 'tipos' => $expediente->tipos->map(fn ($t) => ['id' => $t->id, 'sector_id' => $t->sector_id, 'clave' => $t->clave, 'nombre' => $t->nombre])->values(),
                 'componentes' => $this->opciones($expediente->componentes),
                 'tipologias' => $this->opciones($expediente->tipologias),
-            ],
+            ]]),
             'progreso' => $this->progresoDe($expediente),
+            ...($contratacion ? ['avance_por_etapa' => $this->avancePorEtapa($filas, $posiciones)] : []),
             'requisitos' => $filas->map(fn (ProyectoRequisito $f) => $this->presentarFila($f, $posiciones))->values(),
             // Los más parecidos, hasta MAX_AVISOS; el total dice cuántos hay en realidad.
             'avisos_duplicados' => $avisos['avisos'],
@@ -856,10 +925,14 @@ final class ExpedienteService
     {
         $expediente->loadMissing(['proyecto:id,nombre,sector', 'usuarioRadico:id,name', 'usuarioCreo:id,name']);
         $versiones ??= $this->plantillas->versionesDe($expediente);
-        $compatibles ??= $versiones->isEmpty() ? [] : $this->plantillas->idsCompatibles($expediente->proyecto);
+        $compatibles ??= match (true) {
+            $versiones->isEmpty() => [],
+            $expediente->esContratacion() => $this->contratacion->idsCompatibles($expediente->proceso),
+            default => $this->plantillas->idsCompatibles($expediente->proyecto),
+        };
         $nuevas ??= $this->plantillas->versionesNuevas($versiones);
 
-        return [
+        $cabecera = [
             'id' => $expediente->id,
             'proyecto' => ['id' => $expediente->proyecto->id, 'nombre' => $expediente->proyecto->nombre],
             'plantillas' => $versiones->map(fn (CatalogoVersion $v) => [
@@ -883,6 +956,39 @@ final class ExpedienteService
             'creado' => $expediente->created_at?->toIso8601String(),
             'actualizado' => $expediente->updated_at?->toIso8601String(),
         ];
+
+        return $expediente->esContratacion() ? $this->cabeceraDeContratacion($expediente, $cabecera) : $cabecera;
+    }
+
+    /**
+     * La de un expediente de contratación: sin fase SGR, con su proceso, y con la fecha y el
+     * usuario de radicación presentados como los del cierre, que es lo que guardan.
+     */
+    private function cabeceraDeContratacion(ProyectoExpediente $expediente, array $cabecera): array
+    {
+        $expediente->loadMissing('proceso.modalidadRel:id,nombre');
+        $proceso = $expediente->proceso;
+        $modalidad = $proceso->modalidadRel;
+        // Por qué una plantilla ya no es compatible: no cubre la modalidad, la fuente o el sector
+        // (`corresponde`, sin mirar si está activa o publicada), está inactiva o no tiene versión
+        // publicada vigente. Así el aviso de la pantalla da la razón correcta.
+        $ids = array_map(fn (array $p) => (int) $p['plantilla_id'], $cabecera['plantillas']);
+        $estados = $ids === [] ? [] : $this->contratacion->estadoPorProceso(collect([$proceso]), $ids)[$proceso->id];
+
+        return [
+            ...Arr::except($cabecera, ['fase_sgr', 'fecha_radicado', 'usuario_radico']),
+            'plantillas' => array_map(fn (array $p) => [...$p, ...$estados[(int) $p['plantilla_id']]], $cabecera['plantillas']),
+            'tipo' => $expediente->tipo,
+            'proceso' => [
+                'id' => $proceso->id,
+                'codigo_proceso' => $proceso->codigo_proceso,
+                'objeto' => $proceso->objeto,
+                'estado' => $proceso->estado,
+                'modalidad' => $modalidad ? ['id' => $modalidad->id, 'nombre' => $modalidad->nombre] : null,
+            ],
+            'fecha_cierre' => $cabecera['fecha_radicado'],
+            'usuario_cierre' => $cabecera['usuario_radico'],
+        ];
     }
 
     public function progresoDe(ProyectoExpediente $expediente): array
@@ -894,6 +1000,66 @@ final class ExpedienteService
     }
 
     /**
+     * El avance que acompaña la respuesta de una acción sobre el checklist: el progreso y, en
+     * uno de contratación, también el avance por etapa.
+     */
+    public function avanceDe(ProyectoExpediente $expediente): array
+    {
+        return [
+            'progreso' => $this->progresoDe($expediente),
+            ...($expediente->esContratacion() ? ['avance_por_etapa' => $this->avancePorEtapaDe($expediente)] : []),
+        ];
+    }
+
+    /** @return list<array{etapa: ?array, total: int, cumplidos: int, porcentaje: int}> el de avancePorEtapa() */
+    public function avancePorEtapaDe(ProyectoExpediente $expediente): array
+    {
+        $filas = $expediente->requisitos()
+            ->where('aplica', true)
+            ->with(['requisito', 'origenes.version:id,plantilla_id', ...self::RELACIONES_ETAPA])
+            ->get();
+
+        return $this->avancePorEtapa($filas, $this->posiciones($this->plantillas->versionesDe($expediente)));
+    }
+
+    /**
+     * Avance de cada etapa con filas en el checklist, con la misma definición del progreso: cuentan
+     * las que cuentan y, entre ellas, las cumplidas. En el orden del catálogo de etapas; las filas
+     * sin etapa, al final. Espera cargadas las relaciones de etapa y `origenes.version`.
+     *
+     * @param Collection<int, ProyectoRequisito> $filas las que aplican
+     * @return list<array{etapa: ?array{id: int, nombre: string, orden: int}, total: int, cumplidos: int, porcentaje: int}>
+     */
+    private function avancePorEtapa(Collection $filas, array $posiciones): array
+    {
+        $grupos = [];
+        foreach ($filas as $fila) {
+            $etapa = $this->etapaDe($fila, $posiciones);
+            $clave = $etapa?->id ?? 0;
+            $grupos[$clave] ??= ['etapa' => $etapa, 'total' => 0, 'cumplidos' => 0];
+            $grupos[$clave]['total'] += $fila->cuenta() ? 1 : 0;
+            $grupos[$clave]['cumplidos'] += $fila->cumplidaQueCuenta() ? 1 : 0;
+        }
+
+        return collect($grupos)
+            ->sortBy(fn (array $g) => [$g['etapa'] === null ? 1 : 0, $g['etapa']?->orden ?? 0, $g['etapa']?->id ?? 0])
+            ->map(fn (array $g) => ['etapa' => $this->presentarEtapa($g['etapa']), ...$this->progreso($g['total'], $g['cumplidos'])])
+            ->values()
+            ->all();
+    }
+
+    /** La de un propio es la que eligió; la de una fila de plantilla, la del requisito que muestra. */
+    private function etapaDe(ProyectoRequisito $fila, array $posiciones): ?EtapaContratacion
+    {
+        return $fila->esPropio() ? $fila->etapaPropia : $this->requisitoMostrado($fila, $posiciones)?->etapa;
+    }
+
+    private function presentarEtapa(?EtapaContratacion $etapa): ?array
+    {
+        return $etapa ? ['id' => $etapa->id, 'nombre' => $etapa->nombre, 'orden' => $etapa->orden] : null;
+    }
+
+    /**
      * Se muestra el requisito del primer origen (la principal primero); sin orígenes, el ancla.
      * Un requisito propio no tiene requisito de catálogo: trae sus textos en `propio`.
      *
@@ -901,13 +1067,14 @@ final class ExpedienteService
      */
     public function presentarFila(ProyectoRequisito $fila, ?array $posiciones = null): array
     {
-        $fila->loadMissing(self::RELACIONES_FILA);
+        $contratacion = $fila->expediente->esContratacion();
+        $fila->loadMissing($contratacion ? [...self::RELACIONES_FILA, ...self::RELACIONES_ETAPA] : self::RELACIONES_FILA);
         $posiciones ??= $this->posiciones($this->plantillas->versionesDe($fila->expediente));
         $origenes = $this->origenesOrdenados($fila, $posiciones);
         $r = $origenes->first() ?? $fila->requisito;
         $plantilla = $r?->version->plantilla;
 
-        return [
+        $presentada = [
             'id' => $fila->id,
             'estado' => $fila->estadoVisible(),
             'caracter' => $fila->caracter,
@@ -964,6 +1131,9 @@ final class ExpedienteService
             ] : null,
             'categoria' => $fila->esPropio() ? $fila->categoria_propia : $r->categoria,
         ];
+
+        // La etapa solo en los de contratación: la respuesta de viabilización no cambia.
+        return $contratacion ? [...$presentada, 'etapa' => $this->presentarEtapa($this->etapaDe($fila, $posiciones))] : $presentada;
     }
 
     /**
@@ -1263,8 +1433,12 @@ final class ExpedienteService
         $this->exigirChecklistEditable($expediente);
     }
 
+    /** Radicado (viabilización) o cerrado (contratación), el expediente está congelado. */
     public function exigirBorrador(ProyectoExpediente $expediente): void
     {
+        if ($expediente->estado === ProyectoExpediente::CERRADO) {
+            throw new ReglaNegocioException('El expediente está cerrado.');
+        }
         if (! $expediente->esBorrador()) {
             throw new ReglaNegocioException('El expediente está radicado: su checklist está congelado y no admite cambios.');
         }
@@ -1275,6 +1449,14 @@ final class ExpedienteService
     {
         if ($expediente->esContratacion()) {
             throw new ReglaNegocioException('El expediente es de contratación: no tiene configuración SGR ni se radica.');
+        }
+    }
+
+    /** El cierre es solo de los expedientes de contratación. */
+    private function exigirContratacion(ProyectoExpediente $expediente): void
+    {
+        if (! $expediente->esContratacion()) {
+            throw new ReglaNegocioException('El expediente es de viabilización: se radica, no se cierra.');
         }
     }
 
@@ -1394,7 +1576,8 @@ final class ExpedienteService
         }
     }
 
-    private function progreso(int $total, int $cumplidos): array
+    /** @return array{total: int, cumplidos: int, porcentaje: int} */
+    public function progreso(int $total, int $cumplidos): array
     {
         return [
             'total' => $total,

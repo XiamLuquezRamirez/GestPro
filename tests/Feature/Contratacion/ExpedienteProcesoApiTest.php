@@ -654,6 +654,30 @@ class ExpedienteProcesoApiTest extends TestCase
         Exceptions::assertReported(\RuntimeException::class);
     }
 
+    public function test_cambiar_el_sector_no_hace_una_consulta_por_proceso(): void
+    {
+        $this->plantilla('Agua', ['todos_sectores' => false, 'sector_ids' => [$this->agua]]);
+        $consultas = function (int $sector) {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->guardarProyecto($sector)->assertOk();
+            $total = count(DB::getQueryLog());
+            DB::disableQueryLog();
+
+            return $total;
+        };
+        $this->proceso(['codigo_proceso' => 'LP-001']);
+        $conUno = $consultas($this->vias);
+
+        foreach (range(2, 5) as $i) {
+            $this->proceso(['codigo_proceso' => "LP-00{$i}"]);
+        }
+        $salud = DB::table('sectores')->insertGetId(['nombre' => 'Salud', 'activo' => true]);
+
+        $this->assertSame($conUno, $consultas($salud));
+        $this->assertDatabaseCount('proyectos_expedientes', 0);
+    }
+
     // ------------------------------------------------- eliminar proyecto o proceso
 
     /** Debe comprobarse también en MariaDB: allí el borrado sin este paso falla. */

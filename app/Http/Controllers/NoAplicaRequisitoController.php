@@ -59,7 +59,7 @@ class NoAplicaRequisitoController extends Controller
     {
         return response()->json([
             'requisito' => $this->expedientes->presentarFila($fila->refresh()),
-            'progreso' => $this->expedientes->progresoDe($expediente),
+            ...$this->expedientes->avanceDe($expediente),
         ]);
     }
 }

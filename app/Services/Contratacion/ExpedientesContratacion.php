@@ -3,27 +3,21 @@
 namespace App\Services\Contratacion;
 
 use App\Exceptions\ReglaNegocioException;
-use App\Models\CatalogoVersion;
 use App\Models\PlantillaChecklist;
 use App\Models\ProcesoLicitacion;
-use App\Models\Proyecto;
 use App\Models\ProyectoExpediente;
 use App\Models\User;
 use Closure;
 use App\Services\Viabilizacion\ExpedienteService;
 use App\Services\Viabilizacion\PlantillasExpediente;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 
 /**
  * Expediente de contratación de un proceso: qué plantillas se le ofrecen y cómo nace.
  *
  * Reglas:
- * - Se ofrecen las plantillas de contratación activas, con motor simple y versión publicada
- *   vigente, que cubren la modalidad del proceso (o todas), su fuente (o todas; sin fuente,
- *   solo las de todas las fuentes) y el sector del proyecto (o todos; sin sector, solo las de
- *   todos los sectores). Las de viabilización nunca (PlantillasExpediente es la de ellas).
+ * - Se ofrecen las plantillas que corresponden al proceso (PlantillasContratacion). Las de
+ *   viabilización nunca (PlantillasExpediente es la de ellas).
  * - Un proceso tiene como máximo un expediente. Nace con una o varias plantillas compatibles,
  *   cada una con su versión vigente; la primera elegida es la principal, la que ordena el
  *   checklist primero. El checklist lo arma el motor del expediente (ExpedienteService).
@@ -31,12 +25,15 @@ use Illuminate\Support\Collection;
  *   expediente, el expediente nace solo si hay exactamente una plantilla compatible; con cero
  *   o varias, se crea a mano eligiéndolas. Lo mismo para los procesos sin expediente de un
  *   proyecto al que le cambia el sector. Nunca interrumpe a quien guarda el proceso o el proyecto.
- * - Cambiar la modalidad o la fuente de un proceso con expediente no lo toca.
+ * - Cambiar la modalidad o la fuente de un proceso con expediente no lo toca: el proceso avisa
+ *   cuando ninguna de sus plantillas le sirve ya, y por qué (resumenDeProcesos).
  */
 final class ExpedientesContratacion
 {
-    public function __construct(private readonly ExpedienteService $expedientes)
-    {
+    public function __construct(
+        private readonly ExpedienteService $expedientes,
+        private readonly PlantillasContratacion $plantillas,
+    ) {
     }
 
     /**
@@ -50,8 +47,9 @@ final class ExpedientesContratacion
         $sector = $proceso->proyectoRel?->sectorRel;
         $opcion = fn ($fila) => $fila ? ['id' => $fila->id, 'nombre' => $fila->nombre] : null;
 
-        $plantillas = $this->compatibles($proceso)
-            ->with(['versiones' => fn ($q) => $this->publicada($q)->withCount(['requisitos' => fn ($r) => $r->where('activo', true)])])
+        $plantillas = PlantillaChecklist::query()
+            ->whereIn('id', $this->idsCompatibles($proceso))
+            ->with(['versiones' => fn ($q) => $this->plantillas->publicada($q)->withCount(['requisitos' => fn ($r) => $r->where('activo', true)])])
             ->orderBy('nombre')
             ->orderBy('id')
             ->get();
@@ -84,7 +82,7 @@ final class ExpedientesContratacion
     /** @return list<int> ids de las plantillas que hoy se ofrecen al proceso */
     public function idsCompatibles(ProcesoLicitacion $proceso): array
     {
-        return $this->compatibles($proceso)->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all();
+        return $this->plantillas->idsCompatibles($proceso);
     }
 
     /**
@@ -121,7 +119,7 @@ final class ExpedientesContratacion
     /**
      * Expedientes que nacen al cambiar el sector del proyecto: el de cada proceso suyo sin
      * expediente que ahora tiene exactamente una plantilla compatible. Como crearAutomatico,
-     * nunca interrumpe a quien guarda el proyecto.
+     * nunca interrumpe a quien guarda el proyecto. Decidir no cuesta más con más procesos.
      *
      * @return int cuántos se crearon
      */
@@ -164,28 +162,119 @@ final class ExpedientesContratacion
         if ($proceso->expediente()->exists()) {
             return null;
         }
-        $compatibles = $this->compatibles($proceso)->orderBy('id')->limit(2)->get();
+        $compatibles = $this->idsCompatibles($proceso);
 
-        return $compatibles->count() === 1 ? $compatibles->first() : null;
+        return count($compatibles) === 1 ? PlantillaChecklist::find($compatibles[0]) : null;
     }
 
     /**
      * Procesos sin expediente con exactamente una plantilla compatible, con ella; todos, o solo
-     * los del proyecto dado.
+     * los del proyecto dado. Las consultas no crecen con los procesos.
      *
      * @return Collection<int, array{proceso: ProcesoLicitacion, plantilla: PlantillaChecklist}>
      */
     public function faltantes(?int $proyectoId = null): Collection
     {
-        return ProcesoLicitacion::query()
+        $procesos = ProcesoLicitacion::query()
             ->when($proyectoId !== null, fn ($q) => $q->where('proyecto', $proyectoId))
             ->whereDoesntHave('expediente')
             ->with('proyectoRel:id,nombre,sector')
             ->orderBy('id')
-            ->get()
-            ->map(fn (ProcesoLicitacion $proceso) => ['proceso' => $proceso, 'plantilla' => $this->plantillaAutomatica($proceso)])
-            ->filter(fn (array $fila) => $fila['plantilla'] !== null)
+            ->get();
+        $unicas = collect($this->plantillas->idsCompatiblesPorProceso($procesos))
+            ->filter(fn (array $ids) => count($ids) === 1)
+            ->map(fn (array $ids) => $ids[0]);
+        $plantillas = PlantillaChecklist::query()->whereIn('id', $unicas->unique()->values())->get()->keyBy('id');
+
+        return $procesos
+            ->filter(fn (ProcesoLicitacion $proceso) => $unicas->has($proceso->id))
+            ->map(fn (ProcesoLicitacion $proceso) => ['proceso' => $proceso, 'plantilla' => $plantillas[$unicas[$proceso->id]]])
             ->values();
+    }
+
+    /**
+     * El expediente de cada proceso, resumido para la API del proceso: su estado, su avance y el
+     * aviso si ninguna de sus plantillas le sirve ya (no corresponde a la modalidad, la fuente o
+     * el sector, está inactiva o no tiene versión publicada). Las consultas no crecen con los
+     * procesos.
+     *
+     * @param Collection<int, ProcesoLicitacion> $procesos
+     * @return array<int, ?array{id: int, estado: string, progreso: array{total: int, cumplidos: int, porcentaje: int}, aviso_plantilla: ?string}> proceso_id => resumen; null sin expediente
+     */
+    public function resumenDeProcesos(Collection $procesos): array
+    {
+        $expedientes = $procesos->isEmpty() ? collect() : ProyectoExpediente::query()
+            ->contratacion()
+            ->whereIn('proceso_id', $procesos->pluck('id'))
+            ->with('versionesPlantilla')
+            ->withCount([
+                'requisitos as requisitos_aplican' => fn ($q) => $q->cuenta(),
+                'requisitos as requisitos_cumplidos' => fn ($q) => $q->cumplidaQueCuenta(),
+            ])
+            ->get()
+            ->keyBy('proceso_id');
+        $estados = $this->plantillas->estadoPorProceso(
+            $procesos->filter(fn (ProcesoLicitacion $p) => $expedientes->has($p->id))->values(),
+            $expedientes->flatMap(fn (ProyectoExpediente $e) => $e->versionesPlantilla->pluck('plantilla_id'))
+                ->map(fn ($id) => (int) $id)->unique()->values()->all()
+        );
+
+        return $procesos->mapWithKeys(function (ProcesoLicitacion $proceso) use ($expedientes, $estados) {
+            $expediente = $expedientes->get($proceso->id);
+            if (! $expediente) {
+                return [$proceso->id => null];
+            }
+            $razones = $expediente->versionesPlantilla
+                ->map(fn ($v) => PlantillasContratacion::razon($estados[$proceso->id][(int) $v->plantilla_id]))
+                ->all();
+
+            return [$proceso->id => [
+                'id' => $expediente->id,
+                'estado' => $expediente->estado,
+                'progreso' => $this->expedientes->progreso((int) $expediente->requisitos_aplican, (int) $expediente->requisitos_cumplidos),
+                'aviso_plantilla' => $this->avisoPlantilla($razones),
+            ]];
+        })->all();
+    }
+
+    /**
+     * El aviso cuando ninguna plantilla del expediente le sirve ya al proceso, con la razón: no
+     * corresponde a su modalidad, su fuente o su sector; está inactiva; o ya no tiene versión
+     * publicada. Null si alguna le sirve.
+     *
+     * @param list<?string> $razones las de PlantillasContratacion::razon(), una por plantilla
+     */
+    private function avisoPlantilla(array $razones): ?string
+    {
+        if ($razones === [] || in_array(null, $razones, true)) {
+            return null;
+        }
+        $una = count($razones) === 1;
+        $textos = [
+            'no_corresponde' => [
+                'La plantilla del expediente ya no corresponde a la modalidad, la fuente o el sector del proceso.',
+                'Ninguna plantilla del expediente corresponde ya a la modalidad, la fuente o el sector del proceso.',
+                'ya no corresponden a la modalidad, la fuente o el sector del proceso',
+            ],
+            'inactiva' => [
+                'La plantilla del expediente está inactiva.',
+                'Las plantillas del expediente están inactivas.',
+                'están inactivas',
+            ],
+            'sin_publicada' => [
+                'La plantilla del expediente ya no tiene una versión publicada.',
+                'Las plantillas del expediente ya no tienen una versión publicada.',
+                'ya no tienen una versión publicada',
+            ],
+        ];
+        $distintas = array_values(array_intersect(array_keys($textos), $razones));
+        if (count($distintas) === 1) {
+            return $textos[$distintas[0]][$una ? 0 : 1];
+        }
+        $partes = array_map(fn (string $razon) => $textos[$razon][2], $distintas);
+        $ultima = array_pop($partes);
+
+        return 'Ninguna plantilla del expediente sigue vigente: unas ' . implode(', otras ', $partes) . " y otras {$ultima}.";
     }
 
     /**
@@ -226,7 +315,7 @@ final class ExpedientesContratacion
         }
         $compatibles = array_flip($this->idsCompatibles($proceso));
         $encontradas = PlantillaChecklist::query()->whereIn('id', $ids)
-            ->with(['versiones' => fn ($q) => $this->publicada($q)])
+            ->with(['versiones' => fn ($q) => $this->plantillas->publicada($q)])
             ->get()->keyBy('id');
 
         $errores = [];
@@ -253,32 +342,5 @@ final class ExpedientesContratacion
         }
 
         return ['versiones' => $versiones, 'principal_id' => $ids[0]];
-    }
-
-    private function compatibles(ProcesoLicitacion $proceso): Builder
-    {
-        $sector = Proyecto::query()->whereKey($proceso->proyecto)->value('sector');
-
-        return PlantillaChecklist::query()
-            ->where('uso', PlantillaChecklist::USO_CONTRATACION)
-            ->where('motor', PlantillaChecklist::MOTOR_SIMPLE)
-            ->where('activo', true)
-            ->whereHas('versiones', fn ($q) => $this->publicada($q))
-            ->where(fn (Builder $q) => $q->where('todas_modalidades', true)
-                ->when($proceso->modalidad !== null, fn (Builder $m) => $m->orWhereHas('modalidades', fn (Builder $w) => $w->where('modalidades.id', $proceso->modalidad))))
-            ->where(fn (Builder $q) => $q->where('todas_fuentes', true)
-                ->when($proceso->fuente_id !== null, fn (Builder $f) => $f->orWhereHas('fuentes', fn (Builder $w) => $w->where('fuentes_financiacion.id', $proceso->fuente_id))))
-            ->where(fn (Builder $q) => $q->where('todos_sectores', true)
-                ->when($sector !== null, fn (Builder $s) => $s->orWhereHas('sectores', fn (Builder $w) => $w->where('sectores.id', $sector))));
-    }
-
-    /**
-     * La versión vigente, si está publicada: un borrador nunca arma un expediente.
-     *
-     * @param Builder|HasMany $versiones consulta de versiones de plantilla
-     */
-    private function publicada(Builder|HasMany $versiones): Builder|HasMany
-    {
-        return $versiones->vigente()->where('estado', CatalogoVersion::PUBLICADA);
     }
 }

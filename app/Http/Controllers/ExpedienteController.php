@@ -15,7 +15,7 @@ use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Expedientes de viabilización SGR de un proyecto y su checklist.
+ * Expedientes de un proyecto (viabilización SGR) o de un proceso (contratación) y su checklist.
  * Lectura: cualquier usuario autenticado. Escritura: can:editar-datos.
  */
 class ExpedienteController extends Controller
@@ -132,7 +132,7 @@ class ExpedienteController extends Controller
 
         return response()->json([
             'requisito' => $this->servicio->presentarFila($fila->refresh()),
-            'progreso' => $this->servicio->progresoDe($expediente),
+            ...$this->servicio->avanceDe($expediente),
         ]);
     }
 
@@ -173,6 +173,21 @@ class ExpedienteController extends Controller
     public function radicar(Request $request, ProyectoExpediente $expediente): JsonResponse
     {
         $this->servicio->radicar($expediente, $request->user());
+
+        return response()->json($this->servicio->presentar($expediente->refresh()));
+    }
+
+    /**
+     * Cierra un expediente de contratación. Con requisitos pendientes, sin `confirmar: true`
+     * responde 422 con los pendientes por etapa y no cierra.
+     */
+    public function cerrar(Request $request, ProyectoExpediente $expediente): JsonResponse
+    {
+        $datos = $request->validate(
+            ['confirmar' => ['sometimes', 'boolean']],
+            ['confirmar.boolean' => 'Indica si confirmas el cierre con verdadero o falso.']
+        );
+        $this->servicio->cerrar($expediente, (bool) ($datos['confirmar'] ?? false), $request->user());
 
         return response()->json($this->servicio->presentar($expediente->refresh()));
     }

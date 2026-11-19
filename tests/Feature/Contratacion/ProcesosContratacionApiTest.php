@@ -135,6 +135,8 @@ class ProcesosContratacionApiTest extends TestCase
             'observaciones' => null,
             'estado' => 'preparacion',
             'contratos' => 0,
+            // Sin plantilla de contratación publicada, no nace expediente.
+            'expediente' => null,
             'creado' => $r->json('creado'),
             'actualizado' => $r->json('actualizado'),
             'usuario_creo' => 'Ana Gestora',

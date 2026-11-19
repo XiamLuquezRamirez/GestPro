@@ -92,6 +92,12 @@ class ProyectoRequisito extends Model
             && $this->estado_aplicabilidad !== self::NO_APLICA;
     }
 
+    /** La fila es de las cumplidas que cuentan: la misma definición de scopeCumplidaQueCuenta. */
+    public function cumplidaQueCuenta(): bool
+    {
+        return $this->cuenta() && $this->estado_aplicabilidad === self::APLICA && $this->cumplido;
+    }
+
     /** Estado que ve el usuario: por_definir, pendiente, cumplido, no_aplica_pendiente o no_aplica. */
     public function estadoVisible(): string
     {

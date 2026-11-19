@@ -38,6 +38,8 @@ use Illuminate\Validation\ValidationException;
  * - Al registrarlo, o al cambiarle la modalidad o la fuente mientras no tenga expediente, se
  *   intenta crear su expediente (ExpedientesContratacion::crearAutomatico), ya guardado el
  *   proceso: nunca interrumpe el guardado.
+ * - presentar() trae el expediente del proceso resumido (estado, avance y aviso si su plantilla
+ *   ya no le corresponde), o null sin expediente (ExpedientesContratacion::resumenDeProcesos).
  * - Todo queda en checklist_historial (entidad_tipo = proceso, sin expediente): al editar, solo
  *   lo que cambió; al eliminar, los datos para saber qué era.
  * - Los cambios sobre un proceso bloquean su fila: dos ediciones no se pisan en el historial.
@@ -85,22 +87,28 @@ final class ProcesosContratacion
     ) {
     }
 
-    /** Los procesos del proyecto en el orden en que se crearon, con la forma de presentar(). */
+    /**
+     * Los procesos del proyecto en el orden en que se crearon, con la forma de presentar(). Las
+     * consultas no crecen con los procesos, tampoco las de sus expedientes.
+     */
     public function deProyecto(Proyecto $proyecto): array
     {
-        return ProcesoLicitacion::query()
+        $procesos = ProcesoLicitacion::query()
             ->where('proyecto', $proyecto->id)
             ->with(self::RELACIONES)
             ->withCount('contratos')
             ->orderBy('id')
-            ->get()
-            ->map(fn (ProcesoLicitacion $proceso) => $this->forma($proceso))
-            ->all();
+            ->get();
+        $expedientes = $this->expedientes->resumenDeProcesos($procesos);
+
+        return $procesos->map(fn (ProcesoLicitacion $proceso) => $this->forma($proceso, $expedientes[$proceso->id]))->all();
     }
 
     public function presentar(ProcesoLicitacion $proceso): array
     {
-        return $this->forma($proceso->load(self::RELACIONES)->loadCount('contratos'));
+        $proceso->load(self::RELACIONES)->loadCount('contratos');
+
+        return $this->forma($proceso, $this->expedientes->resumenDeProcesos(collect([$proceso]))[$proceso->id]);
     }
 
     /** @param array{objeto: string, modalidad_id: int, plataforma: string, codigo_proceso?: ?string, url_proceso?: ?string, entidad_contratante_id?: ?int, monto?: int|float|string|null, fuente_id?: ?int, responsable_id?: ?int, fecha_apertura?: ?string, fecha_cierre?: ?string, observaciones?: ?string} $datos */
@@ -386,7 +394,8 @@ final class ProcesosContratacion
         return $columnas;
     }
 
-    private function forma(ProcesoLicitacion $proceso): array
+    /** @param ?array $expediente el de ExpedientesContratacion::resumenDeProcesos(); null sin expediente */
+    private function forma(ProcesoLicitacion $proceso, ?array $expediente): array
     {
         $modalidad = $proceso->modalidadRel;
         $entidad = $proceso->entidadContratante;
@@ -414,6 +423,7 @@ final class ProcesosContratacion
             'observaciones' => $proceso->observaciones,
             'estado' => $proceso->estado,
             'contratos' => (int) $proceso->contratos_count,
+            'expediente' => $expediente,
             'creado' => $proceso->created_at?->toIso8601String(),
             'actualizado' => $proceso->updated_at?->toIso8601String(),
             'usuario_creo' => $proceso->usuarioCreo?->name,

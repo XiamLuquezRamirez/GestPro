@@ -44,6 +44,9 @@ Route::middleware('can:editar-datos')->group(function () {
         ->name('expedientes.configuracion.confirmar');
     Route::post('/expedientes/{expediente}/radicar', [ExpedienteController::class, 'radicar'])
         ->name('expedientes.radicar');
+    // Solo los de contratación: se cierran, con aviso de los pendientes.
+    Route::post('/expedientes/{expediente}/cerrar', [ExpedienteController::class, 'cerrar'])
+        ->name('expedientes.cerrar');
     Route::delete('/expedientes/{expediente}', [ExpedienteController::class, 'destroy'])
         ->name('expedientes.destroy');
 

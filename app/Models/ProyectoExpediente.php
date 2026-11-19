@@ -11,7 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class ProyectoExpediente extends Model
 {
     // De viabilización, por proyecto: borrador -> radicado. De contratación, uno por proceso:
-    // borrador -> cerrado.
+    // borrador -> cerrado. El cierre guarda su fecha y su usuario en fecha_radicado y
+    // usuario_radicado_id, los del acto que termina el trámite.
     public const TIPO_VIABILIZACION = 'viabilizacion';
     public const TIPO_CONTRATACION = 'contratacion';
     public const TIPOS = [self::TIPO_VIABILIZACION, self::TIPO_CONTRATACION];
