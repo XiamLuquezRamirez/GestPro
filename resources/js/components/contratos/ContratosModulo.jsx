@@ -10,7 +10,7 @@ import {
     rutaListaDesde, rutaVistaSecop, textoListaVacia, textoVolverDesde, vistaDeConsulta,
 } from '../../utils/contratosModulo';
 import { avisoProcesoContrato } from '../../utils/avisosContratacion';
-import { textoAvisoCierre } from '../../utils/contratos';
+import { chipAvisoSuspension, textoAvisoCierre, textoAvisoSuspension } from '../../utils/contratos';
 import { RUTA_CONTRATOS } from '../../utils/navegacion';
 import { mensajeApi } from '../../utils/plantillasChecklist';
 import { mensajeSecop } from '../../utils/secop';
@@ -141,6 +141,8 @@ const ListaContratos = ({ edita, proyectos }) => {
 
     const filas = useMemo(() => (contratos ?? []).map((c) => ({
         ...filaContrato(c), avisoProceso: c.aviso_proceso, avisoCierre: textoAvisoCierre(c.aviso_cierre),
+        // Fase 7B: desde cuándo está suspendido (como título) y el chip si su reinicio previsto venció.
+        avisoSuspension: textoAvisoSuspension(c.aviso_suspension), chipSuspension: chipAvisoSuspension(c.aviso_suspension),
     })), [contratos]);
     // Al abrir un contrato se lleva la lista con sus filtros, para volver a ella.
     const estadoNavegacion = { lista: search };
@@ -218,8 +220,9 @@ const ListaContratos = ({ edita, proyectos }) => {
                                         <AvisoProceso aviso={f.avisoProceso} />
                                     </td>
                                     <td data-etiqueta="Estado">
-                                        <span className={`ct-estado ct-estado-${f.tono}`}>{f.estado}</span>
+                                        <span className={`ct-estado ct-estado-${f.tono}`} title={f.avisoSuspension ?? undefined}>{f.estado}</span>
                                         {f.avisoCierre && <span className="ct-aviso-cierre ct-estado ct-estado-ambar">{f.avisoCierre}</span>}
+                                        {f.chipSuspension && <span className="ct-aviso-cierre ct-estado ct-estado-coral" title={f.avisoSuspension}>{f.chipSuspension}</span>}
                                     </td>
                                     <td data-etiqueta="Valor vigente" className="numero">{f.valor}</td>
                                     <td data-etiqueta="Físico" className="numero">{f.avanceFisico}</td>

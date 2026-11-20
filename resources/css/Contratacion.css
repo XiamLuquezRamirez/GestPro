@@ -152,3 +152,18 @@
     .ct-cierre-acciones .gp-boton { flex: 1 1 auto; justify-content: center; }
     .ct-cierre-nota { text-align: left; }
 }
+
+/* ---------- Suspensión y reinicio del contrato (fase 7B) ---------- */
+
+/* Franja de la pestaña de información: desde cuándo está suspendido y el reinicio previsto. */
+.ct-suspension { display: flex; flex-wrap: wrap; gap: .3rem .9rem; align-items: center; padding: .6rem .85rem; margin: 0 0 1rem; font-size: .88rem; color: var(--gp-texto); background: var(--gp-ambar-suave); border-left: 3px solid var(--gp-ambar); border-radius: var(--gp-radio); }
+.ct-suspension small { flex-basis: 100%; font-size: .78rem; color: var(--gp-texto-2); }
+.ct-suspension.ct-suspension-vencida { background: var(--gp-coral-suave); border-left-color: var(--gp-coral); }
+/* Vista previa de los días que se suman al reiniciar. */
+.ct-suspension-vista { padding: .45rem .7rem; color: var(--gp-texto); background: var(--gp-azul-suave); border-radius: var(--gp-radio); }
+/* Fila de una suspensión en la pestaña Modificaciones, con sus fechas bajo el tipo. */
+.ct-suspension-detalle { display: block; margin-top: .15rem; font-size: .76rem; color: var(--gp-texto-3); }
+
+@media (max-width: 720px) {
+    .ct-suspension { flex-direction: column; align-items: flex-start; }
+}

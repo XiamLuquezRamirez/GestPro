@@ -4,7 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
 import axios from '../../axios';
 import { avisarError } from '../../utils/avisosPlantillas';
-import { etiquetaEstadoContrato, textoAvisoCierre } from '../../utils/contratos';
+import { chipAvisoSuspension, etiquetaEstadoContrato, textoAvisoCierre, textoAvisoSuspension } from '../../utils/contratos';
 import { formatoMoneda } from '../../utils/moneda';
 import ContratoEditor, { pedirProcesosProyecto, pedirTiposContrato } from './ContratoEditor';
 import '../../../css/Parametros.css';
@@ -156,9 +156,14 @@ const ContratosProyecto = ({ proyecto, onCerrar, onCambio, puedeEditar = true })
                                                         <td>{contrato.objeto}</td>
                                                         <td>{formatoMoneda(Number(contrato.valor))}</td>
                                                         <td>
-                                                            {etiquetaEstadoContrato(contrato.estado)}
+                                                            <span title={textoAvisoSuspension(contrato.aviso_suspension) ?? undefined}>{etiquetaEstadoContrato(contrato.estado)}</span>
                                                             {textoAvisoCierre(contrato.aviso_cierre) && (
                                                                 <span className="ct-aviso-cierre ct-estado ct-estado-ambar">{textoAvisoCierre(contrato.aviso_cierre)}</span>
+                                                            )}
+                                                            {chipAvisoSuspension(contrato.aviso_suspension) && (
+                                                                <span className="ct-aviso-cierre ct-estado ct-estado-coral" title={textoAvisoSuspension(contrato.aviso_suspension)}>
+                                                                    {chipAvisoSuspension(contrato.aviso_suspension)}
+                                                                </span>
                                                             )}
                                                         </td>
                                                         <td>

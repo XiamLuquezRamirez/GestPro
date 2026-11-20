@@ -4,7 +4,9 @@
 // Funciones puras, probadas en contratos.test.js. Las reglas las valida el backend
 // (ContratoController y ContratosService); aquí se adelantan los mismos mensajes.
 
-import { MAXIMO_OBSERVACION, erroresPorCampo, etiquetaEstadoProceso, etiquetaPlataforma, numeroProceso, valorDesdeApi, valorParaApi } from './contratacion';
+import {
+    MAXIMO_OBSERVACION, erroresPorCampo, etiquetaEstadoProceso, etiquetaPlataforma, numeroProceso, textoFecha, valorDesdeApi, valorParaApi,
+} from './contratacion';
 import { numeroDeMoneda } from './moneda';
 
 // Los valores son las constantes de Contrato (contratos.test.js lo comprueba).
@@ -441,10 +443,21 @@ export const datosModificacion = (contratoId, formulario) => ({
     justificacion: formulario.justificacion,
 });
 
-/** La etiqueta del tipo de modificación. */
+/**
+ * Los tipos que ofrece el formulario de la pestaña Modificaciones. Las suspensiones no: las
+ * registran «Suspender» y «Reiniciar» (el servidor las rechaza en /guardarModificacionContrato).
+ */
+export const TIPOS_MODIFICACION = [
+    ['adicion', 'Adición'],
+    ['prorroga', 'Prórroga'],
+    ['adicion_prorroga', 'Adición y Prórroga'],
+];
+
+/** La etiqueta del tipo de modificación (también de una suspensión, en la tabla). */
 export const etiquetaTipoModificacion = (tipo) => {
     if (tipo === 'adicion') return 'Adición';
     if (tipo === 'prorroga') return 'Prórroga';
+    if (tipo === 'suspension') return 'Suspensión';
     return 'Adición y Prórroga';
 };
 
@@ -455,7 +468,9 @@ export const etiquetaTipoModificacion = (tipo) => {
 const ESTADOS_DE_CIERRE = ['terminado', 'liquidado'];
 // Estados desde los que se termina un contrato (CierreContratos::TERMINABLES).
 const TERMINABLES = ['celebrado', 'en_ejecucion', 'suspendido', 'terminado'];
-const ACCION_DE_ESTADO = { terminado: 'Terminar', liquidado: 'Liquidar' };
+const ACCION_DE_ESTADO = { suspendido: 'Suspender', terminado: 'Terminar', liquidado: 'Liquidar' };
+// Estados a los que, al editar, solo se llega con su acción (los de cierre y suspendido, fase 7B).
+const ESTADOS_POR_ACCION = ['suspendido', ...ESTADOS_DE_CIERRE];
 
 /** Los campos de los diálogos de terminar y liquidar, con los nombres de la API. */
 export const CAMPOS_TERMINAR = ['fecha_terminacion_real', 'observacion'];
@@ -477,10 +492,11 @@ const MENSAJES_CIERRE = {
 /**
  * Qué acciones de cierre ofrece un contrato guardado: terminar (celebrado, en ejecución,
  * suspendido o terminado, para corregir la fecha) y liquidar (cualquier estado salvo anulado;
- * liquidado, para completar o corregir), con la etiqueta de cada botón.
+ * liquidado, para completar o corregir), con la etiqueta de cada botón. Con una suspensión
+ * abierta, ninguna: primero se reinicia (fase 7B; lo explica notaSuspensionCierre).
  */
 export const accionesCierre = (contrato) => {
-    const existe = !vacio(contrato?.id);
+    const existe = !vacio(contrato?.id) && suspensionAbierta(contrato) === null;
     const estado = contrato?.estado ?? null;
     return {
         terminar: existe && TERMINABLES.includes(estado),
@@ -548,13 +564,22 @@ export const muestraBloqueCierre = (contrato) => Boolean(contrato) && (
 );
 
 /**
- * Las opciones del select de estado. Al editar, terminado y liquidado se deshabilitan (se llega a
- * ellos con «Terminar» y «Liquidar») salvo el estado guardado; un contrato nuevo puede llegar en
- * cualquiera (p. ej. uno de SECOP II ya liquidado).
+ * Las opciones del select de estado. Al editar, suspendido, terminado y liquidado se deshabilitan
+ * (se llega a ellos con «Suspender», «Terminar» y «Liquidar») salvo el estado guardado; un
+ * contrato nuevo puede llegar en cualquiera (p. ej. uno de SECOP II ya liquidado o suspendido).
+ * Con una suspensión abierta (`conSuspensionAbierta`), el estado no sale de suspendido: se usa
+ * «Reiniciar» (y terminado y liquidado dicen "reinicia primero").
  */
-export const opcionesEstadoContrato = (estadoGuardado, esNuevo) => ESTADOS_CONTRATO.map(([valor, etiqueta]) => {
-    const deshabilitado = !esNuevo && ESTADOS_DE_CIERRE.includes(valor) && valor !== estadoGuardado;
-    return { valor, etiqueta: deshabilitado ? `${etiqueta} (usa «${ACCION_DE_ESTADO[valor]}»)` : etiqueta, deshabilitado };
+export const opcionesEstadoContrato = (estadoGuardado, esNuevo, conSuspensionAbierta = false) => ESTADOS_CONTRATO.map(([valor, etiqueta]) => {
+    if (esNuevo) return { valor, etiqueta, deshabilitado: false };
+    // Con la suspensión abierta, primero se reinicia: también antes de terminar o liquidar.
+    if (conSuspensionAbierta && valor !== 'suspendido') {
+        return { valor, etiqueta: valor === 'en_ejecucion' ? `${etiqueta} (usa «Reiniciar»)` : `${etiqueta} (reinicia primero)`, deshabilitado: true };
+    }
+    if (ESTADOS_POR_ACCION.includes(valor) && valor !== estadoGuardado) {
+        return { valor, etiqueta: `${etiqueta} (usa «${ACCION_DE_ESTADO[valor]}»)`, deshabilitado: true };
+    }
+    return { valor, etiqueta, deshabilitado: false };
 });
 
 /** El formulario del diálogo de terminar: la fecha guardada, si la hay. */
@@ -684,24 +709,337 @@ export const cambiosSinGuardar = (formulario, contrato, anexos = []) => {
     return (anexos ?? []).some((anexo) => !guardados.has(String(anexo.id)));
 };
 
-/**
- * Si SECOP II no puede cambiar el estado del contrato guardado: propone terminado o liquidado y
- * el contrato no está en ese estado (a esos estados se llega con «Terminar» y «Liquidar»). Lo
- * decide `esNuevo`, como en opcionesEstadoContrato: un contrato nuevo sí lo toma; uno guardado,
- * aunque su estado esté vacío, no.
- */
-export const estadoCierreBloqueado = (estadoSecop, estadoGuardado, esNuevo = false) => (
-    !esNuevo && ESTADOS_DE_CIERRE.includes(estadoSecop) && estadoSecop !== estadoGuardado
+// SECOP II quiere sacar de suspendido un contrato con una suspensión abierta (eso lo hace «Reiniciar»).
+const saleDeSuspensionAbierta = (estadoSecop, estadoGuardado, conSuspensionAbierta) => (
+    conSuspensionAbierta && estadoGuardado === 'suspendido' && !vacio(estadoSecop) && estadoSecop !== 'suspendido'
 );
 
 /**
- * El aviso de "Actualizar desde SECOP II" cuando propone terminado o liquidado y el contrato
- * guardado no lo está: qué acción usar. null si no aplica (contrato nuevo incluido), o si el
- * contrato ya está liquidado y SECOP II lo ve terminado (va detrás).
+ * Si SECOP II no puede cambiar el estado del contrato guardado: propone terminado, liquidado o
+ * suspendido y el contrato no está en ese estado (a esos estados se llega con «Terminar»,
+ * «Liquidar» y «Suspender»), o propone otro estado y el contrato tiene una suspensión abierta
+ * (`conSuspensionAbierta`: se sale con «Reiniciar»). Lo decide `esNuevo`, como en
+ * opcionesEstadoContrato: un contrato nuevo sí lo toma; uno guardado, aunque su estado esté vacío, no.
  */
-export const avisoEstadoCierreSecop = (estadoSecop, estadoGuardado, esNuevo = false) => {
-    if (!estadoCierreBloqueado(estadoSecop, estadoGuardado, esNuevo)) return null;
+export const estadoCierreBloqueado = (estadoSecop, estadoGuardado, esNuevo = false, conSuspensionAbierta = false) => (
+    !esNuevo && (
+        (ESTADOS_POR_ACCION.includes(estadoSecop) && estadoSecop !== estadoGuardado)
+        || saleDeSuspensionAbierta(estadoSecop, estadoGuardado, conSuspensionAbierta)
+    )
+);
+
+/**
+ * El aviso de "Actualizar desde SECOP II" cuando su estado no se copia (estadoCierreBloqueado):
+ * qué acción usar. null si no aplica (contrato nuevo incluido), o si SECOP II va detrás: un
+ * contrato liquidado que SECOP II ve terminado, o uno terminado o liquidado que ve suspendido.
+ */
+export const avisoEstadoCierreSecop = (estadoSecop, estadoGuardado, esNuevo = false, conSuspensionAbierta = false) => {
+    if (!estadoCierreBloqueado(estadoSecop, estadoGuardado, esNuevo, conSuspensionAbierta)) return null;
+    if (saleDeSuspensionAbierta(estadoSecop, estadoGuardado, conSuspensionAbierta)) {
+        return `SECOP II dice «${etiquetaEstadoContrato(estadoSecop)}»: usa «Reiniciar» para registrar el reinicio.`;
+    }
+    if (estadoSecop === 'suspendido') {
+        return ESTADOS_DE_CIERRE.includes(estadoGuardado) ? null : 'SECOP II dice «Suspendido»: usa «Suspender» para registrarlo con su fecha.';
+    }
     if (estadoSecop === 'liquidado') return 'SECOP II dice «Liquidado»: usa «Liquidar» para registrarlo con sus fechas y valor.';
     if (estadoGuardado === 'liquidado') return null;
     return 'SECOP II dice «Terminado»: usa «Terminar» para registrarlo con su fecha de terminación.';
+};
+
+// ---------- Suspensión y reinicio del contrato (fase 7B) ----------
+
+/** Los campos de los diálogos de suspender y reiniciar, con los nombres de la API. */
+export const CAMPOS_SUSPENDER = ['fecha_suspension', 'fecha_reinicio_prevista', 'numero_acta', 'motivo'];
+export const CAMPOS_REINICIAR = ['fecha_suspension', 'fecha_reinicio', 'observacion'];
+
+// Los mensajes de SuspensionContratos y ContratoController.
+const MAXIMO_ACTA = 50;
+const MAXIMO_MOTIVO = 2000;
+const MENSAJES_SUSPENSION = {
+    sinSuspension: 'Escribe la fecha de suspensión.',
+    suspensionFutura: 'La fecha de suspensión no puede ser posterior a hoy.',
+    suspensionAntesDeInicio: 'La fecha de suspensión no puede ser anterior a la de inicio.',
+    suspensionAntesDeReinicio: 'La fecha de suspensión no puede ser anterior al último reinicio.',
+    previstaAnterior: 'La fecha prevista de reinicio no puede ser anterior a la de suspensión.',
+    sinReinicio: 'Escribe la fecha de reinicio.',
+    reinicioFuturo: 'La fecha de reinicio no puede ser posterior a hoy.',
+    reinicioAnterior: 'La fecha de reinicio no puede ser anterior a la de suspensión.',
+    actaLarga: `El número del acta admite hasta ${MAXIMO_ACTA} caracteres.`,
+    motivoLargo: `El motivo admite hasta ${MAXIMO_MOTIVO} caracteres.`,
+    cierreConSuspension: 'Reinicia el contrato antes de terminarlo o liquidarlo.',
+};
+
+const esSuspension = (modificacion) => modificacion?.tipo === 'suspension';
+const diasTexto = (dias) => `${dias} ${Number(dias) === 1 ? 'día' : 'días'}`;
+const textoOpcional = (valor) => (vacio(valor) ? null : String(valor).trim());
+
+// Una fecha año-mes-día (con o sin hora) como milisegundos UTC: así los días son exactos, sin
+// cambios de hora. null si no es una fecha así.
+const diaUtc = (fecha) => {
+    const partes = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(fecha ?? ''));
+    return partes ? Date.UTC(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3])) : null;
+};
+
+const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+/** Los días calendario de `desde` a `hasta` (año-mes-día; negativo si `hasta` es anterior); null si falta alguna. */
+export const diasEntre = (desde, hasta) => {
+    const inicio = diaUtc(desde);
+    const fin = diaUtc(hasta);
+    return inicio === null || fin === null ? null : Math.round((fin - inicio) / MS_POR_DIA);
+};
+
+/** La fecha (año-mes-día) `dias` días calendario después de `fecha`; null si no es una fecha. */
+export const sumarDias = (fecha, dias) => {
+    const inicio = diaUtc(fecha);
+    return inicio === null ? null : new Date(inicio + Number(dias) * MS_POR_DIA).toISOString().slice(0, 10);
+};
+
+/**
+ * La suspensión abierta del contrato ({ desde, reinicio_previsto }, año-mes-día): la de su
+ * `aviso_suspension` cuando el contrato trae esa clave (la API la da siempre: null sin suspensión
+ * abierta), aunque sus modificaciones locales digan otra cosa (pueden ir atrasadas si no se pudo
+ * recargar). Solo sin la clave, la fila sin fecha de reinicio de sus modificaciones. null si no tiene.
+ */
+export const suspensionAbierta = (contrato) => {
+    if (contrato && Object.prototype.hasOwnProperty.call(contrato, 'aviso_suspension') && contrato.aviso_suspension !== undefined) {
+        const aviso = contrato.aviso_suspension;
+        return aviso?.desde ? { desde: comoFecha(aviso.desde), reinicio_previsto: comoFecha(aviso.reinicio_previsto) || null } : null;
+    }
+    const fila = (contrato?.modificaciones ?? []).find((m) => esSuspension(m) && vacio(m.fecha_reinicio));
+    return fila ? { desde: comoFecha(fila.fecha_modificacion), reinicio_previsto: comoFecha(fila.fecha_reinicio_prevista) || null } : null;
+};
+
+/**
+ * Qué acciones de suspensión ofrece un contrato guardado: suspender (en ejecución y sin una
+ * suspensión abierta) y reiniciar (suspendido, la tenga o no: sin ella, el diálogo pide la fecha de
+ * suspensión).
+ */
+export const accionesSuspension = (contrato) => {
+    const existe = !vacio(contrato?.id);
+    return {
+        suspender: existe && contrato.estado === 'en_ejecucion' && suspensionAbierta(contrato) === null,
+        reiniciar: existe && contrato.estado === 'suspendido',
+    };
+};
+
+/** La nota junto a los botones de un contrato con una suspensión abierta (no se termina ni se liquida); null si no la tiene. */
+export const notaSuspensionCierre = (contrato) => (
+    !vacio(contrato?.id) && suspensionAbierta(contrato) !== null ? MENSAJES_SUSPENSION.cierreConSuspension : null
+);
+
+/** El texto del aviso de suspensión (`aviso_suspension` de la API): "Suspendido desde 05/11/2026 (14 días)"; null sin aviso. */
+export const textoAvisoSuspension = (aviso) => {
+    if (!aviso?.desde) return null;
+    const dias = !vacio(aviso.dias) && Number.isFinite(Number(aviso.dias)) ? ` (${diasTexto(Number(aviso.dias))})` : '';
+    return `Suspendido desde ${textoFecha(aviso.desde)}${dias}`;
+};
+
+/** El chip de las listas y del contrato: "Reinicio vencido" si el reinicio previsto ya pasó; si no, null. */
+export const chipAvisoSuspension = (aviso) => (aviso?.desde && aviso.vencido ? 'Reinicio vencido' : null);
+
+/** "Reinicio previsto el 10/11/2026", con ": vencido" si ya pasó; null sin fecha prevista. */
+export const textoReinicioPrevisto = (aviso) => {
+    if (!aviso?.desde || vacio(aviso.reinicio_previsto)) return null;
+    return `Reinicio previsto el ${textoFecha(aviso.reinicio_previsto)}${aviso.vencido ? ': vencido' : ''}`;
+};
+
+/** El formulario del diálogo de suspender: la fecha de suspensión empieza en `hoy`. */
+export const formularioSuspender = (contrato, hoy) => ({
+    fecha_suspension: comoFecha(hoy),
+    fecha_reinicio_prevista: '',
+    numero_acta: '',
+    motivo: '',
+});
+
+/** El formulario del diálogo de reiniciar: la fecha de reinicio empieza en `hoy`. */
+export const formularioReiniciar = (contrato, hoy) => ({
+    fecha_suspension: '',
+    fecha_reinicio: comoFecha(hoy),
+    observacion: '',
+});
+
+/** Lo que espera POST /contratos/{id}/suspender, con la versión (`updated_at`) del contrato abierto. */
+export const datosSuspender = (formulario, contrato) => ({
+    fecha_suspension: comoFecha(formulario.fecha_suspension),
+    fecha_reinicio_prevista: comoFecha(formulario.fecha_reinicio_prevista) || null,
+    numero_acta: textoOpcional(formulario.numero_acta),
+    motivo: textoOpcional(formulario.motivo),
+    actualizado: contrato?.updated_at ?? null,
+});
+
+/**
+ * Lo que espera POST /contratos/{id}/reiniciar. La fecha de suspensión va solo si el contrato no
+ * tiene una suspensión abierta (entonces el servidor la crea ya cerrada).
+ */
+export const datosReiniciar = (formulario, contrato) => ({
+    fecha_reinicio: comoFecha(formulario.fecha_reinicio),
+    ...(suspensionAbierta(contrato) === null ? { fecha_suspension: comoFecha(formulario.fecha_suspension) || null } : {}),
+    observacion: observacionParaApi(formulario),
+    actualizado: contrato?.updated_at ?? null,
+});
+
+// El último reinicio de las suspensiones cerradas del contrato (año-mes-día), o null.
+const ultimoReinicio = (contrato) => (contrato?.modificaciones ?? [])
+    .filter((m) => esSuspension(m) && !vacio(m.fecha_reinicio))
+    .map((m) => comoFecha(m.fecha_reinicio))
+    .reduce((ultimo, fecha) => (ultimo === null || fecha > ultimo ? fecha : ultimo), null);
+
+// La fecha de suspensión: obligatoria, no posterior a hoy, ni anterior a la de inicio ni al último reinicio.
+const errorSuspension = (fecha, contrato, hoy) => {
+    if (!fecha) return MENSAJES_SUSPENSION.sinSuspension;
+    if (fecha > hoy) return MENSAJES_SUSPENSION.suspensionFutura;
+    const inicio = comoFecha(contrato?.fecha_inicio);
+    if (inicio && fecha < inicio) return MENSAJES_SUSPENSION.suspensionAntesDeInicio;
+    const reinicio = ultimoReinicio(contrato);
+    if (reinicio && fecha < reinicio) return MENSAJES_SUSPENSION.suspensionAntesDeReinicio;
+    return null;
+};
+
+const largo = (valor) => String(valor ?? '').trim().length;
+
+/**
+ * Errores del diálogo de suspender por campo, con los mensajes del servidor; {} si se puede
+ * enviar. `hoy` es el día (año-mes-día) en la zona de contratación. La prevista puede ser futura.
+ */
+export const erroresSuspender = (formulario, contrato, hoy) => {
+    const suspension = comoFecha(formulario?.fecha_suspension);
+    const prevista = comoFecha(formulario?.fecha_reinicio_prevista);
+    return sinNulos({
+        fecha_suspension: errorSuspension(suspension, contrato, hoy),
+        fecha_reinicio_prevista: suspension && prevista && prevista < suspension ? MENSAJES_SUSPENSION.previstaAnterior : null,
+        numero_acta: largo(formulario?.numero_acta) > MAXIMO_ACTA ? MENSAJES_SUSPENSION.actaLarga : null,
+        motivo: largo(formulario?.motivo) > MAXIMO_MOTIVO ? MENSAJES_SUSPENSION.motivoLargo : null,
+    });
+};
+
+// La fecha de suspensión con que se cuenta al reiniciar: la de la abierta o, sin ella, la escrita.
+const suspensionDelReinicio = (formulario, contrato) => suspensionAbierta(contrato)?.desde ?? comoFecha(formulario?.fecha_suspension);
+
+/**
+ * Errores del diálogo de reiniciar por campo; {} si se puede enviar. Sin suspensión abierta, la
+ * fecha de suspensión es obligatoria y sigue las reglas de suspender. La de reinicio no es
+ * posterior a `hoy` ni anterior a la de suspensión (el mismo día vale: suma 0 días).
+ */
+export const erroresReiniciar = (formulario, contrato, hoy) => {
+    const abierta = suspensionAbierta(contrato);
+    const suspension = suspensionDelReinicio(formulario, contrato);
+    const reinicio = comoFecha(formulario?.fecha_reinicio);
+    let errorReinicio = null;
+    if (!reinicio) errorReinicio = MENSAJES_SUSPENSION.sinReinicio;
+    else if (reinicio > hoy) errorReinicio = MENSAJES_SUSPENSION.reinicioFuturo;
+    else if (suspension && reinicio < suspension) errorReinicio = MENSAJES_SUSPENSION.reinicioAnterior;
+    return sinNulos({
+        fecha_suspension: abierta ? null : errorSuspension(suspension, contrato, hoy),
+        fecha_reinicio: errorReinicio,
+        observacion: errorObservacion(formulario),
+    });
+};
+
+/**
+ * La vista previa del reinicio: los días calendario suspendidos (reinicio − suspensión) y la fecha
+ * fin vigente antes y después de sumarlos, como hará el servidor al recalcular. Sin fecha fin,
+ * ambas son null. null si faltan fechas o el reinicio es anterior a la suspensión.
+ */
+export const vistaPreviaReinicio = (formulario, contrato) => {
+    const dias = diasEntre(suspensionDelReinicio(formulario, contrato), formulario?.fecha_reinicio);
+    if (dias === null || dias < 0) return null;
+    const fechaFinActual = comoFecha(contrato?.fecha_fin) || null;
+    return { dias, fechaFinActual, fechaFinNueva: fechaFinActual ? sumarDias(fechaFinActual, dias) : null };
+};
+
+/** "Se suman 14 días: la fecha fin pasa de 30/06/2026 a 14/07/2026."; null sin vista previa. */
+export const textoVistaPreviaReinicio = (vista) => {
+    if (!vista) return null;
+    if (vista.dias === 0) return 'No se suman días: la fecha fin no cambia.';
+    const suman = `${vista.dias === 1 ? 'Se suma' : 'Se suman'} ${diasTexto(vista.dias)}`;
+    return vista.fechaFinActual
+        ? `${suman}: la fecha fin pasa de ${textoFecha(vista.fechaFinActual)} a ${textoFecha(vista.fechaFinNueva)}.`
+        : `${suman} a la fecha fin del contrato.`;
+};
+
+/**
+ * El contrato abierto tras suspenderlo o reiniciarlo: del contrato presentado que responde la API
+ * toma el estado, la fecha fin vigente (al reiniciar se corre), sus avisos y la versión nueva; lo
+ * demás (anexos, actas…) se conserva hasta recargar. Al reiniciar (`reinicio.fecha_reinicio`, la
+ * que se envió) y quedar fuera de suspendido, la suspensión abierta de sus modificaciones se cierra
+ * en local con esa fecha y sus días (como los calcula el servidor): así, si la recarga falla, el
+ * contrato no queda con una fila abierta que ya no lo está.
+ */
+export const contratoTrasSuspension = (abierto, presentado, reinicio = null) => {
+    const tras = {
+        ...abierto,
+        estado: presentado.estado,
+        fecha_fin: presentado.fecha_fin,
+        aviso_suspension: presentado.aviso_suspension ?? null,
+        aviso_cierre: presentado.aviso_cierre ?? null,
+        updated_at: presentado.updated_at,
+    };
+    const fecha = comoFecha(reinicio?.fecha_reinicio);
+    if (!fecha || presentado.estado === 'suspendido' || !Array.isArray(abierto?.modificaciones)) return tras;
+    tras.modificaciones = abierto.modificaciones.map((m) => (esSuspension(m) && vacio(m.fecha_reinicio)
+        ? { ...m, fecha_reinicio: fecha, dias_prorroga: diasEntre(m.fecha_modificacion, fecha) }
+        : m));
+    return tras;
+};
+
+/**
+ * Lo que espera POST /eliminarModificacionContrato: el id y, para una suspensión (cambia el estado
+ * y la fecha fin), la versión (`updated_at`) del contrato abierto, que el servidor exige (409).
+ */
+export const datosEliminarModificacion = (modificacion, contrato) => (esSuspension(modificacion)
+    ? { id: modificacion.id, actualizado: contrato?.updated_at ?? null }
+    : { id: modificacion.id });
+
+// La suspensión más reciente de la lista, como la elige el servidor: por fecha y luego por id.
+const ultimaSuspension = (modificaciones) => (modificaciones ?? []).filter(esSuspension).reduce((ultima, m) => {
+    if (ultima === null) return m;
+    const fecha = comoFecha(m.fecha_modificacion);
+    const fechaUltima = comoFecha(ultima.fecha_modificacion);
+    if (fecha !== fechaUltima) return fecha > fechaUltima ? m : ultima;
+    return Number(m.id) > Number(ultima.id) ? m : ultima;
+}, null);
+
+/** Si la pestaña Modificaciones ofrece eliminar la fila: siempre, salvo una suspensión que no es la última. */
+export const puedeEliminarModificacion = (modificacion, modificaciones) => {
+    if (!esSuspension(modificacion)) return true;
+    const ultima = ultimaSuspension(modificaciones);
+    return ultima === null || String(ultima.id) === String(modificacion.id);
+};
+
+/**
+ * El detalle de una suspensión en la tabla de modificaciones: "Del 05/11/2026 al 19/11/2026:
+ * 14 días" o, abierta, "Desde el 05/11/2026: abierta" con su reinicio previsto. null si no es una suspensión.
+ */
+export const detalleSuspension = (modificacion) => {
+    if (!esSuspension(modificacion)) return null;
+    const desde = textoFecha(modificacion.fecha_modificacion);
+    if (vacio(modificacion.fecha_reinicio)) {
+        const prevista = vacio(modificacion.fecha_reinicio_prevista) ? '' : `, reinicio previsto el ${textoFecha(modificacion.fecha_reinicio_prevista)}`;
+        return `Desde el ${desde}: abierta${prevista}`;
+    }
+    return `Del ${desde} al ${textoFecha(modificacion.fecha_reinicio)}: ${diasTexto(Number(modificacion.dias_prorroga) || 0)}`;
+};
+
+/** La columna de días de la tabla: "Abierta" o los días de una suspensión (también 0), los de una prórroga o "-". */
+export const textoDiasModificacion = (modificacion) => {
+    if (esSuspension(modificacion)) {
+        return vacio(modificacion.fecha_reinicio) ? 'Abierta' : String(Number(modificacion.dias_prorroga) || 0);
+    }
+    // Como antes: sin días (o 0) en una adición o prórroga, "-".
+    return Number(modificacion?.dias_prorroga) ? String(modificacion.dias_prorroga) : '-';
+};
+
+/** El título y el texto de la confirmación de eliminar una modificación o una suspensión. */
+export const confirmacionEliminarModificacion = (modificacion) => {
+    if (!esSuspension(modificacion)) {
+        return { titulo: '¿Eliminar esta modificación?', texto: 'Se recalculará el valor y la fecha fin del contrato.' };
+    }
+    const efecto = vacio(modificacion.fecha_reinicio)
+        ? 'Como está abierta, el contrato vuelve a «En ejecución».'
+        : 'La fecha fin se recalcula sin sus días.';
+    return {
+        titulo: '¿Eliminar esta suspensión?',
+        texto: `Solo se puede eliminar la última suspensión. ${efecto} El cambio queda en el historial del contrato.`,
+    };
 };

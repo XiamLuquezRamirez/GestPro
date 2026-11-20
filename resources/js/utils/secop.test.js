@@ -380,6 +380,37 @@ describe('diferenciasSecop', () => {
     });
 });
 
+describe('el estado suspendido con SECOP II', () => {
+    const conEstado = (estado) => conContrato({ estado });
+    const suspendidoAbierto = {
+        ...guardado, estado: 'suspendido', aviso_suspension: { desde: '2026-11-05', dias: 14, reinicio_previsto: null, vencido: false },
+    };
+
+    it('a un contrato guardado en ejecución no le ofrece ni le copia «Suspendido», y avisa usar «Suspender»', () => {
+        const formulario = formularioContrato(guardado);
+        expect(diferenciasSecop(formulario, conEstado('suspendido'), { tipos, contrato: guardado })).toEqual([]);
+        expect(aplicarDiferencias(formulario, conEstado('suspendido'), ['estado'], guardado).estado).toBe('en_ejecucion');
+        expect(avisosSecop(conEstado('suspendido'), formulario, guardado))
+            .toEqual(['SECOP II dice «Suspendido»: usa «Suspender» para registrarlo con su fecha.']);
+    });
+
+    it('con una suspensión abierta no lo saca de suspendido, y avisa usar «Reiniciar»', () => {
+        const formulario = formularioContrato(suspendidoAbierto);
+        expect(diferenciasSecop(formulario, resultado, { tipos, contrato: suspendidoAbierto })).toEqual([]);
+        expect(aplicarDiferencias(formulario, resultado, ['estado'], suspendidoAbierto).estado).toBe('suspendido');
+        expect(avisosSecop(resultado, formulario, suspendidoAbierto))
+            .toEqual(['SECOP II dice «En ejecución»: usa «Reiniciar» para registrar el reinicio.']);
+    });
+
+    it('un suspendido sin suspensión abierta sí toma el estado de SECOP II', () => {
+        const sinAbierta = { ...guardado, estado: 'suspendido', aviso_suspension: null };
+        const formulario = formularioContrato(sinAbierta);
+        expect(diferenciasSecop(formulario, resultado, { tipos, contrato: sinAbierta }).map((d) => d.campo)).toEqual(['estado']);
+        expect(aplicarDiferencias(formulario, resultado, ['estado'], sinAbierta).estado).toBe('en_ejecucion');
+        expect(avisosSecop(resultado, formulario, sinAbierta)).toEqual([]);
+    });
+});
+
 describe('aplicarDiferencias', () => {
     const formulario = { ...formularioContrato(guardado), objeto: 'X', valor_inicial: '1', estado: 'suspendido' };
     const otro = conContrato({ secop_proceso: 'CO1.BDOS.111', url_secop: 'https://community.secop.gov.co/otro' });

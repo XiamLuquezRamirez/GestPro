@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import {
-    faArrowUpRightFromSquare, faCalculator, faEye, faFile, faFileSignature, faFlagCheckered, faInfo, faLinkSlash, faMagnifyingGlass, faPlus, faRotate,
-    faSave, faTimes, faTrash,
+    faArrowUpRightFromSquare, faCalculator, faEye, faFile, faFileSignature, faFlagCheckered, faInfo, faLinkSlash, faMagnifyingGlass, faPause, faPlay, faPlus,
+    faRotate, faSave, faTimes, faTrash,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Swal from 'sweetalert2';
@@ -9,7 +9,10 @@ import axios from '../../axios';
 import { avisarError } from '../../utils/avisosPlantillas';
 import { datosEstado, esEdicionDesactualizada, textoFecha, textoValor, valorEnEdicion } from '../../utils/contratacion';
 import {
-    ACTA_VACIA, ACTIVIDAD_VACIA, ANEXO_VACIO, AVANCE_VACIO, MODIFICACION_VACIA, accionesCierre, actividadConAvance, anexosDelContrato,
+    ACTA_VACIA, ACTIVIDAD_VACIA, ANEXO_VACIO, AVANCE_VACIO, MODIFICACION_VACIA, TIPOS_MODIFICACION, accionesCierre, accionesSuspension, actividadConAvance,
+    anexosDelContrato, confirmacionEliminarModificacion, contratoTrasSuspension, datosEliminarModificacion, detalleSuspension, notaSuspensionCierre,
+    puedeEliminarModificacion, suspensionAbierta,
+    textoDiasModificacion,
     anexosParaGuardar, aplicarPrecarga, avanceFinancieroDeActas, avanceFisicoDeActividades, calculoActa, cambiarProyecto, cambiosSinGuardar,
     contratoTrasCierre, contratoVacio, datosActa, datosContrato, datosDelProceso, datosModificacion, erroresGuardarContrato,
     etiquetaTipoModificacion, formularioContrato, muestraBloqueCierre, notaProceso, notaSinEstadoCierre, opcionesEstadoContrato, opcionesProceso,
@@ -23,6 +26,7 @@ import {
     mensajeSecop, referenciaSecop, vincularSecop,
 } from '../../utils/secop';
 import { BloqueCierre, DialogoCierre } from './CierreContrato';
+import { DialogoSuspension, FranjaSuspension } from './SuspensionContrato';
 import { BuscarSecop, DiferenciasSecop } from './SecopContrato';
 import '../../../css/Parametros.css';
 import '../../../css/Contratacion.css';
@@ -72,11 +76,13 @@ export const pedirProcesosProyecto = async (proyectoId) => {
  *   elegido. Sin la prop, el proyecto es el de `proyecto` o el del contrato, sin selector.
  * - `puedeEditar`: sin permiso, el contrato se ve sin controles para modificarlo.
  *   Con permiso, un contrato guardado ofrece «Terminar» y «Liquidar» (o sus correcciones), cada uno
- *   con su diálogo; quedan deshabilitados mientras el formulario tenga cambios sin guardar.
+ *   con su diálogo; quedan deshabilitados mientras el formulario tenga cambios sin guardar. Igual
+ *   «Suspender» (en ejecución) y «Reiniciar» (suspendido), de la fase 7B.
  *   Con permiso, el formulario ofrece SECOP II: "Buscar en SECOP II" (contrato nuevo o sin ID de
  *   SECOP II) y "Actualizar desde SECOP II" (con ID). Lo que se copia de SECOP II se guarda con el contrato.
  * - `recargar(id)`: vuelve a traer los contratos tras un cambio en las pestañas; resuelve el contrato `id` recargado o null.
- * - `onCambio()` (opcional): tras terminar o liquidar el contrato, para que quien lo pinta (y quien
+ * - `onCambio()` (opcional): tras terminar, liquidar, suspender o reiniciar el contrato (o eliminar
+ *   una suspensión), para que quien lo pinta (y quien
  *   pinta a este) recargue lo suyo: el contrato tiene una versión nueva.
  * - `onGuardado(contrato)`: tras guardar (con los avisos ya mostrados); quien lo pinta cierra el editor.
  * - `onCancelar()`: "Cancelar" o "Volver a la lista".
@@ -138,6 +144,8 @@ const ContratoEditor = ({
     const turnoSecop = useRef(0);
     // Cierre del contrato: el diálogo abierto ('terminar', 'liquidar' o null).
     const [dialogoCierre, setDialogoCierre] = useState(null);
+    // Suspensión y reinicio (fase 7B): el diálogo abierto ('suspender', 'reiniciar' o null).
+    const [dialogoSuspension, setDialogoSuspension] = useState(null);
     const idNotaCierre = useId();
     // El formulario del último render, para comparar con SECOP II cuando llega la respuesta.
     const formularioActual = useRef(formContrato);
@@ -782,17 +790,87 @@ const ContratoEditor = ({
         ]);
     };
 
-    // Refrescar los datos del contrato abierto tras registrar o eliminar una modificación
-    const refrescarContratoAbierto = async () => {
+    // ---------- Suspensión y reinicio del contrato (fase 7B) ----------
+
+    // Tras suspender o reiniciar, como tras terminar o liquidar: el contrato abierto toma el estado,
+    // la fecha fin (al reiniciar se corre), los avisos y la versión nueva; el select de estado lo
+    // sigue; la lista se recarga y, con ella, la pestaña Modificaciones (la suspensión es una fila).
+    // Al reiniciar, la suspensión abierta se cierra antes en local con la fecha enviada: si la
+    // recarga falla, la pestaña y el contrato no la siguen mostrando abierta.
+    const alSuspenderOReiniciar = async (tipo, data, enviado = null) => {
+        const { contrato: presentado, avisos = [], resumen = null } = data ?? {};
+        setDialogoSuspension(null);
+        if (!presentado) return;
+        const reinicio = tipo === 'reiniciar' ? enviado : null;
+        setEditingContrato(prev => contratoTrasSuspension(prev, presentado, reinicio));
+        if (reinicio) setModificaciones(prev => contratoTrasSuspension({ modificaciones: prev }, presentado, reinicio).modificaciones ?? prev);
+        setFormContrato(prev => ({ ...prev, estado: presentado.estado ?? prev.estado }));
+        if (resumen) setResumenModificacion(resumen);
+        avisarCambio();
+        let recargado = null;
+        let sinRecargar = [];
+        try {
+            recargado = await recargar?.(editingContrato.id);
+        } catch {
+            sinRecargar = ['No se pudo actualizar la lista de contratos: ciérrala y vuelve a abrirla para ver lo último.'];
+        }
+        if (recargado) {
+            setModificaciones(recargado.modificaciones || []);
+            setEditingContrato(prev => ({ ...prev, modificaciones: recargado.modificaciones || [] }));
+        }
+        const titulo = tipo === 'suspender' ? 'Contrato suspendido' : 'Contrato reiniciado';
+        const texto = tipo === 'reiniciar' && presentado.fecha_fin ? `La fecha fin vigente es el ${textoFecha(presentado.fecha_fin)}.` : undefined;
+        const lista = [...avisos, ...sinRecargar];
+        await (lista.length
+            ? Swal.fire({ icon: 'warning', titleText: `${titulo}, con avisos`, html: htmlErrores('Revisa lo siguiente:', lista) })
+            : Swal.fire({ icon: 'success', title: titulo, text: texto }));
+    };
+
+    // Otra persona cambió el contrato: se avisa y se recarga la lista. Al eliminar una suspensión
+    // (`titulo` propio) también se refresca el contrato abierto y su pestaña Modificaciones: no
+    // había cambios sin guardar, así que toma la versión nueva y se puede volver a intentar.
+    const alSuspensionDesactualizada = async (error, titulo = null) => {
+        const tipo = dialogoSuspension;
+        setDialogoSuspension(null);
+        const recarga = titulo
+            ? refrescarContratoAbierto(true).catch(() => false)
+            : recargarTrasCierre(editingContrato?.id);
+        await Promise.all([
+            recarga,
+            Swal.fire({
+                icon: 'warning',
+                titleText: titulo ?? (tipo === 'reiniciar' ? 'No se guardó el reinicio' : 'No se guardó la suspensión'),
+                text: mensajeApi(error),
+            }),
+        ]);
+    };
+
+    // Refrescar los datos del contrato abierto tras registrar o eliminar una modificación.
+    // `versionNueva`: eliminar una suspensión sí cambia la versión y puede cambiar el estado.
+    // Resuelve true si recargó el contrato abierto, false si `recargar` no lo dio (puede rechazar).
+    const refrescarContratoAbierto = async (versionNueva = false) => {
         const actual = await recargar(formContrato.id);
         if (formContrato.id && actual) {
-            setModificaciones(actual.modificaciones || []);
-            // Los vigentes recalculados salen del contrato recargado; lo escrito en el
-            // formulario se conserva. Registrar una modificación no cambia la versión
-            // (updated_at), y se guarda la que tenía al abrirse: así un cambio de otra
-            // persona entretanto sigue dando 409.
-            setEditingContrato(prev => ({ ...actual, updated_at: prev?.updated_at ?? actual.updated_at }));
+            aplicarContratoRefrescado(actual, versionNueva);
+            return true;
         }
+        return false;
+    };
+
+    // El contrato abierto toma uno recargado (de la lista o de su detalle).
+    const aplicarContratoRefrescado = (actual, versionNueva) => {
+        setModificaciones(actual.modificaciones || []);
+        if (versionNueva) {
+            // Se eliminó sin cambios sin guardar: el contrato y su estado son los recargados.
+            setEditingContrato(actual);
+            setFormContrato(prev => ({ ...prev, estado: actual.estado ?? prev.estado }));
+            return;
+        }
+        // Los vigentes recalculados salen del contrato recargado; lo escrito en el
+        // formulario se conserva. Registrar una modificación no cambia la versión
+        // (updated_at), y se guarda la que tenía al abrirse: así un cambio de otra
+        // persona entretanto sigue dando 409.
+        setEditingContrato(prev => ({ ...actual, updated_at: prev?.updated_at ?? actual.updated_at }));
     };
 
     // Manejar cambios en el formulario de modificación (otrosí)
@@ -830,21 +908,61 @@ const ContratoEditor = ({
         }
     };
 
-    // Eliminar una modificación (otrosí) y recalcular el contrato
-    const eliminarModificacion = async (id) => {
+    // Eliminar una modificación (otrosí) o una suspensión y recalcular el contrato. Eliminar una
+    // suspensión cambia la versión del contrato (y, si estaba abierta, su estado): como los botones
+    // de cierre, espera a que no haya cambios sin guardar. Solo se elimina la última (lo dice el 422).
+    const eliminarModificacion = async (mod) => {
+        const esSuspension = mod.tipo === 'suspension';
+        if (esSuspension && cambiosSinGuardar(formContrato, editingContrato, anexos)) {
+            Swal.fire({ icon: 'warning', title: NOTA_CAMBIOS_SIN_GUARDAR, text: 'Eliminar una suspensión cambia el contrato: guarda o descarta lo que escribiste antes.' });
+            return;
+        }
+        const { titulo, texto } = confirmacionEliminarModificacion(mod);
         const result = await Swal.fire({
-            icon: 'warning', title: '¿Eliminar esta modificación?',
-            text: 'Se recalculará el valor y la fecha fin del contrato.',
+            icon: 'warning', title: titulo, text: texto,
             showCancelButton: true, confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar',
         });
         if (!result.isConfirmed) return;
+        let resp;
         try {
-            const resp = await axios.post('/eliminarModificacionContrato', { id });
-            setResumenModificacion(resp.data.resumen);
-            await refrescarContratoAbierto();
+            // Una suspensión lleva la versión del contrato: con una lista vieja, 409.
+            resp = await axios.post('/eliminarModificacionContrato', datosEliminarModificacion(mod, editingContrato));
         } catch (e) {
-            Swal.fire({ icon: 'error', title: 'Error al eliminar la modificación', text: e.response?.data?.error || e.message });
+            if (esSuspension && esEdicionDesactualizada(e)) {
+                await alSuspensionDesactualizada(e, 'No se eliminó la suspensión');
+                return;
+            }
+            const titulo = esSuspension ? 'No se eliminó la suspensión' : 'Error al eliminar la modificación';
+            Swal.fire({ icon: 'error', title: titulo, text: e.response?.data?.error || mensajeApi(e) });
+            return;
         }
+        // Se eliminó: lo que falle de aquí en adelante es la recarga, no la eliminación.
+        setResumenModificacion(resp.data?.resumen);
+        if (esSuspension) avisarCambio();
+        let enLista = false;
+        try {
+            enLista = await refrescarContratoAbierto(esSuspension);
+        } catch {
+            enLista = false;
+        }
+        if (enLista) return;
+        // La lista no lo dio: el contrato abierto (su versión, estado y modificaciones) se toma de
+        // su detalle; si tampoco, al menos se quita la fila.
+        let detalle = null;
+        if (formContrato.id) {
+            try {
+                detalle = (await axios.get(`/contratos/${formContrato.id}/detalle`)).data ?? null;
+            } catch {
+                detalle = null;
+            }
+        }
+        if (detalle) aplicarContratoRefrescado(detalle, esSuspension);
+        else setModificaciones(prev => prev.filter(m => String(m.id) !== String(mod.id)));
+        await Swal.fire({
+            icon: 'warning',
+            titleText: esSuspension ? 'Suspensión eliminada' : 'Modificación eliminada',
+            text: 'No se pudo actualizar la lista de contratos: ciérrala y vuelve a abrirla para ver lo último.',
+        });
     };
 
     // Formulario de contrato: proceso elegido, nota R4 y vigentes que difieren de los iniciales.
@@ -861,14 +979,22 @@ const ContratoEditor = ({
     // Cierre: qué acciones ofrece el contrato guardado y si el formulario tiene cambios sin guardar
     // (terminar o liquidar cambia la versión: lo escrito ya no se podría guardar).
     const cierre = accionesCierre(editingContrato);
-    const ofreceCierre = puedeEditar && (cierre.terminar || cierre.liquidar);
-    const conCambios = ofreceCierre && cambiosSinGuardar(formContrato, editingContrato, anexos);
+    // Suspensión (fase 7B): suspender en ejecución, reiniciar suspendido. Con una suspensión
+    // abierta no se termina ni se liquida (la nota lo dice) y el estado no sale de suspendido.
+    const suspension = accionesSuspension(editingContrato);
+    const conSuspensionAbierta = suspensionAbierta(editingContrato) !== null;
+    const ofreceAcciones = puedeEditar && (cierre.terminar || cierre.liquidar || suspension.suspender || suspension.reiniciar);
+    const conCambios = ofreceAcciones && cambiosSinGuardar(formContrato, editingContrato, anexos);
     // Un contrato guardado sin estado válido no se termina hasta elegirlo y guardarlo.
-    const notaSinEstado = ofreceCierre ? notaSinEstadoCierre(editingContrato) : null;
+    const notaSinEstado = ofreceAcciones ? notaSinEstadoCierre(editingContrato) : null;
+    const notaSuspension = puedeEditar ? notaSuspensionCierre(editingContrato) : null;
     // Con cambios sin guardar, los botones siguen enfocables (aria-disabled) y la nota explica por
     // qué no hacen nada; mientras se guarda, sí quedan deshabilitados.
     const abrirCierre = (tipo) => {
         if (!conCambios) setDialogoCierre(tipo);
+    };
+    const abrirSuspension = (tipo) => {
+        if (!conCambios) setDialogoSuspension(tipo);
     };
 
     // Propiedades comunes de un control del formulario de contrato: valor, cambio y aviso de error.
@@ -895,8 +1021,32 @@ const ContratoEditor = ({
             <div className="contratos-modal-body">
                 <div className="contrato-form-header">
                     <h3>{editingContrato ? 'Editar Contrato' : 'Agregar Nuevo Contrato'}</h3>
-                    {ofreceCierre && (
+                    {ofreceAcciones && (
                         <div className="ct-cierre-acciones">
+                            {suspension.suspender && (
+                                <button
+                                    type="button"
+                                    className="gp-boton"
+                                    onClick={() => abrirSuspension('suspender')}
+                                    disabled={guardandoContrato}
+                                    aria-disabled={conCambios ? 'true' : undefined}
+                                    aria-describedby={conCambios ? idNotaCierre : undefined}
+                                >
+                                    <FontAwesomeIcon icon={faPause} /> Suspender
+                                </button>
+                            )}
+                            {suspension.reiniciar && (
+                                <button
+                                    type="button"
+                                    className="gp-boton"
+                                    onClick={() => abrirSuspension('reiniciar')}
+                                    disabled={guardandoContrato}
+                                    aria-disabled={conCambios ? 'true' : undefined}
+                                    aria-describedby={conCambios ? idNotaCierre : undefined}
+                                >
+                                    <FontAwesomeIcon icon={faPlay} /> Reiniciar
+                                </button>
+                            )}
                             {cierre.terminar && (
                                 <button
                                     type="button"
@@ -923,6 +1073,7 @@ const ContratoEditor = ({
                             )}
                             {conCambios && <small id={idNotaCierre} className="ct-cierre-nota">{NOTA_CAMBIOS_SIN_GUARDAR}</small>}
                             {notaSinEstado && <small className="ct-cierre-nota">{notaSinEstado}</small>}
+                            {notaSuspension && <small className="ct-cierre-nota">{notaSuspension}</small>}
                         </div>
                     )}
                     <button
@@ -979,6 +1130,7 @@ const ContratoEditor = ({
                         <p className="contratos-info">
                             Completa los datos del contrato. Los campos marcados con * son obligatorios.
                         </p>
+                        {editingContrato && <FranjaSuspension aviso={editingContrato.aviso_suspension} />}
                         {(puedeEditar || referenciaContratoSecop.id) && (
                             <section className="ct-secop" aria-labelledby="secop-titulo">
                                 <div className="ct-secop-cabecera">
@@ -1087,7 +1239,7 @@ const ContratoEditor = ({
                                 {campoContrato('estado', 'Estado *', (
                                     <select {...controlContrato('estado')}>
                                         <option value="">Elige el estado</option>
-                                        {opcionesEstadoContrato(editingContrato?.estado, !editingContrato).map(o => (
+                                        {opcionesEstadoContrato(editingContrato?.estado, !editingContrato, conSuspensionAbierta).map(o => (
                                             <option key={o.valor} value={o.valor} disabled={o.deshabilitado}>{o.etiqueta}</option>
                                         ))}
                                     </select>
@@ -1565,7 +1717,8 @@ const ContratoEditor = ({
                 {contratoActiveTab === 'modificaciones' && (
                     <div className="contratos-modal-section">
                         <p className="contratos-info">
-                            Registre las adiciones y prórrogas (otrosíes) del contrato. El valor y la fecha fin vigentes se recalculan automáticamente desde la base inicial más el historial de modificaciones.
+                            Registra las adiciones y prórrogas (otrosíes) del contrato. El valor y la fecha fin vigentes se recalculan automáticamente desde la base inicial más el historial de modificaciones.
+                            Las suspensiones se registran con «Suspender» y «Reiniciar» y se listan aquí: al reiniciar, sus días se suman a la fecha fin.
                         </p>
 
                         {resumenModificacion && (
@@ -1614,9 +1767,7 @@ const ContratoEditor = ({
                                     <div className="form-group">
                                         <label htmlFor="tipo_modificacion">Tipo *</label>
                                         <select id="tipo_modificacion" name="tipo" value={formModificacion.tipo} onChange={handleModificacionChange}>
-                                            <option value="adicion">Adición</option>
-                                            <option value="prorroga">Prórroga</option>
-                                            <option value="adicion_prorroga">Adición y Prórroga</option>
+                                            {TIPOS_MODIFICACION.map(([valor, etiqueta]) => <option key={valor} value={valor}>{etiqueta}</option>)}
                                         </select>
                                     </div>
                                     <div className="form-group">
@@ -1668,12 +1819,12 @@ const ContratoEditor = ({
                                     <table>
                                         <thead>
                                             <tr>
-                                                <th>N° Otrosí</th>
+                                                <th>N° Otrosí o acta</th>
                                                 <th>Tipo</th>
                                                 <th>Valor adición</th>
-                                                <th>Días prórroga</th>
+                                                <th>Días</th>
                                                 <th>Fecha</th>
-                                                <th>Justificación</th>
+                                                <th>Justificación o motivo</th>
                                                 <th>Acciones</th>
                                             </tr>
                                         </thead>
@@ -1681,19 +1832,24 @@ const ContratoEditor = ({
                                             {modificaciones.map(mod => (
                                                 <tr key={mod.id}>
                                                     <td>{mod.numero_otrosi || '-'}</td>
-                                                    <td>{etiquetaTipoModificacion(mod.tipo)}</td>
+                                                    <td>
+                                                        {etiquetaTipoModificacion(mod.tipo)}
+                                                        {detalleSuspension(mod) && <small className="ct-suspension-detalle">{detalleSuspension(mod)}</small>}
+                                                    </td>
                                                     <td>{mod.valor_adicion ? formatoMoneda(Number(mod.valor_adicion)) : '-'}</td>
-                                                    <td>{mod.dias_prorroga || '-'}</td>
+                                                    <td>{textoDiasModificacion(mod)}</td>
                                                     <td>{mod.fecha_modificacion || '-'}</td>
                                                     <td>{mod.justificacion || '-'}</td>
                                                     <td>
                                                         <div className="anexo-actions">
-                                                            {puedeEditar && (
+                                                            {/* De las suspensiones, solo la última se elimina. */}
+                                                            {puedeEditar && puedeEliminarModificacion(mod, modificaciones) && (
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => eliminarModificacion(mod.id)}
+                                                                    onClick={() => eliminarModificacion(mod)}
                                                                     className="btn-delete-anexo"
-                                                                    title="Eliminar modificación"
+                                                                    title={mod.tipo === 'suspension' ? 'Eliminar suspensión' : 'Eliminar modificación'}
+                                                                    aria-label={mod.tipo === 'suspension' ? 'Eliminar suspensión' : 'Eliminar modificación'}
                                                                 >
                                                                     <FontAwesomeIcon icon={faTrash} />
                                                                 </button>
@@ -1721,6 +1877,15 @@ const ContratoEditor = ({
                     avisos={dialogoSecop.avisos}
                     onCopiar={copiarDiferencias}
                     onCerrar={() => setDialogoSecop(null)}
+                />
+            )}
+            {dialogoSuspension && editingContrato && (
+                <DialogoSuspension
+                    tipo={dialogoSuspension}
+                    contrato={editingContrato}
+                    onGuardado={(data, enviado) => alSuspenderOReiniciar(dialogoSuspension, data, enviado)}
+                    onDesactualizado={alSuspensionDesactualizada}
+                    onCerrar={() => setDialogoSuspension(null)}
                 />
             )}
             {dialogoCierre && editingContrato && (

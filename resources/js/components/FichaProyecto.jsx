@@ -5,7 +5,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import axios from '../axios';
 import { datosGenerales, errorDeFicha, esIdProyecto, filaProceso, resumenFormulacion } from '../utils/fichaProyecto';
 import { estadoDesdeFicha, estadoNuevoContratoDeProyecto, filaContrato, puedeEditarContratos, rutaContrato } from '../utils/contratosModulo';
-import { textoAvisoCierre } from '../utils/contratos';
+import { chipAvisoSuspension, textoAvisoCierre, textoAvisoSuspension } from '../utils/contratos';
 import { RUTA_CONTRATOS } from '../utils/navegacion';
 import ChipsAvisosProceso from './ChipsAvisosProceso';
 import ProcesosProyecto from './ProcesosProyecto';
@@ -145,8 +145,11 @@ const Procesos = ({ procesos, onAbrir }) => {
 };
 
 const Contratos = ({ proyecto, contratos, edita }) => {
-    // Como en la lista del módulo Contratos: con el aviso de datos de cierre que faltan.
-    const filas = contratos.map((c) => ({ ...filaContrato(c), avisoCierre: textoAvisoCierre(c.aviso_cierre) }));
+    // Como en la lista del módulo Contratos: con el aviso de datos de cierre que faltan y el de suspensión.
+    const filas = contratos.map((c) => ({
+        ...filaContrato(c), avisoCierre: textoAvisoCierre(c.aviso_cierre),
+        avisoSuspension: textoAvisoSuspension(c.aviso_suspension), chipSuspension: chipAvisoSuspension(c.aviso_suspension),
+    }));
     return (
         <Bloque
             titulo="Contratos"
@@ -175,8 +178,9 @@ const Contratos = ({ proyecto, contratos, edita }) => {
                                     <td data-etiqueta="Número"><Link to={rutaContrato(f.id)} state={estadoDesdeFicha(proyecto.id)} className="ct-enlace">{f.numero}</Link></td>
                                     <td data-etiqueta="Objeto"><span className="ct-objeto" title={f.objeto}>{f.objeto}</span></td>
                                     <td data-etiqueta="Estado">
-                                        <span className={`ct-estado ct-estado-${f.tono}`}>{f.estado}</span>
+                                        <span className={`ct-estado ct-estado-${f.tono}`} title={f.avisoSuspension ?? undefined}>{f.estado}</span>
                                         {f.avisoCierre && <span className="ct-aviso-cierre ct-estado ct-estado-ambar">{f.avisoCierre}</span>}
+                                        {f.chipSuspension && <span className="ct-aviso-cierre ct-estado ct-estado-coral" title={f.avisoSuspension}>{f.chipSuspension}</span>}
                                     </td>
                                     <td data-etiqueta="Valor vigente" className="numero">{f.valor}</td>
                                     <td data-etiqueta="Físico" className="numero">{f.avanceFisico}</td>

@@ -55,6 +55,33 @@ import {
     saldoLiquidacion,
     textoAvisoCierre,
 } from './contratos';
+import {
+    CAMPOS_REINICIAR,
+    CAMPOS_SUSPENDER,
+    TIPOS_MODIFICACION,
+    accionesSuspension,
+    chipAvisoSuspension,
+    confirmacionEliminarModificacion,
+    contratoTrasSuspension,
+    datosEliminarModificacion,
+    datosReiniciar,
+    datosSuspender,
+    detalleSuspension,
+    diasEntre,
+    erroresReiniciar,
+    erroresSuspender,
+    formularioReiniciar,
+    formularioSuspender,
+    notaSuspensionCierre,
+    puedeEliminarModificacion,
+    sumarDias,
+    suspensionAbierta,
+    textoAvisoSuspension,
+    textoDiasModificacion,
+    textoReinicioPrevisto,
+    textoVistaPreviaReinicio,
+    vistaPreviaReinicio,
+} from './contratos';
 
 // Un contrato como lo devuelve presentar (POST /guardarContrato).
 const presentado = {
@@ -704,17 +731,20 @@ describe('opcionesEstadoContrato', () => {
         expect(opcionesEstadoContrato('en_ejecucion', false).map((o) => o.valor)).toEqual(ESTADOS_CONTRATO.map(([v]) => v));
     });
 
-    it('al editar, terminado y liquidado se deshabilitan y dicen qué acción usar', () => {
+    it('al editar, suspendido, terminado y liquidado se deshabilitan y dicen qué acción usar', () => {
         const opciones = opcionesEstadoContrato('en_ejecucion', false);
-        expect(deshabilitados(opciones)).toEqual(['terminado', 'liquidado']);
+        expect(deshabilitados(opciones)).toEqual(['suspendido', 'terminado', 'liquidado']);
+        expect(opciones.find((o) => o.valor === 'suspendido').etiqueta).toBe('Suspendido (usa «Suspender»)');
         expect(opciones.find((o) => o.valor === 'terminado').etiqueta).toBe('Terminado (usa «Terminar»)');
         expect(opciones.find((o) => o.valor === 'liquidado').etiqueta).toBe('Liquidado (usa «Liquidar»)');
         expect(opciones.find((o) => o.valor === 'en_ejecucion')).toEqual({ valor: 'en_ejecucion', etiqueta: 'En ejecución', deshabilitado: false });
     });
 
     it('el estado guardado sigue habilitado: un terminado puede quedarse así, pero no pasar a liquidado', () => {
-        expect(deshabilitados(opcionesEstadoContrato('terminado', false))).toEqual(['liquidado']);
-        expect(deshabilitados(opcionesEstadoContrato('liquidado', false))).toEqual(['terminado']);
+        expect(deshabilitados(opcionesEstadoContrato('terminado', false))).toEqual(['suspendido', 'liquidado']);
+        expect(deshabilitados(opcionesEstadoContrato('liquidado', false))).toEqual(['suspendido', 'terminado']);
+        expect(deshabilitados(opcionesEstadoContrato('suspendido', false))).toEqual(['terminado', 'liquidado']);
+        expect(opcionesEstadoContrato('suspendido', false).find((o) => o.valor === 'suspendido').etiqueta).toBe('Suspendido');
         expect(opcionesEstadoContrato('liquidado', false).find((o) => o.valor === 'liquidado').etiqueta).toBe('Liquidado');
     });
 
@@ -927,6 +957,48 @@ describe('avisoEstadoCierreSecop', () => {
     });
 });
 
+describe('estado suspendido desde SECOP II', () => {
+    it('no se aplica «Suspendido» a un contrato guardado que no lo está: se usa «Suspender»', () => {
+        expect(estadoCierreBloqueado('suspendido', 'en_ejecucion')).toBe(true);
+        expect(estadoCierreBloqueado('suspendido', 'celebrado', false)).toBe(true);
+        expect(estadoCierreBloqueado('suspendido', null, false)).toBe(true);
+        expect(avisoEstadoCierreSecop('suspendido', 'en_ejecucion'))
+            .toBe('SECOP II dice «Suspendido»: usa «Suspender» para registrarlo con su fecha.');
+        expect(avisoEstadoCierreSecop('suspendido', null))
+            .toBe('SECOP II dice «Suspendido»: usa «Suspender» para registrarlo con su fecha.');
+    });
+
+    it('a un contrato terminado o liquidado SECOP II lo ve suspendido: va detrás, se bloquea sin aviso', () => {
+        expect(estadoCierreBloqueado('suspendido', 'liquidado')).toBe(true);
+        expect(avisoEstadoCierreSecop('suspendido', 'liquidado')).toBeNull();
+        expect(avisoEstadoCierreSecop('suspendido', 'terminado')).toBeNull();
+    });
+
+    it('con una suspensión abierta, SECOP II no lo saca de suspendido: se usa «Reiniciar»', () => {
+        expect(estadoCierreBloqueado('en_ejecucion', 'suspendido', false, true)).toBe(true);
+        expect(estadoCierreBloqueado('celebrado', 'suspendido', false, true)).toBe(true);
+        expect(estadoCierreBloqueado('terminado', 'suspendido', false, true)).toBe(true);
+        expect(avisoEstadoCierreSecop('en_ejecucion', 'suspendido', false, true))
+            .toBe('SECOP II dice «En ejecución»: usa «Reiniciar» para registrar el reinicio.');
+        expect(avisoEstadoCierreSecop('liquidado', 'suspendido', false, true))
+            .toBe('SECOP II dice «Liquidado»: usa «Reiniciar» para registrar el reinicio.');
+    });
+
+    it('sin suspensión abierta, un suspendido sí toma otro estado (salvo terminado y liquidado); el mismo estado, nada', () => {
+        expect(estadoCierreBloqueado('en_ejecucion', 'suspendido')).toBe(false);
+        expect(avisoEstadoCierreSecop('en_ejecucion', 'suspendido')).toBeNull();
+        expect(estadoCierreBloqueado('suspendido', 'suspendido', false, true)).toBe(false);
+        expect(avisoEstadoCierreSecop('suspendido', 'suspendido', false, true)).toBeNull();
+        expect(estadoCierreBloqueado(undefined, 'suspendido', false, true)).toBe(false);
+        expect(avisoEstadoCierreSecop(undefined, 'suspendido', false, true)).toBeNull();
+    });
+
+    it('un contrato nuevo toma «Suspendido» de SECOP II', () => {
+        expect(estadoCierreBloqueado('suspendido', '', true)).toBe(false);
+        expect(avisoEstadoCierreSecop('suspendido', '', true)).toBeNull();
+    });
+});
+
 describe('estadoCierreBloqueado', () => {
     it('SECOP II no cambia el estado de un contrato guardado a terminado ni a liquidado', () => {
         expect(estadoCierreBloqueado('liquidado', 'en_ejecucion')).toBe(true);
@@ -966,5 +1038,386 @@ describe('muestraBloqueCierre', () => {
 
     it('sin contrato, no', () => {
         expect(muestraBloqueCierre(null)).toBe(false);
+    });
+});
+
+
+// ---------- Suspensión y reinicio del contrato (fase 7B) ----------
+
+// Un contrato suspendido con su suspensión abierta, como lo devuelven presentar y los listados.
+const avisoAbierto = { desde: '2026-11-05', dias: 14, reinicio_previsto: null, vencido: false };
+const suspendido = { ...presentado, estado: 'suspendido', aviso_suspension: avisoAbierto };
+// Filas de la pestaña Modificaciones (detalle y GET /listarContratos).
+const filaSuspension = (datos = {}) => ({
+    id: 30, contrato_id: 7, numero_otrosi: 'Acta 2', tipo: 'suspension', valor_adicion: null, dias_prorroga: null,
+    fecha_modificacion: '2026-11-05', fecha_reinicio: null, fecha_reinicio_prevista: null, justificacion: 'Lluvias', ...datos,
+});
+
+describe('suspensionAbierta', () => {
+    it('la del aviso de la API: desde cuándo y el reinicio previsto', () => {
+        expect(suspensionAbierta(suspendido)).toEqual({ desde: '2026-11-05', reinicio_previsto: null });
+        expect(suspensionAbierta({ ...suspendido, aviso_suspension: { ...avisoAbierto, reinicio_previsto: '2026-11-10' } }))
+            .toEqual({ desde: '2026-11-05', reinicio_previsto: '2026-11-10' });
+    });
+
+    it('sin la clave del aviso, la fila abierta de sus modificaciones (con las fechas sin hora)', () => {
+        const contrato = {
+            ...presentado, estado: 'suspendido',
+            modificaciones: [{ id: 1, tipo: 'prorroga', dias_prorroga: 10 }, filaSuspension({ fecha_modificacion: '2026-11-05 00:00:00', fecha_reinicio_prevista: '2026-12-01' })],
+        };
+        expect(suspensionAbierta(contrato)).toEqual({ desde: '2026-11-05', reinicio_previsto: '2026-12-01' });
+    });
+
+    it('sin suspensión abierta (cerradas o ninguna), null', () => {
+        expect(suspensionAbierta(presentado)).toBeNull();
+        expect(suspensionAbierta({ ...presentado, modificaciones: [filaSuspension({ fecha_reinicio: '2026-11-10', dias_prorroga: 5 })] })).toBeNull();
+        expect(suspensionAbierta({ ...presentado, estado: 'suspendido', aviso_suspension: null })).toBeNull();
+        expect(suspensionAbierta(null)).toBeNull();
+    });
+
+    it('con la clave del aviso (aunque sea null), manda el aviso y no las modificaciones, que pueden ir atrasadas', () => {
+        // Tras reiniciar sin poder recargar: la fila sigue abierta en local, pero el aviso ya es null.
+        expect(suspensionAbierta({ ...presentado, estado: 'en_ejecucion', aviso_suspension: null, modificaciones: [filaSuspension()] })).toBeNull();
+        // Tras suspender sin poder recargar: la fila nueva aún no está, el aviso sí.
+        expect(suspensionAbierta({ ...suspendido, modificaciones: [] })).toEqual({ desde: '2026-11-05', reinicio_previsto: null });
+        // Una clave undefined cuenta como sin aviso: se miran las modificaciones.
+        expect(suspensionAbierta({ ...presentado, aviso_suspension: undefined, modificaciones: [filaSuspension()] }))
+            .toEqual({ desde: '2026-11-05', reinicio_previsto: null });
+    });
+});
+
+describe('accionesSuspension', () => {
+    it('un contrato guardado en ejecución se suspende; uno suspendido se reinicia', () => {
+        expect(accionesSuspension(presentado)).toEqual({ suspender: true, reiniciar: false });
+        expect(accionesSuspension(suspendido)).toEqual({ suspender: false, reiniciar: true });
+    });
+
+    it('un suspendido sin suspensión abierta (p. ej. de SECOP II) también se reinicia', () => {
+        expect(accionesSuspension({ ...presentado, estado: 'suspendido' })).toEqual({ suspender: false, reiniciar: true });
+    });
+
+    it('en ejecución con una suspensión abierta no se suspende otra vez', () => {
+        expect(accionesSuspension({ ...presentado, modificaciones: [filaSuspension()] })).toEqual({ suspender: false, reiniciar: false });
+    });
+
+    it('en otros estados, o sin contrato guardado, ninguna', () => {
+        ['celebrado', 'terminado', 'liquidado', 'anulado', null, 'Vigente'].forEach((estado) => {
+            expect(accionesSuspension({ ...presentado, estado })).toEqual({ suspender: false, reiniciar: false });
+        });
+        expect(accionesSuspension({ ...presentado, id: undefined })).toEqual({ suspender: false, reiniciar: false });
+        expect(accionesSuspension(null)).toEqual({ suspender: false, reiniciar: false });
+    });
+});
+
+describe('cierre con una suspensión abierta', () => {
+    it('no se termina ni se liquida: primero se reinicia, con su nota', () => {
+        expect(accionesCierre(suspendido)).toMatchObject({ terminar: false, liquidar: false });
+        expect(notaSuspensionCierre(suspendido)).toBe('Reinicia el contrato antes de terminarlo o liquidarlo.');
+    });
+
+    it('un suspendido sin suspensión abierta sigue como en la fase 7A, sin nota', () => {
+        expect(accionesCierre({ ...presentado, estado: 'suspendido' })).toMatchObject({ terminar: true, liquidar: true });
+        expect(notaSuspensionCierre({ ...presentado, estado: 'suspendido' })).toBeNull();
+        expect(notaSuspensionCierre(presentado)).toBeNull();
+        expect(notaSuspensionCierre(null)).toBeNull();
+    });
+});
+
+describe('opcionesEstadoContrato con una suspensión abierta', () => {
+    const deshabilitados = (opciones) => opciones.filter((o) => o.deshabilitado).map((o) => o.valor);
+
+    it('solo queda suspendido: para salir se usa «Reiniciar»', () => {
+        const opciones = opcionesEstadoContrato('suspendido', false, true);
+        expect(deshabilitados(opciones)).toEqual(['celebrado', 'en_ejecucion', 'terminado', 'liquidado', 'anulado']);
+        expect(opciones.find((o) => o.valor === 'en_ejecucion').etiqueta).toBe('En ejecución (usa «Reiniciar»)');
+        expect(opciones.find((o) => o.valor === 'celebrado').etiqueta).toBe('Celebrado (reinicia primero)');
+        expect(opciones.find((o) => o.valor === 'anulado').etiqueta).toBe('Anulado (reinicia primero)');
+        expect(opciones.find((o) => o.valor === 'terminado').etiqueta).toBe('Terminado (reinicia primero)');
+        expect(opciones.find((o) => o.valor === 'liquidado').etiqueta).toBe('Liquidado (reinicia primero)');
+        expect(opciones.find((o) => o.valor === 'suspendido')).toEqual({ valor: 'suspendido', etiqueta: 'Suspendido', deshabilitado: false });
+    });
+
+    it('un contrato nuevo no tiene suspensiones: cualquier estado', () => {
+        expect(deshabilitados(opcionesEstadoContrato('', true, false))).toEqual([]);
+    });
+});
+
+describe('textos del aviso de suspensión', () => {
+    it('desde cuándo y cuántos días lleva suspendido', () => {
+        expect(textoAvisoSuspension(avisoAbierto)).toBe('Suspendido desde 05/11/2026 (14 días)');
+        expect(textoAvisoSuspension({ ...avisoAbierto, dias: 1 })).toBe('Suspendido desde 05/11/2026 (1 día)');
+        expect(textoAvisoSuspension({ ...avisoAbierto, dias: 0 })).toBe('Suspendido desde 05/11/2026 (0 días)');
+        expect(textoAvisoSuspension(null)).toBeNull();
+        expect(textoAvisoSuspension(undefined)).toBeNull();
+    });
+
+    it('el chip solo si el reinicio previsto ya pasó', () => {
+        expect(chipAvisoSuspension({ ...avisoAbierto, reinicio_previsto: '2026-11-10', vencido: true })).toBe('Reinicio vencido');
+        expect(chipAvisoSuspension({ ...avisoAbierto, reinicio_previsto: '2026-11-30', vencido: false })).toBeNull();
+        expect(chipAvisoSuspension(avisoAbierto)).toBeNull();
+        expect(chipAvisoSuspension(null)).toBeNull();
+    });
+
+    it('el reinicio previsto, con «vencido» si pasó; sin previsto, null', () => {
+        expect(textoReinicioPrevisto({ ...avisoAbierto, reinicio_previsto: '2026-11-10', vencido: true })).toBe('Reinicio previsto el 10/11/2026: vencido');
+        expect(textoReinicioPrevisto({ ...avisoAbierto, reinicio_previsto: '2026-11-30', vencido: false })).toBe('Reinicio previsto el 30/11/2026');
+        expect(textoReinicioPrevisto(avisoAbierto)).toBeNull();
+        expect(textoReinicioPrevisto(null)).toBeNull();
+    });
+});
+
+describe('días calendario', () => {
+    it('diasEntre cuenta días exactos entre fechas año-mes-día, sin zona horaria', () => {
+        expect(diasEntre('2026-11-05', '2026-11-19')).toBe(14);
+        expect(diasEntre('2026-11-05', '2026-11-05')).toBe(0);
+        // Cruza el fin de año, un 29 de febrero y meses de distinto largo.
+        expect(diasEntre('2026-12-25', '2027-01-05')).toBe(11);
+        expect(diasEntre('2028-02-28', '2028-03-01')).toBe(2);
+        expect(diasEntre('2026-03-01', '2026-11-01')).toBe(245);
+        expect(diasEntre('2026-11-19', '2026-11-05')).toBe(-14);
+        expect(diasEntre('2026-11-05 00:00:00', '2026-11-06')).toBe(1);
+    });
+
+    it('diasEntre sin una fecha válida, null', () => {
+        expect(diasEntre('', '2026-11-05')).toBeNull();
+        expect(diasEntre('2026-11-05', null)).toBeNull();
+        expect(diasEntre('05/11/2026', '2026-11-06')).toBeNull();
+    });
+
+    it('sumarDias corre la fecha los días dados', () => {
+        expect(sumarDias('2026-06-30', 14)).toBe('2026-07-14');
+        expect(sumarDias('2026-12-20', 15)).toBe('2027-01-04');
+        expect(sumarDias('2028-02-28', 1)).toBe('2028-02-29');
+        expect(sumarDias('2026-06-30', 0)).toBe('2026-06-30');
+        expect(sumarDias('2026-06-30 00:00:00', 1)).toBe('2026-07-01');
+        expect(sumarDias('', 3)).toBeNull();
+    });
+});
+
+describe('formularios y datos de suspender y reiniciar', () => {
+    const hoy = '2026-11-19';
+
+    it('los campos de cada diálogo, con los nombres de la API', () => {
+        expect(CAMPOS_SUSPENDER).toEqual(['fecha_suspension', 'fecha_reinicio_prevista', 'numero_acta', 'motivo']);
+        expect(CAMPOS_REINICIAR).toEqual(['fecha_suspension', 'fecha_reinicio', 'observacion']);
+    });
+
+    it('los formularios empiezan con la fecha de hoy', () => {
+        expect(formularioSuspender(presentado, hoy)).toEqual({ fecha_suspension: hoy, fecha_reinicio_prevista: '', numero_acta: '', motivo: '' });
+        expect(formularioReiniciar(suspendido, hoy)).toEqual({ fecha_suspension: '', fecha_reinicio: hoy, observacion: '' });
+    });
+
+    it('lo que espera POST /contratos/{id}/suspender: vacíos como null, textos recortados y la versión', () => {
+        expect(datosSuspender({ fecha_suspension: '2026-11-05', fecha_reinicio_prevista: '', numero_acta: '  Acta 2 ', motivo: ' ' }, presentado))
+            .toEqual({ fecha_suspension: '2026-11-05', fecha_reinicio_prevista: null, numero_acta: 'Acta 2', motivo: null, actualizado: '2026-11-18 09:00:00' });
+        expect(datosSuspender({ fecha_suspension: '2026-11-05', fecha_reinicio_prevista: '2026-12-01', numero_acta: '', motivo: 'Lluvias' }, { ...presentado, updated_at: null }))
+            .toEqual({ fecha_suspension: '2026-11-05', fecha_reinicio_prevista: '2026-12-01', numero_acta: null, motivo: 'Lluvias', actualizado: null });
+    });
+
+    it('lo que espera POST /contratos/{id}/reiniciar: la fecha de suspensión solo si no hay una abierta', () => {
+        const formulario = { fecha_suspension: '2026-10-01', fecha_reinicio: '2026-11-19', observacion: ' Acta de reinicio ' };
+        expect(datosReiniciar(formulario, suspendido))
+            .toEqual({ fecha_reinicio: '2026-11-19', observacion: 'Acta de reinicio', actualizado: '2026-11-18 09:00:00' });
+        expect(datosReiniciar({ ...formulario, observacion: '' }, { ...suspendido, aviso_suspension: null }))
+            .toEqual({ fecha_reinicio: '2026-11-19', fecha_suspension: '2026-10-01', observacion: null, actualizado: '2026-11-18 09:00:00' });
+    });
+});
+
+describe('erroresSuspender', () => {
+    const hoy = '2026-11-19';
+    const formulario = { fecha_suspension: '2026-11-05', fecha_reinicio_prevista: '', numero_acta: '', motivo: '' };
+
+    it('sin errores con una fecha entre el inicio y hoy', () => {
+        expect(erroresSuspender(formulario, presentado, hoy)).toEqual({});
+        expect(erroresSuspender({ ...formulario, fecha_suspension: hoy, fecha_reinicio_prevista: hoy }, presentado, hoy)).toEqual({});
+    });
+
+    it('la fecha de suspensión: obligatoria, no futura, no anterior al inicio ni al último reinicio', () => {
+        expect(erroresSuspender({ ...formulario, fecha_suspension: '' }, presentado, hoy)).toEqual({ fecha_suspension: 'Escribe la fecha de suspensión.' });
+        expect(erroresSuspender({ ...formulario, fecha_suspension: '2026-11-20' }, presentado, hoy))
+            .toEqual({ fecha_suspension: 'La fecha de suspensión no puede ser posterior a hoy.' });
+        expect(erroresSuspender({ ...formulario, fecha_suspension: '2026-01-09' }, presentado, hoy))
+            .toEqual({ fecha_suspension: 'La fecha de suspensión no puede ser anterior a la de inicio.' });
+        const conCerrada = { ...presentado, modificaciones: [filaSuspension({ fecha_modificacion: '2026-10-01', fecha_reinicio: '2026-11-10 00:00:00', dias_prorroga: 40 })] };
+        expect(erroresSuspender(formulario, conCerrada, hoy))
+            .toEqual({ fecha_suspension: 'La fecha de suspensión no puede ser anterior al último reinicio.' });
+        expect(erroresSuspender({ ...formulario, fecha_suspension: '2026-11-10' }, conCerrada, hoy)).toEqual({});
+    });
+
+    it('la prevista no es anterior a la de suspensión; el acta y el motivo tienen largo máximo', () => {
+        expect(erroresSuspender({ ...formulario, fecha_reinicio_prevista: '2026-11-04' }, presentado, hoy))
+            .toEqual({ fecha_reinicio_prevista: 'La fecha prevista de reinicio no puede ser anterior a la de suspensión.' });
+        // La prevista puede ser futura.
+        expect(erroresSuspender({ ...formulario, fecha_reinicio_prevista: '2027-01-15' }, presentado, hoy)).toEqual({});
+        expect(erroresSuspender({ ...formulario, numero_acta: 'x'.repeat(51), motivo: 'x'.repeat(2001) }, presentado, hoy)).toEqual({
+            numero_acta: 'El número del acta admite hasta 50 caracteres.',
+            motivo: 'El motivo admite hasta 2000 caracteres.',
+        });
+        expect(erroresSuspender({ ...formulario, numero_acta: 'x'.repeat(50) }, presentado, hoy)).toEqual({});
+    });
+});
+
+describe('erroresReiniciar', () => {
+    const hoy = '2026-11-19';
+    const formulario = { fecha_suspension: '', fecha_reinicio: '2026-11-19', observacion: '' };
+
+    it('con la suspensión abierta, solo la fecha de reinicio: obligatoria, no futura, no anterior a la suspensión', () => {
+        expect(erroresReiniciar(formulario, suspendido, hoy)).toEqual({});
+        expect(erroresReiniciar({ ...formulario, fecha_reinicio: '2026-11-05' }, suspendido, hoy)).toEqual({});
+        expect(erroresReiniciar({ ...formulario, fecha_reinicio: '' }, suspendido, hoy)).toEqual({ fecha_reinicio: 'Escribe la fecha de reinicio.' });
+        expect(erroresReiniciar({ ...formulario, fecha_reinicio: '2026-11-20' }, suspendido, hoy))
+            .toEqual({ fecha_reinicio: 'La fecha de reinicio no puede ser posterior a hoy.' });
+        expect(erroresReiniciar({ ...formulario, fecha_reinicio: '2026-11-04' }, suspendido, hoy))
+            .toEqual({ fecha_reinicio: 'La fecha de reinicio no puede ser anterior a la de suspensión.' });
+    });
+
+    it('sin suspensión abierta pide la fecha de suspensión, con las reglas de suspender', () => {
+        const sinAbierta = { ...presentado, estado: 'suspendido', aviso_suspension: null };
+        expect(erroresReiniciar(formulario, sinAbierta, hoy)).toEqual({ fecha_suspension: 'Escribe la fecha de suspensión.' });
+        expect(erroresReiniciar({ ...formulario, fecha_suspension: '2026-01-01' }, sinAbierta, hoy))
+            .toEqual({ fecha_suspension: 'La fecha de suspensión no puede ser anterior a la de inicio.' });
+        expect(erroresReiniciar({ ...formulario, fecha_suspension: '2026-10-01', fecha_reinicio: '2026-09-30' }, sinAbierta, hoy))
+            .toEqual({ fecha_reinicio: 'La fecha de reinicio no puede ser anterior a la de suspensión.' });
+        expect(erroresReiniciar({ ...formulario, fecha_suspension: '2026-10-01' }, sinAbierta, hoy)).toEqual({});
+    });
+
+    it('con la suspensión abierta, la fecha de suspensión escrita no cuenta', () => {
+        expect(erroresReiniciar({ ...formulario, fecha_suspension: '2030-01-01' }, suspendido, hoy)).toEqual({});
+    });
+
+    it('la observación tiene largo máximo', () => {
+        expect(erroresReiniciar({ ...formulario, observacion: 'x'.repeat(2001) }, suspendido, hoy))
+            .toEqual({ observacion: 'La observación admite hasta 2000 caracteres.' });
+    });
+});
+
+describe('vista previa del reinicio', () => {
+    it('los días suspendidos y la fecha fin corrida', () => {
+        const vista = vistaPreviaReinicio({ fecha_reinicio: '2026-11-19' }, suspendido);
+        expect(vista).toEqual({ dias: 14, fechaFinActual: '2026-06-30', fechaFinNueva: '2026-07-14' });
+        expect(textoVistaPreviaReinicio(vista)).toBe('Se suman 14 días: la fecha fin pasa de 30/06/2026 a 14/07/2026.');
+    });
+
+    it('sin suspensión abierta usa la fecha de suspensión escrita', () => {
+        const sinAbierta = { ...presentado, estado: 'suspendido', aviso_suspension: null, fecha_fin: '2026-12-31 00:00:00' };
+        expect(vistaPreviaReinicio({ fecha_suspension: '2026-11-18', fecha_reinicio: '2026-11-19' }, sinAbierta))
+            .toEqual({ dias: 1, fechaFinActual: '2026-12-31', fechaFinNueva: '2027-01-01' });
+        expect(textoVistaPreviaReinicio({ dias: 1, fechaFinActual: '2026-12-31', fechaFinNueva: '2027-01-01' }))
+            .toBe('Se suma 1 día: la fecha fin pasa de 31/12/2026 a 01/01/2027.');
+    });
+
+    it('el mismo día no suma días', () => {
+        const vista = vistaPreviaReinicio({ fecha_reinicio: '2026-11-05' }, suspendido);
+        expect(vista).toEqual({ dias: 0, fechaFinActual: '2026-06-30', fechaFinNueva: '2026-06-30' });
+        expect(textoVistaPreviaReinicio(vista)).toBe('No se suman días: la fecha fin no cambia.');
+    });
+
+    it('sin fecha fin, solo los días', () => {
+        const vista = vistaPreviaReinicio({ fecha_reinicio: '2026-11-19' }, { ...suspendido, fecha_fin: null });
+        expect(vista).toEqual({ dias: 14, fechaFinActual: null, fechaFinNueva: null });
+        expect(textoVistaPreviaReinicio(vista)).toBe('Se suman 14 días a la fecha fin del contrato.');
+    });
+
+    it('sin fechas completas o con el reinicio antes de la suspensión, null', () => {
+        expect(vistaPreviaReinicio({ fecha_reinicio: '' }, suspendido)).toBeNull();
+        expect(vistaPreviaReinicio({ fecha_reinicio: '2026-11-04' }, suspendido)).toBeNull();
+        expect(vistaPreviaReinicio({ fecha_suspension: '', fecha_reinicio: '2026-11-19' }, { ...suspendido, aviso_suspension: null })).toBeNull();
+        expect(textoVistaPreviaReinicio(null)).toBeNull();
+    });
+});
+
+describe('contratoTrasSuspension', () => {
+    it('toma del contrato presentado el estado, la fecha fin, los avisos y la versión; lo demás se conserva', () => {
+        const abierto = { ...listado, anexos: [{ id: 1 }], modificaciones: [{ id: 2 }] };
+        const respuesta = {
+            ...presentado, estado: 'en_ejecucion', fecha_fin: '2026-07-14', aviso_suspension: null, aviso_cierre: null,
+            updated_at: '2026-11-19T15:00:00-05:00', objeto: 'No se toma',
+        };
+        expect(contratoTrasSuspension(abierto, respuesta)).toEqual({
+            ...abierto, estado: 'en_ejecucion', fecha_fin: '2026-07-14', aviso_suspension: null, aviso_cierre: null, updated_at: '2026-11-19T15:00:00-05:00',
+        });
+        expect(contratoTrasSuspension(abierto, { ...respuesta, aviso_suspension: undefined, aviso_cierre: undefined }))
+            .toMatchObject({ aviso_suspension: null, aviso_cierre: null });
+    });
+
+    it('al reiniciar, cierra en local la suspensión abierta con la fecha de reinicio y sus días', () => {
+        const abierto = { ...suspendido, modificaciones: [{ id: 2, tipo: 'prorroga', dias_prorroga: 10 }, filaSuspension({ fecha_modificacion: '2026-11-05 00:00:00' })] };
+        const respuesta = { ...presentado, estado: 'en_ejecucion', fecha_fin: '2026-07-14', aviso_suspension: null, updated_at: 'v2' };
+        const tras = contratoTrasSuspension(abierto, respuesta, { fecha_reinicio: '2026-11-19' });
+        expect(tras.modificaciones).toEqual([
+            { id: 2, tipo: 'prorroga', dias_prorroga: 10 },
+            filaSuspension({ fecha_modificacion: '2026-11-05 00:00:00', fecha_reinicio: '2026-11-19', dias_prorroga: 14 }),
+        ]);
+        expect(suspensionAbierta(tras)).toBeNull();
+        expect(suspensionAbierta({ ...tras, aviso_suspension: undefined })).toBeNull();
+    });
+
+    it('al suspender (o sin fecha de reinicio), las modificaciones no cambian y el aviso dice que está abierta', () => {
+        const abierto = { ...presentado, modificaciones: [{ id: 2, tipo: 'prorroga' }] };
+        const tras = contratoTrasSuspension(abierto, { ...suspendido, updated_at: 'v2' });
+        expect(tras.modificaciones).toEqual([{ id: 2, tipo: 'prorroga' }]);
+        expect(suspensionAbierta(tras)).toEqual({ desde: '2026-11-05', reinicio_previsto: null });
+        // Sin modificaciones en el contrato abierto, no se agregan.
+        expect(contratoTrasSuspension(listado, { ...presentado, estado: 'en_ejecucion' }, { fecha_reinicio: '2026-11-19' })).not.toHaveProperty('modificaciones');
+    });
+});
+
+describe('suspensiones en la pestaña Modificaciones', () => {
+    it('el formulario no ofrece el tipo suspensión; la tabla sí lo nombra', () => {
+        expect(TIPOS_MODIFICACION.map(([valor]) => valor)).toEqual(['adicion', 'prorroga', 'adicion_prorroga']);
+        expect(etiquetaTipoModificacion('suspension')).toBe('Suspensión');
+    });
+
+    it('el detalle: sus fechas y días, o «abierta» con el reinicio previsto', () => {
+        expect(detalleSuspension(filaSuspension())).toBe('Desde el 05/11/2026: abierta');
+        expect(detalleSuspension(filaSuspension({ fecha_reinicio_prevista: '2026-12-01' })))
+            .toBe('Desde el 05/11/2026: abierta, reinicio previsto el 01/12/2026');
+        expect(detalleSuspension(filaSuspension({ fecha_reinicio: '2026-11-19', dias_prorroga: 14 }))).toBe('Del 05/11/2026 al 19/11/2026: 14 días');
+        expect(detalleSuspension(filaSuspension({ fecha_reinicio: '2026-11-06 00:00:00', dias_prorroga: 1 }))).toBe('Del 05/11/2026 al 06/11/2026: 1 día');
+        expect(detalleSuspension({ tipo: 'prorroga', dias_prorroga: 10 })).toBeNull();
+    });
+
+    it('la columna de días: «Abierta», los días de la suspensión (también 0) o los de la prórroga', () => {
+        expect(textoDiasModificacion(filaSuspension())).toBe('Abierta');
+        expect(textoDiasModificacion(filaSuspension({ fecha_reinicio: '2026-11-05', dias_prorroga: 0 }))).toBe('0');
+        expect(textoDiasModificacion(filaSuspension({ fecha_reinicio: '2026-11-19', dias_prorroga: 14 }))).toBe('14');
+        expect(textoDiasModificacion({ tipo: 'prorroga', dias_prorroga: 30 })).toBe('30');
+        expect(textoDiasModificacion({ tipo: 'adicion', dias_prorroga: null })).toBe('-');
+    });
+
+    it('eliminar una suspensión manda la versión del contrato; una adición o prórroga, solo el id', () => {
+        expect(datosEliminarModificacion(filaSuspension(), { ...suspendido, updated_at: '2026-11-19 10:00:00' }))
+            .toEqual({ id: 30, actualizado: '2026-11-19 10:00:00' });
+        expect(datosEliminarModificacion(filaSuspension(), { ...suspendido, updated_at: undefined })).toEqual({ id: 30, actualizado: null });
+        expect(datosEliminarModificacion({ id: 4, tipo: 'prorroga' }, { ...presentado, updated_at: 'v' })).toEqual({ id: 4 });
+    });
+
+    it('solo la última suspensión (por fecha y luego por id, como el servidor) se puede eliminar; las demás modificaciones, siempre', () => {
+        const primera = filaSuspension({ id: 30, fecha_modificacion: '2026-10-01', fecha_reinicio: '2026-10-11', dias_prorroga: 10 });
+        const ultima = filaSuspension({ id: 31, fecha_modificacion: '2026-11-01 00:00:00' });
+        const prorroga = { id: 32, tipo: 'prorroga', fecha_modificacion: '2026-11-10' };
+        const lista = [ultima, prorroga, primera];
+        expect(puedeEliminarModificacion(primera, lista)).toBe(false);
+        expect(puedeEliminarModificacion(ultima, lista)).toBe(true);
+        expect(puedeEliminarModificacion(prorroga, lista)).toBe(true);
+        // El mismo día, la de id mayor.
+        const otra = filaSuspension({ id: 33, fecha_modificacion: '2026-11-01' });
+        expect(puedeEliminarModificacion(ultima, [...lista, otra])).toBe(false);
+        expect(puedeEliminarModificacion(otra, [...lista, otra])).toBe(true);
+        expect(puedeEliminarModificacion(ultima, null)).toBe(true);
+    });
+
+    it('al eliminar, la confirmación explica la regla de la última y qué pasa con el contrato', () => {
+        expect(confirmacionEliminarModificacion(filaSuspension())).toEqual({
+            titulo: '¿Eliminar esta suspensión?',
+            texto: 'Solo se puede eliminar la última suspensión. Como está abierta, el contrato vuelve a «En ejecución». El cambio queda en el historial del contrato.',
+        });
+        expect(confirmacionEliminarModificacion(filaSuspension({ fecha_reinicio: '2026-11-19', dias_prorroga: 14 }))).toEqual({
+            titulo: '¿Eliminar esta suspensión?',
+            texto: 'Solo se puede eliminar la última suspensión. La fecha fin se recalcula sin sus días. El cambio queda en el historial del contrato.',
+        });
+        expect(confirmacionEliminarModificacion({ tipo: 'adicion' })).toEqual({
+            titulo: '¿Eliminar esta modificación?', texto: 'Se recalculará el valor y la fecha fin del contrato.',
+        });
     });
 });
