@@ -227,7 +227,7 @@ Run: `git status --short`
 Expected: como mucho, `public/` (si corre `npm run watch`) y las dos imágenes del usuario.
 
 Run: `php artisan test`
-Expected: pasan todas, 1346. Si alguna falla, detenerse y avisar.
+Expected: pasan todas, 1346. Entre las 7 p. m. y la medianoche de Bogotá pueden fallar 2, "un propio pesa 1" (`AvancePonderadoApiTest`) y "marcar responde tambien el avance por etapa" (`ExpedienteContratacionApiTest`), porque comparan la fecha en UTC; la tarea 2 las corrige. Si falla cualquier otra, detenerse y avisar.
 
 Run: `npm test`
 Expected: pasan todas, 918.
