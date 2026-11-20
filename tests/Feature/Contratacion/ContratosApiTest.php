@@ -210,6 +210,8 @@ class ContratosApiTest extends TestCase
                 'fecha_liquidacion' => null,
                 'valor_liquidado' => null,
                 'aviso_cierre' => null,
+                // Fase 7B.
+                'aviso_suspension' => null,
                 'anticipo' => true,
                 'porcentaje_anticipo' => 30,
                 'avance_fisico' => 10,
@@ -561,14 +563,15 @@ class ContratosApiTest extends TestCase
         $form = [
             'id' => $contrato->id, 'actualizado' => $this->version($contrato),
             'n_contrato' => 'C-001-2026', 'objeto' => 'Construcción del acueducto veredal',
-            'valor_inicial' => '1000000.00', 'estado' => 'suspendido', 'contratista' => 'Consorcio Agua 2',
+            // Fase 7B: a suspendido ya no se pasa por el formulario (usa «Suspender»): otro estado.
+            'valor_inicial' => '1000000.00', 'estado' => 'celebrado', 'contratista' => 'Consorcio Agua 2',
         ];
         $this->como($gestor)->postJson(self::GUARDAR, ['formContrato' => $form, 'anexos' => []])->assertOk()
             ->assertJsonPath('contrato.supervisor', 'Ing. Pérez');
 
         $eventos = $this->eventos($contrato);
         $this->assertCount(2, $eventos);
-        $this->assertSame(['contrato_editado', ['contratista' => 'Consorcio Agua', 'estado' => 'en_ejecucion'], ['contratista' => 'Consorcio Agua 2', 'estado' => 'suspendido']], $eventos[1]);
+        $this->assertSame(['contrato_editado', ['contratista' => 'Consorcio Agua', 'estado' => 'en_ejecucion'], ['contratista' => 'Consorcio Agua 2', 'estado' => 'celebrado']], $eventos[1]);
         $this->assertSame($gestor->id, (int) DB::table('checklist_historial')->orderByDesc('id')->value('usuario_id'));
     }
 

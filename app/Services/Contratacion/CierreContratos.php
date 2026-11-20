@@ -4,6 +4,7 @@ namespace App\Services\Contratacion;
 
 use App\Exceptions\ReglaNegocioException;
 use App\Models\Contrato;
+use App\Models\ModificacionContrato;
 use App\Models\User;
 use App\Services\Viabilizacion\HistorialChecklist;
 use Brick\Math\BigDecimal;
@@ -33,6 +34,8 @@ use Illuminate\Validation\ValidationException;
  *   `contrato_liquidado`, con antes y después (R15).
  * - Sin ningún cambio (mismo estado y mismos datos) y sin observación no se guarda nada: ni versión
  *   nueva ni historial; responde el contrato tal cual y sus avisos. Con observación sí se registra.
+ * - Fase 7B: un contrato con una suspensión abierta no se termina ni se liquida: primero se
+ *   reinicia (SuspensionContratos). Uno suspendido sin suspensión abierta sigue estas reglas.
  * - aviso() dice qué datos de cierre le faltan a un contrato según su estado, sin consultas.
  */
 final class CierreContratos
@@ -57,6 +60,8 @@ final class CierreContratos
 
     public const LIQUIDACION_ANTERIOR = 'La fecha de liquidación no puede ser anterior a la de terminación.';
 
+    public const SUSPENSION_ABIERTA = 'Reinicia el contrato antes de terminarlo o liquidarlo.';
+
     public const SUPERA_VIGENTE = 'El valor liquidado supera el valor vigente del contrato.';
 
     // Estados desde los que se termina un contrato.
@@ -77,6 +82,7 @@ final class CierreContratos
             // Primero la versión: con un formulario viejo, el estado que se ve engañaría.
             $actual = $this->bloquear($contrato);
             $this->exigirVersion($actual, $actualizado, ContratosService::DESACTUALIZADO);
+            $this->exigirSinSuspensionAbierta($actual);
             if ($actual->estado === Contrato::LIQUIDADO) {
                 throw new ReglaNegocioException(self::TERMINAR_LIQUIDADO);
             }
@@ -119,6 +125,7 @@ final class CierreContratos
         return DB::transaction(function () use ($contrato, $terminacion, $liquidacion, $valor, $observacion, $actualizado, $usuario) {
             $actual = $this->bloquear($contrato);
             $this->exigirVersion($actual, $actualizado, ContratosService::DESACTUALIZADO);
+            $this->exigirSinSuspensionAbierta($actual);
             if ($actual->estado === Contrato::ANULADO) {
                 throw new ReglaNegocioException(self::ANULADO);
             }
@@ -186,6 +193,13 @@ final class CierreContratos
         $inicio = $this->fecha($contrato->fecha_inicio);
         if ($inicio !== null && $fecha < $inicio) {
             throw ValidationException::withMessages(['fecha_terminacion_real' => self::TERMINACION_ANTERIOR]);
+        }
+    }
+
+    private function exigirSinSuspensionAbierta(Contrato $contrato): void
+    {
+        if (ModificacionContrato::query()->where('contrato_id', $contrato->id)->suspensionesAbiertas()->exists()) {
+            throw new ReglaNegocioException(self::SUSPENSION_ABIERTA);
         }
     }
 

@@ -3,16 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\Contrato;
+use App\Models\ModificacionContrato;
 use App\Models\Proyecto;
 use App\Services\Contratacion\ContratosService;
 use App\Services\Contratacion\ExpedientesContratacion;
 use App\Services\Contratacion\ProcesosContratacion;
+use App\Services\Contratacion\SuspensionContratos;
 use App\Services\Financiacion\FuentesProyecto;
 use App\Services\Viabilizacion\ExpedienteService;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ProyectoController extends Controller
 {
@@ -100,6 +103,8 @@ class ProyectoController extends Controller
         app(ContratosService::class)->agregarProcesos($todos);
         // Los datos de cierre que faltan, como en el detalle y en /listarContratos (sin consultas).
         app(ContratosService::class)->agregarAvisoCierre($todos);
+        // Fase 7B: desde cuándo está suspendido y si su reinicio previsto venció (una consulta).
+        app(ContratosService::class)->agregarAvisoSuspension($todos);
 
         return response()->json($proyectos);
     }
@@ -1054,17 +1059,25 @@ class ProyectoController extends Controller
     /**
      * Registra una modificación (otrosí) y recalcula el valor y la fecha fin
      * vigentes del contrato desde su base inmutable + historial completo.
+     * Las suspensiones no se registran aquí (fase 7B): las registra «Suspender».
      */
     public function guardarModificacionContrato(Request $request)
     {
         $data = $request->all();
         $contratoId = $data['contrato_id'];
 
+        if (($data['tipo'] ?? null) === ModificacionContrato::SUSPENSION) {
+            throw ValidationException::withMessages(['tipo' => SuspensionContratos::POR_FORMULARIO]);
+        }
+
         $nullableDecimal = fn ($v) => ($v === '' || $v === null) ? null : $v;
         $nullableInt = fn ($v) => ($v === '' || $v === null) ? null : (int) $v;
 
         DB::beginTransaction();
         try {
+            // Con el contrato bloqueado, un reinicio que corre a la vez espera (o termina antes) y
+            // el recálculo de aquí no pisa la fecha fin que dejó.
+            Contrato::query()->whereKey($contratoId)->lockForUpdate()->firstOrFail();
             DB::table('modificaciones_contrato')->insert([
                 'contrato_id' => $contratoId,
                 'numero_otrosi' => $data['numero_otrosi'] ?? null,
@@ -1090,11 +1103,25 @@ class ProyectoController extends Controller
     }
 
     /**
-     * Elimina una modificación (otrosí) y recalcula el contrato afectado.
+     * Elimina una modificación (otrosí) y recalcula el contrato afectado. Una suspensión la
+     * elimina SuspensionContratos (con `actualizado`, solo la última, y devuelve el estado si
+     * estaba abierta).
      */
-    public function eliminarModificacionContrato(Request $request)
+    public function eliminarModificacionContrato(Request $request, SuspensionContratos $suspensiones)
     {
         $id = $request->input('id');
+
+        $suspension = DB::table('modificaciones_contrato')->where('id', $id)->where('tipo', ModificacionContrato::SUSPENSION)->first();
+        if ($suspension !== null) {
+            // Una suspensión cambia el estado y la fecha fin: trae la versión del contrato (409).
+            $datos = $request->validate(['actualizado' => ContratoController::VERSION], ContratoController::MENSAJES_VERSION);
+            $resumen = $suspensiones->eliminar((int) $suspension->id, (int) $suspension->contrato_id, $datos['actualizado'], $request->user());
+
+            return response()->json([
+                'success' => 'Modificación eliminada correctamente',
+                'resumen' => $resumen,
+            ]);
+        }
 
         DB::beginTransaction();
         try {
@@ -1105,6 +1132,8 @@ class ProyectoController extends Controller
             }
 
             $contratoId = $mod->contrato_id;
+            // Como al registrar: el contrato bloqueado antes de borrar y recalcular.
+            Contrato::query()->whereKey($contratoId)->lockForUpdate()->firstOrFail();
             DB::table('modificaciones_contrato')->where('id', $id)->delete();
 
             $resumen = $this->recalcularContrato($contratoId);
@@ -1134,6 +1163,7 @@ class ProyectoController extends Controller
         // Con lo que avisa el proceso de cada contrato y los datos de cierre que faltan, como en el detalle.
         app(ContratosService::class)->agregarProcesos($contratos, true);
         app(ContratosService::class)->agregarAvisoCierre($contratos);
+        app(ContratosService::class)->agregarAvisoSuspension($contratos);
         app(ContratosService::class)->agregarDetalle($contratos);
 
         return response()->json($contratos);

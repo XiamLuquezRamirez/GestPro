@@ -7,6 +7,7 @@ use App\Models\AnexoContrato;
 use App\Models\AvanceFinanciero;
 use App\Models\AvanceFisico;
 use App\Models\Contrato;
+use App\Models\ModificacionContrato;
 use App\Models\ProcesoLicitacion;
 use App\Models\Proyecto;
 use App\Models\TipoProceso;
@@ -58,6 +59,11 @@ use Illuminate\Validation\ValidationException;
  *   y valor liquidado): se conservan.
  * - presentar(), la búsqueda, el detalle y el listado por proyecto traen los datos de cierre y
  *   `aviso_cierre` (CierreContratos::aviso), calculado con la fila, sin consultas.
+ * - Fase 7B: al editar, el estado no pasa a suspendido desde otro (eso lo hace «Suspender»,
+ *   SuspensionContratos) ni sale de suspendido mientras el contrato tiene una suspensión abierta
+ *   (eso lo hace «Reiniciar»); sin suspensión abierta sí sale. Al crear, cualquier estado.
+ * - presentar(), la búsqueda, el detalle y los listados por proyecto traen `aviso_suspension`
+ *   (SuspensionContratos::aviso): en los listados, con una sola consulta para todas las filas.
  */
 final class ContratosService
 {
@@ -124,6 +130,10 @@ final class ContratosService
 
     public const CIERRE_POR_FORMULARIO = 'Para terminar o liquidar el contrato usa «Terminar» o «Liquidar».';
 
+    public const SUSPENDER_POR_FORMULARIO = 'Para suspender el contrato usa «Suspender».';
+
+    public const REINICIAR_POR_FORMULARIO = 'Para reanudar el contrato usa «Reiniciar».';
+
     // Estados a los que solo se llega con su acción (CierreContratos), no con el formulario.
     private const ESTADOS_DE_CIERRE = [Contrato::TERMINADO, Contrato::LIQUIDADO];
 
@@ -132,6 +142,7 @@ final class ContratosService
     public function __construct(
         private readonly HistorialChecklist $historial,
         private readonly ExpedientesContratacion $expedientes,
+        private readonly AvisosContratacion $avisosContratacion,
     ) {
     }
 
@@ -187,6 +198,14 @@ final class ContratosService
             $nuevoEstado = $valores['estado'] ?? $actual->estado;
             if ($nuevoEstado !== $actual->estado && in_array($nuevoEstado, self::ESTADOS_DE_CIERRE, true)) {
                 throw ValidationException::withMessages(['estado' => self::CIERRE_POR_FORMULARIO]);
+            }
+            // Fase 7B: suspender y reanudar (con una suspensión abierta) tienen su acción.
+            if ($nuevoEstado === Contrato::SUSPENDIDO && $actual->estado !== Contrato::SUSPENDIDO) {
+                throw ValidationException::withMessages(['estado' => self::SUSPENDER_POR_FORMULARIO]);
+            }
+            if ($actual->estado === Contrato::SUSPENDIDO && $nuevoEstado !== Contrato::SUSPENDIDO
+                && ModificacionContrato::query()->where('contrato_id', $actual->id)->suspensionesAbiertas()->exists()) {
+                throw ValidationException::withMessages(['estado' => self::REINICIAR_POR_FORMULARIO]);
             }
             $this->exigirTipo($valores, $actual);
             [$valores] = $this->exigirVinculos($valores, $actual);
@@ -349,6 +368,11 @@ final class ContratosService
             'aviso_cierre' => CierreContratos::aviso(
                 $contrato->estado, $contrato->fecha_terminacion_real, $contrato->fecha_liquidacion, $contrato->valor_liquidado
             ),
+            'aviso_suspension' => SuspensionContratos::aviso(
+                $contrato->estado,
+                $contrato->estado === Contrato::SUSPENDIDO ? SuspensionContratos::abierta($contrato->id) : null,
+                $this->avisosContratacion->hoy()->toDateString()
+            ),
             'anticipo' => (bool) $contrato->anticipo,
             'porcentaje_anticipo' => $this->entero($contrato->porcentaje_anticipo),
             'avance_fisico' => $this->entero($contrato->avance_fisico),
@@ -414,6 +438,23 @@ final class ContratosService
     {
         foreach ($filas as $fila) {
             $fila->aviso_cierre = CierreContratos::aviso($fila->estado, $fila->fecha_terminacion_real, $fila->fecha_liquidacion, $fila->valor_liquidado);
+        }
+    }
+
+    /**
+     * Completa las filas de contratos de los listados (consultas con DB::table que traen el id y el
+     * estado) con `aviso_suspension` (SuspensionContratos::aviso): una sola consulta para las
+     * suspensiones abiertas de todas las filas suspendidas, ninguna si no hay suspendidas.
+     *
+     * @param iterable<object> $filas
+     */
+    public function agregarAvisoSuspension(iterable $filas): void
+    {
+        $filas = Collection::make($filas);
+        $abiertas = SuspensionContratos::abiertasDe($filas->mapWithKeys(fn ($f) => [(int) $f->id => $f->estado])->all());
+        $hoy = $this->avisosContratacion->hoy()->toDateString();
+        foreach ($filas as $fila) {
+            $fila->aviso_suspension = SuspensionContratos::aviso($fila->estado, $abiertas[(int) $fila->id] ?? null, $hoy);
         }
     }
 
@@ -531,6 +572,7 @@ final class ContratosService
         $filas = $consulta->get();
         $this->agregarProcesos($filas, true, $resumenes);
         $this->agregarAvisoCierre($filas);
+        $this->agregarAvisoSuspension($filas);
 
         return $filas->map(fn ($f) => [
             'id' => (int) $f->id,
@@ -553,13 +595,14 @@ final class ContratosService
             'proceso' => $f->proceso,
             'aviso_proceso' => $f->aviso_proceso,
             'aviso_cierre' => $f->aviso_cierre,
+            'aviso_suspension' => $f->aviso_suspension,
             'secop_id_contrato' => $f->secop_id_contrato,
             'updated_at' => $f->updated_at,
         ])->all();
     }
 
     /**
-     * El contrato con la misma forma que un elemento de GET /listarContratos (con `aviso_proceso` y `aviso_cierre`),
+     * El contrato con la misma forma que un elemento de GET /listarContratos (con `aviso_proceso`, `aviso_cierre` y `aviso_suspension`),
      * más `proyecto_nombre`, o null si no existe.
      */
     public function detalle(int $id): ?object
@@ -575,6 +618,7 @@ final class ContratosService
         $filas = [$fila];
         $this->agregarProcesos($filas, true);
         $this->agregarAvisoCierre($filas);
+        $this->agregarAvisoSuspension($filas);
         $this->agregarDetalle($filas);
 
         return $fila;

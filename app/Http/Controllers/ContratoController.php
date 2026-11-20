@@ -6,6 +6,7 @@ use App\Models\Contrato;
 use App\Services\Contratacion\CierreContratos;
 use App\Services\Contratacion\CierreGuardado;
 use App\Services\Contratacion\ContratosService;
+use App\Services\Contratacion\SuspensionContratos;
 use Closure;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
@@ -15,7 +16,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Guardar, eliminar, terminar y liquidar contratos (can:editar-datos). Lectura: buscar y detalle (cualquier usuario
+ * Guardar, eliminar, terminar, liquidar, suspender y reiniciar contratos (can:editar-datos). Lectura: buscar y detalle (cualquier usuario
  * autenticado); los listados por proyecto siguen en ProyectoController (GET /proyectos y
  * GET /listarContratos).
  */
@@ -51,8 +52,7 @@ class ContratoController extends Controller
         'secop_proceso.max' => 'El proceso de SECOP II admite hasta 40 caracteres.',
         'url_secop.regex' => 'El enlace de SECOP II debe empezar por http:// o https://.',
         'url_secop.max' => 'El enlace de SECOP II admite hasta 500 caracteres.',
-        'actualizado.present' => 'Falta la versión del contrato que estabas editando. Ciérralo y vuelve a abrirlo.',
-        'actualizado.date' => 'La versión del contrato no es válida. Ciérralo y vuelve a abrirlo.',
+        ...self::MENSAJES_VERSION,
         'anexos.*.descripcion.required' => 'Escribe la descripción del anexo.',
         'anexos.*.descripcion.max' => 'La descripción del anexo admite hasta 255 caracteres.',
         'anexos.*.nombreArchivo.required' => 'Falta el nombre del archivo del anexo: vuelve a subirlo.',
@@ -69,6 +69,10 @@ class ContratoController extends Controller
         'valor_liquidado.min' => 'El valor liquidado no puede ser negativo.',
         'valor_liquidado.decimal' => 'El valor liquidado admite hasta 2 decimales.',
         'observacion.max' => 'La observación admite hasta 2000 caracteres.',
+        'fecha_suspension.required' => 'Escribe la fecha de suspensión.',
+        'fecha_reinicio.required' => 'Escribe la fecha de reinicio.',
+        'numero_acta.max' => 'El número del acta admite hasta 50 caracteres.',
+        'motivo.max' => 'El motivo admite hasta 2000 caracteres.',
     ];
 
     private const ATRIBUTOS = [
@@ -112,6 +116,11 @@ class ContratoController extends Controller
         'fecha_liquidacion' => 'la fecha de liquidación',
         'valor_liquidado' => 'el valor liquidado',
         'observacion' => 'la observación',
+        'fecha_suspension' => 'la fecha de suspensión',
+        'fecha_reinicio_prevista' => 'la fecha prevista de reinicio',
+        'fecha_reinicio' => 'la fecha de reinicio',
+        'numero_acta' => 'el número del acta',
+        'motivo' => 'el motivo',
     ];
 
     // Las columnas de valor son decimal(15, 2): 13 cifras enteras y 2 decimales.
@@ -119,7 +128,13 @@ class ContratoController extends Controller
 
     // El `actualizado` del contrato que tenía la pantalla: siempre presente; null solo para un
     // contrato antiguo, sin fechas. Con otro valor, el servicio responde 409.
-    private const VERSION = ['present', 'nullable', 'bail', 'string', 'date'];
+    // También la usa eliminarModificacionContrato al eliminar una suspensión.
+    public const VERSION = ['present', 'nullable', 'bail', 'string', 'date'];
+
+    public const MENSAJES_VERSION = [
+        'actualizado.present' => 'Falta la versión del contrato que estabas editando. Ciérralo y vuelve a abrirlo.',
+        'actualizado.date' => 'La versión del contrato no es válida. Ciérralo y vuelve a abrirlo.',
+    ];
 
     // El ID de un contrato en SECOP II (sin distinguir mayúsculas) y su enlace.
     private const FORMATO_SECOP = '/^CO1\.PCCNTR\.\d+$/i';
@@ -133,6 +148,7 @@ class ContratoController extends Controller
     public function __construct(
         private readonly ContratosService $contratos,
         private readonly CierreContratos $cierre,
+        private readonly SuspensionContratos $suspension,
     ) {
     }
 
@@ -292,6 +308,76 @@ class ContratoController extends Controller
             $datos['actualizado'],
             $request->user()
         ));
+    }
+
+    /**
+     * Suspende un contrato en ejecución: `fecha_suspension`, `fecha_reinicio_prevista`,
+     * `numero_acta` y `motivo` opcionales y `actualizado`. Responde el contrato y los avisos.
+     */
+    public function suspender(Request $request, string $contrato): JsonResponse
+    {
+        $datos = $request->validate([
+            'fecha_suspension' => ['bail', 'required', 'string', 'date_format:Y-m-d'],
+            'fecha_reinicio_prevista' => ['sometimes', 'nullable', 'bail', 'string', 'date_format:Y-m-d'],
+            'numero_acta' => ['sometimes', 'nullable', 'bail', 'string', 'max:50'],
+            'motivo' => ['sometimes', 'nullable', 'bail', 'string', 'max:2000'],
+            'actualizado' => self::VERSION,
+        ], self::MENSAJES, self::ATRIBUTOS);
+        $fila = Contrato::find($contrato);
+        if ($fila === null) {
+            return response()->json(['mensaje' => 'El contrato no existe.'], 404);
+        }
+
+        $guardado = $this->suspension->suspender(
+            $fila,
+            $datos['fecha_suspension'],
+            $datos['fecha_reinicio_prevista'] ?? null,
+            $datos['numero_acta'] ?? null,
+            $datos['motivo'] ?? null,
+            $datos['actualizado'],
+            $request->user()
+        );
+
+        return response()->json([
+            'success' => true,
+            'contrato' => $this->contratos->presentar($guardado->contrato),
+            'avisos' => $guardado->avisos,
+        ]);
+    }
+
+    /**
+     * Reinicia un contrato suspendido: `fecha_reinicio`, `fecha_suspension` (solo si no tiene una
+     * suspensión abierta), `observacion` opcional y `actualizado`. Responde el contrato, los avisos
+     * y el resumen del recálculo.
+     */
+    public function reiniciar(Request $request, string $contrato): JsonResponse
+    {
+        $datos = $request->validate([
+            'fecha_reinicio' => ['bail', 'required', 'string', 'date_format:Y-m-d'],
+            'fecha_suspension' => ['sometimes', 'nullable', 'bail', 'string', 'date_format:Y-m-d'],
+            'observacion' => ['sometimes', 'nullable', 'bail', 'string', 'max:2000'],
+            'actualizado' => self::VERSION,
+        ], self::MENSAJES, self::ATRIBUTOS);
+        $fila = Contrato::find($contrato);
+        if ($fila === null) {
+            return response()->json(['mensaje' => 'El contrato no existe.'], 404);
+        }
+
+        $guardado = $this->suspension->reiniciar(
+            $fila,
+            $datos['fecha_reinicio'],
+            $datos['fecha_suspension'] ?? null,
+            $datos['observacion'] ?? null,
+            $datos['actualizado'],
+            $request->user()
+        );
+
+        return response()->json([
+            'success' => true,
+            'contrato' => $this->contratos->presentar($guardado->contrato),
+            'avisos' => $guardado->avisos,
+            'resumen' => $guardado->resumen,
+        ]);
     }
 
     private function cerrado(CierreGuardado $guardado): JsonResponse

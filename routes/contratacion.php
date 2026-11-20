@@ -58,6 +58,14 @@ Route::middleware('can:editar-datos')->group(function () {
     Route::post('/contratos/{contrato}/liquidar', [ContratoController::class, 'liquidar'])
         ->whereNumber('contrato')
         ->name('contratos.liquidar');
+
+    // Suspensión y reinicio del contrato (fase 7B): cambian el estado y registran la suspensión.
+    Route::post('/contratos/{contrato}/suspender', [ContratoController::class, 'suspender'])
+        ->whereNumber('contrato')
+        ->name('contratos.suspender');
+    Route::post('/contratos/{contrato}/reiniciar', [ContratoController::class, 'reiniciar'])
+        ->whereNumber('contrato')
+        ->name('contratos.reiniciar');
 });
 
 // SECOP II (datos abiertos): consultar para importar contratos. Administrador o Gestor, con
